@@ -1,0 +1,21 @@
+---
+chat_aiops_user_password: "{{ lookup('ansible.builtin.env', 'CHAT_AIOPS_PASSWORD', default='aiops-secret') }}"
+chat_aiops_channel_name: operations
+chat_aiops_username: aiops
+
+chat_users:
+  - username: "{{ chat_aiops_username }}"
+    password: "{{ chat_aiops_user_password }}"
+    is_admin: false
+
+chat_channels:
+  - name: "{{ chat_aiops_channel_name }}"
+    allow_anonymous_webhook: true
+    anonymous_webhook_username: "{{ chat_aiops_username }}"
+
+chat_memberships:
+  - channel: "{{ chat_aiops_channel_name }}"
+    username: "{{ chat_aiops_username }}"
+
+chat_seed_messages: []
+chat_instance_settings: {}

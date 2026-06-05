@@ -1,0 +1,29 @@
+---
+- name: Normalize API base URL
+  ansible.builtin.set_fact:
+    chat_api_base_normalized: "{{ chat_api_base | regex_replace('/$', '') }}"
+
+- name: Include login
+  ansible.builtin.include_tasks: login.yml
+
+- name: Include users (create missing, refresh id map)
+  ansible.builtin.include_tasks: users.yml
+
+- name: Include channels (create missing)
+  ansible.builtin.include_tasks: channels.yml
+
+- name: Include memberships
+  ansible.builtin.include_tasks: memberships.yml
+  when: chat_memberships | length > 0
+
+- name: Include channel webhook PATCH
+  ansible.builtin.include_tasks: channel_webhooks.yml
+  when: chat_channels | length > 0
+
+- name: Include seed messages
+  ansible.builtin.include_tasks: messages.yml
+  when: chat_seed_messages | length > 0
+
+- name: Include instance settings
+  ansible.builtin.include_tasks: instance_settings.yml
+  when: chat_instance_settings | default({}) | length > 0

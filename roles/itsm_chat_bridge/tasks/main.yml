@@ -1,0 +1,132 @@
+---
+- name: Set external chat webhook URL for summary
+  ansible.builtin.set_fact:
+    itsm_chat_webhook_url: >-
+      {{ demo_platform.chat_app.url }}/api/v1/webhooks/channels/{{
+      chat_aiops_channel_name | urlencode }}/messages
+
+- name: Set in-cluster chat webhook URL for bridge relay
+  ansible.builtin.set_fact:
+    itsm_chat_bridge_webhook_url: >-
+      http://{{ itsm_chat_bridge_chat_service }}.{{ itsm_chat_bridge_namespace }}.svc.cluster.local:{{
+      itsm_chat_bridge_chat_port }}/api/v1/webhooks/channels/{{
+      chat_aiops_channel_name | urlencode }}/messages
+
+- name: Set in-cluster bridge URL for itsm webhook
+  ansible.builtin.set_fact:
+    itsm_chat_bridge_url: >-
+      http://{{ itsm_chat_bridge_name }}.{{ itsm_chat_bridge_namespace }}.svc.cluster.local:{{
+      itsm_chat_bridge_port }}/hook
+
+- name: Read bridge Python script
+  ansible.builtin.set_fact:
+    itsm_chat_bridge_script_content: "{{ lookup('file', role_path ~ '/files/bridge.py') }}"
+
+- name: Deploy itsm-chat-bridge ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: "{{ itsm_chat_bridge_name }}"
+        namespace: "{{ itsm_chat_bridge_namespace }}"
+      data:
+        bridge.py: "{{ itsm_chat_bridge_script_content }}"
+
+- name: Deploy itsm-chat-bridge Deployment
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "{{ itsm_chat_bridge_name }}"
+        namespace: "{{ itsm_chat_bridge_namespace }}"
+        labels:
+          app: "{{ itsm_chat_bridge_name }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: "{{ itsm_chat_bridge_name }}"
+        template:
+          metadata:
+            labels:
+              app: "{{ itsm_chat_bridge_name }}"
+          spec:
+            securityContext:
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+              - name: bridge
+                image: "{{ itsm_chat_bridge_image }}"
+                imagePullPolicy: IfNotPresent
+                command:
+                  - python
+                  - /app/bridge.py
+                ports:
+                  - containerPort: "{{ itsm_chat_bridge_port }}"
+                    name: http
+                env:
+                  - name: CHAT_WEBHOOK_URL
+                    value: "{{ itsm_chat_bridge_webhook_url }}"
+                  - name: PORT
+                    value: "{{ itsm_chat_bridge_port | string }}"
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  runAsNonRoot: true
+                volumeMounts:
+                  - name: script
+                    mountPath: /app
+                    readOnly: true
+                readinessProbe:
+                  tcpSocket:
+                    port: http
+                  initialDelaySeconds: 3
+                  periodSeconds: 10
+                livenessProbe:
+                  tcpSocket:
+                    port: http
+                  initialDelaySeconds: 10
+                  periodSeconds: 20
+            volumes:
+              - name: script
+                configMap:
+                  name: "{{ itsm_chat_bridge_name }}"
+                  defaultMode: 0555
+
+- name: Deploy itsm-chat-bridge Service
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ itsm_chat_bridge_name }}"
+        namespace: "{{ itsm_chat_bridge_namespace }}"
+        labels:
+          app: "{{ itsm_chat_bridge_name }}"
+      spec:
+        selector:
+          app: "{{ itsm_chat_bridge_name }}"
+        ports:
+          - name: http
+            port: "{{ itsm_chat_bridge_port }}"
+            targetPort: http
+
+- name: Wait for itsm-chat-bridge Deployment to become available
+  ansible.builtin.command:
+    argv:
+      - oc
+      - wait
+      - --for=condition=available
+      - deployment/{{ itsm_chat_bridge_name }}
+      - -n
+      - "{{ itsm_chat_bridge_namespace }}"
+      - --timeout=120s
+  changed_when: false
