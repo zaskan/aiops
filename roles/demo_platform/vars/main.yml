@@ -1,0 +1,40 @@
+---
+validate_certs: false
+
+itsm_app_git_url: "https://github.com/zaskan/itsm-app.git"
+itsm_app_git_ref: main
+itsm_app_namespace: itsm-app
+itsm_app_manifest_base: "https://raw.githubusercontent.com/zaskan/itsm-app/{{ itsm_app_git_ref }}/k8s"
+itsm_app_source_repo_url: "{{ itsm_app_git_url | trim | regex_replace('/$', '') }}#{{ itsm_app_git_ref }}"
+itsm_app_session_secret: "{{ lookup('ansible.builtin.env', 'ITSM_SESSION_SECRET', default='replace-with-long-random-string') }}"
+itsm_app_mcp_token: "{{ lookup('ansible.builtin.env', 'ITSM_MCP_TOKEN', default='084f926a012ae68ff7928033beeeef08e4e3c99304d98f8bf9b2521e13b6fc50') }}"
+itsm_app_bootstrap_admin_user: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_USER', default='admin') }}"
+itsm_app_bootstrap_admin_password: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_PASSWORD', default='admin') }}"
+
+chat_app_git_url: "https://github.com/zaskan/chat-app.git"
+chat_app_git_ref: main
+chat_app_namespace: demo-chat
+chat_app_manifest_base: "https://raw.githubusercontent.com/zaskan/chat-app/{{ chat_app_git_ref }}/k8s"
+chat_app_source_repo_url: "{{ chat_app_git_url | trim | regex_replace('/$', '') }}#{{ chat_app_git_ref }}"
+chat_app_jwt_secret: "{{ lookup('ansible.builtin.env', 'CHAT_JWT_SECRET', default='replace-with-long-random-string') }}"
+chat_app_seed_admin_username: "{{ lookup('ansible.builtin.env', 'CHAT_SEED_ADMIN_USERNAME', default='admin') }}"
+chat_app_seed_admin_password: "{{ lookup('ansible.builtin.env', 'CHAT_SEED_ADMIN_PASSWORD', default='changeme') }}"
+
+gitea_namespace: gitea
+gitea_kustomize_overlay: "https://github.com/zaskan/gitea/deploy/overlays/openshift"
+gitea_admin_user: "{{ lookup('ansible.builtin.env', 'GITEA_ADMIN_USER', default='giteaadmin') }}"
+gitea_admin_password: "{{ lookup('ansible.builtin.env', 'GITEA_ADMIN_PASSWORD', default='changeme-gitea-admin-password') }}"
+gitea_admin_email: "{{ lookup('ansible.builtin.env', 'GITEA_ADMIN_EMAIL', default='admin@example.com') }}"
+gitea_secret_key: "{{ lookup('ansible.builtin.env', 'GITEA_SECRET_KEY', default='changeme-gitea-secret-key') }}"
+gitea_postgres_password: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_PASSWORD', default='changeme-gitea-db-password') }}"
+
+aap_password_override: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD', default='') }}"
+aap_username_override: "{{ lookup('ansible.builtin.env', 'AAP_USERNAME', default='') }}"
+
+demo_platform_write_artifacts: true
+demo_platform_artifacts_dir: "{{ playbook_dir }}/../artifacts"
+
+uninstall_assume_yes: false
+uninstall_keep_gitea_data: false
+uninstall_delete_gitea_namespace: true
+uninstall_remove_artifacts: true

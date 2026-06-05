@@ -1,0 +1,328 @@
+---
+- name: Check whether gitea deployment exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - deployment
+      - gitea
+      - -n
+      - "{{ gitea_namespace }}"
+      - -o
+      - jsonpath={.status.availableReplicas}
+  register: demo_gitea_available
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether gitea needs installation
+  ansible.builtin.set_fact:
+    demo_gitea_needs_install: >-
+      {{
+        demo_gitea_available.rc != 0
+        or (demo_gitea_available.stdout | default('0') | int) < 1
+      }}
+
+- name: Set gitea external hostname
+  ansible.builtin.set_fact:
+    demo_gitea_host: "gitea-gitea.apps.{{ openshift_cluster_domain }}"
+    demo_gitea_root_url: "https://gitea-gitea.apps.{{ openshift_cluster_domain }}/"
+
+- name: Install gitea from GitHub Kustomize overlay
+  when: demo_gitea_needs_install | bool
+  block:
+    - name: Apply gitea manifests from remote Kustomize overlay
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - -k
+          - "{{ gitea_kustomize_overlay }}"
+      register: demo_gitea_apply
+      changed_when: "'configured' in demo_gitea_apply.stdout or 'created' in demo_gitea_apply.stdout"
+      failed_when: false
+
+    - name: Shallow-clone gitea repo when remote Kustomize apply fails
+      ansible.builtin.git:
+        repo: https://github.com/zaskan/gitea.git
+        dest: /tmp/gitea-deploy
+        depth: 1
+        version: main
+      when: demo_gitea_apply.rc != 0
+
+    - name: Apply gitea manifests from local clone fallback
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - -k
+          - /tmp/gitea-deploy/deploy/overlays/openshift
+      when: demo_gitea_apply.rc != 0
+      register: demo_gitea_apply_fallback
+      changed_when: "'configured' in demo_gitea_apply_fallback.stdout or 'created' in demo_gitea_apply_fallback.stdout"
+
+    - name: Fail when gitea manifests could not be applied
+      ansible.builtin.fail:
+        msg: >-
+          gitea installation failed. Could not apply Kustomize overlay from GitHub.
+          Check cluster permissions and network access to github.com/zaskan/gitea.
+      when:
+        - demo_gitea_apply.rc != 0
+        - demo_gitea_apply_fallback is not defined or demo_gitea_apply_fallback.rc != 0
+
+    - name: Update gitea host ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: gitea-host-config
+            namespace: "{{ gitea_namespace }}"
+          data:
+            GITEA_HOST: "{{ demo_gitea_host }}"
+            GITEA__server__ROOT_URL: "{{ demo_gitea_root_url }}"
+
+    - name: Update gitea and postgres secrets
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ gitea_namespace }}"
+          type: Opaque
+          stringData: "{{ item.data }}"
+      loop:
+        - name: gitea-secret
+          data:
+            SECRET_KEY: "{{ gitea_secret_key }}"
+            ADMIN_USER: "{{ gitea_admin_user }}"
+            ADMIN_PASSWORD: "{{ gitea_admin_password }}"
+            ADMIN_EMAIL: "{{ gitea_admin_email }}"
+        - name: postgres-secret
+          data:
+            POSTGRES_USER: gitea
+            POSTGRES_PASSWORD: "{{ gitea_postgres_password }}"
+            POSTGRES_DB: gitea
+
+    - name: Grant nonroot-v2 SCC to gitea service account
+      ansible.builtin.command:
+        argv:
+          - oc
+          - adm
+          - policy
+          - add-scc-to-user
+          - nonroot-v2
+          - -z
+          - gitea
+          - -n
+          - "{{ gitea_namespace }}"
+      register: demo_gitea_scc
+      changed_when: "'added' in demo_gitea_scc.stdout | lower"
+      failed_when: false
+
+    - name: Patch gitea Route host
+      ansible.builtin.command:
+        argv:
+          - oc
+          - patch
+          - route
+          - gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - --type=merge
+          - "-p"
+          - '{"spec":{"host":"{{ demo_gitea_host }}"}}'
+      register: demo_gitea_route_patch
+      changed_when: "'patched' in demo_gitea_route_patch.stdout"
+      failed_when: false
+
+    - name: Wait for PostgreSQL deployment to become available
+      ansible.builtin.command:
+        argv:
+          - oc
+          - wait
+          - --for=condition=available
+          - deployment/postgres
+          - -n
+          - "{{ gitea_namespace }}"
+          - --timeout=300s
+      changed_when: false
+
+    - name: Restart gitea deployment after configuration changes
+      ansible.builtin.command:
+        argv:
+          - oc
+          - rollout
+          - restart
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+      changed_when: true
+
+    - name: Wait for gitea deployment to become available
+      ansible.builtin.command:
+        argv:
+          - oc
+          - wait
+          - --for=condition=available
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - --timeout=300s
+      changed_when: false
+
+    - name: Check whether gitea admin user already exists
+      ansible.builtin.command:
+        argv:
+          - oc
+          - exec
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - -c
+          - gitea
+          - --
+          - gitea
+          - --config
+          - /data/gitea/conf/app.ini
+          - admin
+          - user
+          - list
+      register: demo_gitea_admin_list
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Create gitea admin user
+      ansible.builtin.command:
+        argv:
+          - oc
+          - exec
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - -c
+          - gitea
+          - --
+          - gitea
+          - --config
+          - /data/gitea/conf/app.ini
+          - admin
+          - user
+          - create
+          - --admin
+          - --username
+          - "{{ gitea_admin_user }}"
+          - --password
+          - "{{ gitea_admin_password }}"
+          - --email
+          - "{{ gitea_admin_email }}"
+          - --must-change-password=false
+      when: gitea_admin_user not in demo_gitea_admin_list.stdout
+      no_log: true
+
+    - name: Update gitea admin password when user already exists
+      ansible.builtin.command:
+        argv:
+          - oc
+          - exec
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - -c
+          - gitea
+          - --
+          - gitea
+          - --config
+          - /data/gitea/conf/app.ini
+          - admin
+          - user
+          - change-password
+          - --username
+          - "{{ gitea_admin_user }}"
+          - --password
+          - "{{ gitea_admin_password }}"
+      when: gitea_admin_user in demo_gitea_admin_list.stdout
+      no_log: true
+
+- name: Get gitea route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - gitea
+      - -n
+      - "{{ gitea_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_gitea_route
+  changed_when: false
+
+- name: Fail when gitea route host is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      gitea is not available. Could not resolve Route host in namespace
+      {{ gitea_namespace }}. Check: oc get pods,route -n {{ gitea_namespace }}
+  when: demo_gitea_route.stdout | trim == ""
+
+- name: Set gitea URL fact
+  ansible.builtin.set_fact:
+    gitea_url: "https://{{ demo_gitea_route.stdout | trim }}"
+
+- name: Verify gitea health endpoint
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/healthz"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: demo_gitea_health
+  retries: 18
+  delay: 10
+  until: demo_gitea_health.status == 200 and demo_gitea_health.content is search('pass')
+
+- name: Fail when gitea health check fails
+  ansible.builtin.fail:
+    msg: >-
+      gitea health check failed at {{ gitea_url }}/api/healthz.
+      Check: oc logs -n {{ gitea_namespace }} deployment/gitea --tail=80
+  when: demo_gitea_health.status != 200 or demo_gitea_health.content is not search('pass')
+
+- name: Read gitea admin username from secret
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - gitea-secret
+      - -n
+      - "{{ gitea_namespace }}"
+      - -o
+      - jsonpath={.data.ADMIN_USER}
+  register: demo_gitea_user_b64
+  changed_when: false
+  no_log: true
+
+- name: Read gitea admin password from secret
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - gitea-secret
+      - -n
+      - "{{ gitea_namespace }}"
+      - -o
+      - jsonpath={.data.ADMIN_PASSWORD}
+  register: demo_gitea_pass_b64
+  changed_when: false
+  no_log: true
+
+- name: Set gitea credential facts
+  ansible.builtin.set_fact:
+    gitea_username: "{{ demo_gitea_user_b64.stdout | b64decode | default(gitea_admin_user, true) }}"
+    gitea_password: "{{ demo_gitea_pass_b64.stdout | b64decode | default(gitea_admin_password, true) }}"
+  no_log: true

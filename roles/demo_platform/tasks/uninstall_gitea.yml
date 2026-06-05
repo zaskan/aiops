@@ -1,0 +1,98 @@
+---
+- name: Check whether gitea namespace exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - namespace
+      - "{{ gitea_namespace }}"
+  register: demo_gitea_ns_check
+  changed_when: false
+  failed_when: false
+
+- name: Skip gitea uninstall when namespace is absent
+  ansible.builtin.debug:
+    msg: "gitea namespace '{{ gitea_namespace }}' not found; skipping."
+  when: demo_gitea_ns_check.rc != 0
+
+- name: Uninstall gitea workloads but keep PVCs
+  when:
+    - demo_gitea_ns_check.rc == 0
+    - uninstall_keep_gitea_data | bool
+  block:
+    - name: Delete gitea workloads and configuration
+      ansible.builtin.command:
+        argv:
+          - oc
+          - delete
+          - -n
+          - "{{ gitea_namespace }}"
+          - --ignore-not-found=true
+          - --wait=true
+          - deployment/gitea
+          - deployment/postgres
+          - service/gitea-http
+          - service/postgres
+          - route/gitea
+          - configmap/gitea-config
+          - configmap/gitea-host-config
+          - configmap/gitea-cert-config
+          - secret/postgres-secret
+          - secret/gitea-secret
+          - serviceaccount/gitea
+      register: demo_gitea_keep_data_delete
+      changed_when: "'deleted' in demo_gitea_keep_data_delete.stdout"
+
+- name: Uninstall gitea via Kustomize overlay
+  when:
+    - demo_gitea_ns_check.rc == 0
+    - not uninstall_keep_gitea_data | bool
+  block:
+    - name: Delete gitea resources from remote Kustomize overlay
+      ansible.builtin.command:
+        argv:
+          - oc
+          - delete
+          - -k
+          - "{{ gitea_kustomize_overlay }}"
+          - --ignore-not-found=true
+          - --wait=true
+      register: demo_gitea_kustomize_delete
+      changed_when: "'deleted' in demo_gitea_kustomize_delete.stdout"
+      failed_when: false
+
+    - name: Shallow-clone gitea repo when remote Kustomize delete fails
+      ansible.builtin.git:
+        repo: https://github.com/zaskan/gitea.git
+        dest: /tmp/gitea-deploy
+        depth: 1
+        version: main
+      when: demo_gitea_kustomize_delete.rc != 0
+
+    - name: Delete gitea resources from local clone fallback
+      ansible.builtin.command:
+        argv:
+          - oc
+          - delete
+          - -k
+          - /tmp/gitea-deploy/deploy/overlays/openshift
+          - --ignore-not-found=true
+          - --wait=true
+      when: demo_gitea_kustomize_delete.rc != 0
+      register: demo_gitea_kustomize_delete_fallback
+      changed_when: "'deleted' in demo_gitea_kustomize_delete_fallback.stdout"
+
+- name: Delete gitea namespace
+  ansible.builtin.command:
+    argv:
+      - oc
+      - delete
+      - namespace
+      - "{{ gitea_namespace }}"
+      - --wait=true
+      - --ignore-not-found=true
+  register: demo_gitea_ns_delete
+  changed_when: demo_gitea_ns_delete.rc == 0 and 'deleted' in demo_gitea_ns_delete.stdout
+  when:
+    - demo_gitea_ns_check.rc == 0
+    - uninstall_delete_gitea_namespace | bool

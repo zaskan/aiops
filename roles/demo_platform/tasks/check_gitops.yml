@@ -1,0 +1,130 @@
+---
+- name: Check openshift-gitops namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: openshift-gitops
+  register: demo_gitops_namespace
+
+- name: Fail when openshift-gitops namespace is missing
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift GitOps is not available. Expected namespace openshift-gitops with
+      a running Argo CD server and route.
+  when: demo_gitops_namespace.resources | default([]) | length == 0
+
+- name: Check OpenShift GitOps server deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: openshift-gitops-server
+    namespace: openshift-gitops
+  register: demo_gitops_server_deploy
+
+- name: Check legacy argocd-server deployment when openshift-gitops-server is absent
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-server
+    namespace: openshift-gitops
+  register: demo_gitops_argocd_deploy
+  when: demo_gitops_server_deploy.resources | default([]) | length == 0
+
+- name: Select GitOps server deployment
+  ansible.builtin.set_fact:
+    demo_gitops_deploy: >-
+      {{
+        demo_gitops_server_deploy.resources[0]
+        if demo_gitops_server_deploy.resources | default([]) | length > 0
+        else demo_gitops_argocd_deploy.resources[0] | default({})
+      }}
+
+- name: Fail when GitOps server deployment is missing
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift GitOps is not available. Expected namespace openshift-gitops with
+      a running Argo CD server and route.
+  when: demo_gitops_deploy | length == 0
+
+- name: Fail when GitOps server deployment is not available
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift GitOps is not available. Expected namespace openshift-gitops with
+      a running Argo CD server and route.
+  when: >
+    demo_gitops_deploy.status.availableReplicas | default(0) | int < 1
+
+- name: Get OpenShift GitOps route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - openshift-gitops-server
+      - -n
+      - openshift-gitops
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_gitops_route
+  changed_when: false
+  failed_when: false
+
+- name: Get legacy argocd route host when openshift-gitops-server route is absent
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - argocd-server
+      - -n
+      - openshift-gitops
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_gitops_route_legacy
+  changed_when: false
+  failed_when: false
+  when: demo_gitops_route.rc != 0 or demo_gitops_route.stdout | trim == ""
+
+- name: Set GitOps route host
+  ansible.builtin.set_fact:
+    demo_gitops_route_host: >-
+      {{
+        demo_gitops_route.stdout | trim
+        if demo_gitops_route.stdout | default('') | trim != ''
+        else demo_gitops_route_legacy.stdout | default('') | trim
+      }}
+
+- name: Fail when GitOps route host is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift GitOps is not available. Expected namespace openshift-gitops with
+      a running Argo CD server and route.
+  when: demo_gitops_route_host | trim == ""
+
+- name: Read OpenShift GitOps admin password
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - openshift-gitops-cluster
+      - -n
+      - openshift-gitops
+      - -o
+      - jsonpath={.data.admin\.password}
+  register: demo_gitops_admin_secret
+  changed_when: false
+  no_log: true
+
+- name: Fail when OpenShift GitOps admin password secret is missing
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift GitOps is not available. Expected namespace openshift-gitops with
+      a running Argo CD server and route.
+  when: demo_gitops_admin_secret.rc != 0 or demo_gitops_admin_secret.stdout | trim == ""
+
+- name: Set OpenShift GitOps facts
+  ansible.builtin.set_fact:
+    gitops_url: "https://{{ demo_gitops_route_host }}"
+    gitops_admin_password: "{{ demo_gitops_admin_secret.stdout | b64decode }}"
+  no_log: true

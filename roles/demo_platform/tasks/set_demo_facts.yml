@@ -1,0 +1,68 @@
+---
+- name: Publish demo platform facts
+  ansible.builtin.set_fact:
+    demo_platform:
+      openshift:
+        api_server: "{{ openshift_api_server }}"
+        token: "{{ openshift_token }}"
+        user: "{{ openshift_user }}"
+        cluster_domain: "{{ openshift_cluster_domain }}"
+      aap:
+        instance_name: "{{ aap_instance_name }}"
+        namespace: "{{ aap_namespace }}"
+        gateway_url: "{{ aap_gateway_url }}"
+        controller_url: "{{ aap_controller_url | default(aap_gateway_url) }}"
+        eda_url: "{{ aap_eda_url | default('') }}"
+        username: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+      gitops:
+        url: "{{ gitops_url }}"
+        namespace: openshift-gitops
+        username: admin
+        password: "{{ gitops_admin_password }}"
+      itsm_app:
+        url: "{{ itsm_app_url }}"
+        api_base_url: "{{ itsm_app_url }}/api/v1"
+        username: "{{ itsm_app_username }}"
+        password: "{{ itsm_app_password }}"
+        mcp_token: "{{ itsm_mcp_token }}"
+      chat_app:
+        url: "{{ chat_app_url }}"
+        api_base_url: "{{ chat_app_url }}/api/v1"
+        username: "{{ chat_app_username }}"
+        password: "{{ chat_app_password }}"
+      gitea:
+        url: "{{ gitea_url }}"
+        username: "{{ gitea_username }}"
+        password: "{{ gitea_password }}"
+    cacheable: true
+  no_log: true
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ demo_platform_artifacts_dir }}"
+    state: directory
+    mode: "0750"
+  when: demo_platform_write_artifacts | bool
+
+- name: Write demo platform facts artifact for downstream playbooks
+  ansible.builtin.copy:
+    dest: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  when: demo_platform_write_artifacts | bool
+  no_log: true
+
+- name: Display demo platform summary
+  ansible.builtin.debug:
+    msg:
+      - "OpenShift API: {{ openshift_api_server }} (user: {{ openshift_user }})"
+      - "AAP Gateway: {{ aap_gateway_url }}"
+      - "OpenShift GitOps: {{ gitops_url }}"
+      - "itsm-app: {{ itsm_app_url }}"
+      - "chat-app: {{ chat_app_url }}"
+      - "gitea: {{ gitea_url }}"
+      - "Facts artifact: {{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

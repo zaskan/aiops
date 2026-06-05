@@ -1,0 +1,127 @@
+---
+- name: Set candidate AAP instance identifiers
+  ansible.builtin.set_fact:
+    demo_aap_candidate_name: "{{ demo_aap_cr.metadata.name }}"
+    demo_aap_candidate_namespace: "{{ demo_aap_cr.metadata.namespace }}"
+    demo_aap_candidate_ready: true
+
+- name: List routes in AAP instance namespace
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ demo_aap_candidate_namespace }}"
+  register: demo_aap_routes
+
+- name: Resolve AAP gateway route host
+  ansible.builtin.set_fact:
+    demo_aap_candidate_gateway_host: >-
+      {{
+        (
+          demo_aap_routes.resources
+          | selectattr('metadata.name', 'equalto', demo_aap_candidate_name)
+          | map(attribute='spec')
+          | map(attribute='host')
+          | list
+          | first
+        )
+        | default(
+          demo_aap_routes.resources
+          | selectattr('metadata.name', 'equalto', demo_aap_candidate_name ~ '-' ~ demo_aap_candidate_namespace)
+          | map(attribute='spec')
+          | map(attribute='host')
+          | list
+          | first,
+          true
+        )
+        | default(
+          demo_aap_routes.resources
+          | rejectattr('metadata.name', 'match', '.*eda.*')
+          | rejectattr('metadata.name', 'equalto', 'mcp')
+          | map(attribute='spec')
+          | map(attribute='host')
+          | list
+          | first,
+          true
+        )
+      }}
+
+- name: Skip instance when gateway route host is missing
+  ansible.builtin.set_fact:
+    demo_aap_candidate_ready: false
+  when: demo_aap_candidate_gateway_host | default('') | trim == ""
+
+- name: Read AAP admin password secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ demo_aap_candidate_name }}-admin-password"
+    namespace: "{{ demo_aap_candidate_namespace }}"
+  register: demo_aap_admin_secret
+  no_log: true
+  when: demo_aap_candidate_ready | bool
+
+- name: Skip instance when admin password secret is missing
+  ansible.builtin.set_fact:
+    demo_aap_candidate_ready: false
+  when:
+    - demo_aap_candidate_ready | bool
+    - demo_aap_admin_secret.resources | default([]) | length == 0
+
+- name: Decode AAP admin password
+  ansible.builtin.set_fact:
+    demo_aap_candidate_password: >-
+      {{ demo_aap_admin_secret.resources[0].data.password | b64decode }}
+  no_log: true
+  when: demo_aap_candidate_ready | bool
+
+- name: Probe AAP controller API via gateway
+  ansible.builtin.uri:
+    url: "https://{{ demo_aap_candidate_gateway_host }}/api/controller/v2/ping/"
+    user: admin
+    password: "{{ demo_aap_candidate_password }}"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    force_basic_auth: true
+    status_code: 200
+  register: demo_aap_ping
+  retries: 5
+  delay: 5
+  until: demo_aap_ping.status == 200
+  when: demo_aap_candidate_ready | bool
+
+- name: Skip instance when controller API ping fails
+  ansible.builtin.set_fact:
+    demo_aap_candidate_ready: false
+  when:
+    - demo_aap_candidate_ready | bool
+    - demo_aap_ping is defined
+    - demo_aap_ping.status | default(0) != 200
+
+- name: Resolve AAP EDA route host when present
+  ansible.builtin.set_fact:
+    demo_aap_candidate_eda_host: >-
+      {{
+        demo_aap_routes.resources
+        | selectattr('metadata.name', 'match', '.*eda.*')
+        | map(attribute='spec')
+        | map(attribute='host')
+        | list
+        | first
+        | default('', true)
+      }}
+  when: demo_aap_candidate_ready | bool
+
+- name: Record first ready AAP instance
+  ansible.builtin.set_fact:
+    demo_aap_ready_instance: true
+    aap_instance_name: "{{ demo_aap_candidate_name }}"
+    aap_namespace: "{{ demo_aap_candidate_namespace }}"
+    aap_gateway_url: "https://{{ demo_aap_candidate_gateway_host }}"
+    aap_controller_url: "https://{{ demo_aap_candidate_gateway_host }}"
+    aap_eda_url: "{{ ('https://' ~ demo_aap_candidate_eda_host) if demo_aap_candidate_eda_host | default('') | length > 0 else '' }}"
+    aap_username: admin
+    aap_password: "{{ demo_aap_candidate_password }}"
+  no_log: true
+  when:
+    - demo_aap_candidate_ready | bool
+    - demo_aap_ready_instance is not defined

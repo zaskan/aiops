@@ -1,0 +1,91 @@
+---
+- name: List AnsibleAutomationPlatform custom resources
+  kubernetes.core.k8s_info:
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+  register: demo_aap_cr_list
+
+- name: Fail when no AnsibleAutomationPlatform CR exists
+  ansible.builtin.fail:
+    msg: >-
+      Ansible Automation Platform is not available. No ready AnsibleAutomationPlatform
+      custom resource was found in the cluster.
+  when: demo_aap_cr_list.resources | default([]) | length == 0
+
+- name: Get AAP operator subscription channels
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - subscription
+      - -A
+      - -o
+      - jsonpath={range .items[?(@.spec.name=="ansible-automation-platform-operator")]}{.spec.channel}{"\n"}{end}
+  register: demo_aap_channels_raw
+  changed_when: false
+  failed_when: false
+
+- name: Get AAP operator CSV versions
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - csv
+      - -A
+      - -l
+      - operators.coreos.com/ansible-automation-platform-operator.aap=
+      - -o
+      - jsonpath={range .items[*]}{.spec.version}{"\n"}{end}
+  register: demo_aap_csv_versions_raw
+  changed_when: false
+  failed_when: false
+
+- name: Build AAP operator channel list
+  ansible.builtin.set_fact:
+    demo_aap_operator_channels: "{{ demo_aap_channels_raw.stdout_lines | default([]) | map('trim') | select('ne', '') | list }}"
+
+- name: Build AAP operator version list
+  ansible.builtin.set_fact:
+    demo_aap_operator_versions: "{{ demo_aap_csv_versions_raw.stdout_lines | default([]) | map('trim') | select('ne', '') | list }}"
+
+- name: Determine whether AAP 2.7 operator is installed
+  ansible.builtin.set_fact:
+    demo_aap_operator_is_27: true
+  when: >
+    demo_aap_operator_channels | map('trim') | select('equalto', 'stable-2.7') | list | length > 0
+    or demo_aap_operator_versions | map('trim') | select('match', '2\\.7\\.') | list | length > 0
+
+- name: Default AAP 2.7 operator flag to false
+  ansible.builtin.set_fact:
+    demo_aap_operator_is_27: false
+  when: demo_aap_operator_is_27 is not defined
+
+- name: Fail when AAP 2.7 operator is not installed
+  ansible.builtin.fail:
+    msg: >-
+      Ansible Automation Platform 2.7 is not available. Expected operator channel
+      stable-2.7 with a ready AnsibleAutomationPlatform instance. Found channels:
+      {{ demo_aap_operator_channels | default([]) | join(', ') | default('none', true) }}.
+      Found CSV versions: {{ demo_aap_operator_versions | default([]) | join(', ') | default('none', true) }}.
+  when: not demo_aap_operator_is_27 | bool
+
+- name: Evaluate readiness for each AAP instance
+  ansible.builtin.include_tasks: check_aap_instance.yml
+  loop: "{{ demo_aap_cr_list.resources }}"
+  loop_control:
+    loop_var: demo_aap_cr
+    label: "{{ demo_aap_cr.metadata.namespace }}/{{ demo_aap_cr.metadata.name }}"
+
+- name: Fail when no ready AAP instance was discovered
+  ansible.builtin.fail:
+    msg: >-
+      Ansible Automation Platform is not available. No ready AnsibleAutomationPlatform
+      custom resource was found in the cluster. AAP CRs exist but none responded on
+      the gateway route/API ping. Check: oc get routes,secrets -n aap
+  when: demo_aap_ready_instance is not defined
+
+- name: Apply optional AAP credential overrides
+  ansible.builtin.set_fact:
+    aap_username: "{{ aap_username_override if (aap_username_override | default('') | length > 0) else aap_username }}"
+    aap_password: "{{ aap_password_override if (aap_password_override | default('') | length > 0) else aap_password }}"
+  no_log: true

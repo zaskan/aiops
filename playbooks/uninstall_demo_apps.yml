@@ -1,0 +1,9 @@
+---
+- name: Uninstall demo applications from OpenShift
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all/demo_platform.yml
+  roles:
+    - role: demo_platform
+      tasks_from: uninstall_main.yml

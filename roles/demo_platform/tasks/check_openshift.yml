@@ -1,0 +1,68 @@
+---
+- name: Verify OpenShift CLI is available
+  ansible.builtin.command: oc version --client
+  register: demo_oc_client
+  changed_when: false
+  failed_when: false
+
+- name: Fail when OpenShift CLI is missing
+  ansible.builtin.fail:
+    msg: "OpenShift CLI (oc) not found. Install the OpenShift CLI and ensure it is on PATH."
+  when: demo_oc_client.rc != 0
+
+- name: Verify OpenShift login session
+  ansible.builtin.command: oc whoami
+  register: demo_oc_whoami
+  changed_when: false
+  failed_when: false
+
+- name: Fail when not logged in to OpenShift
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift cluster is not available. Run 'oc login' to an OpenShift cluster
+      before running this playbook.
+  when: demo_oc_whoami.rc != 0
+
+- name: Get OpenShift API server URL
+  ansible.builtin.command: oc whoami --show-server
+  register: demo_oc_server
+  changed_when: false
+
+- name: Fail when OpenShift API server URL is empty
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift cluster is not available. Run 'oc login' to an OpenShift cluster
+      before running this playbook.
+  when: demo_oc_server.stdout | trim == ""
+
+- name: Get OpenShift access token
+  ansible.builtin.command: oc whoami --show-token
+  register: demo_oc_token
+  changed_when: false
+  no_log: true
+
+- name: Fail when OpenShift access token is empty
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift cluster is not available. Run 'oc login' to an OpenShift cluster
+      before running this playbook.
+  when: demo_oc_token.stdout | trim == ""
+
+- name: Get OpenShift cluster ingress domain
+  ansible.builtin.command: oc get ingresses.config cluster -o jsonpath='{.spec.domain}'
+  register: demo_oc_domain
+  changed_when: false
+
+- name: Fail when cluster ingress domain is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift cluster is not available. Could not read ingress domain from
+      cluster configuration (ingresses.config/cluster).
+  when: demo_oc_domain.stdout | trim == ""
+
+- name: Set OpenShift facts
+  ansible.builtin.set_fact:
+    openshift_user: "{{ demo_oc_whoami.stdout | trim }}"
+    openshift_api_server: "{{ demo_oc_server.stdout | trim }}"
+    openshift_token: "{{ demo_oc_token.stdout | trim }}"
+    openshift_cluster_domain: "{{ demo_oc_domain.stdout | trim }}"

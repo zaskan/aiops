@@ -1,0 +1,21 @@
+---
+- name: Verify OpenShift cluster access
+  ansible.builtin.include_tasks: check_openshift.yml
+
+- name: Verify Ansible Automation Platform 2.7
+  ansible.builtin.include_tasks: check_aap.yml
+
+- name: Verify OpenShift GitOps
+  ansible.builtin.include_tasks: check_gitops.yml
+
+- name: Ensure itsm-app is installed and healthy
+  ansible.builtin.include_tasks: install_itsm_app.yml
+
+- name: Ensure chat-app is installed and healthy
+  ansible.builtin.include_tasks: install_chat_app.yml
+
+- name: Ensure gitea is installed and healthy
+  ansible.builtin.include_tasks: install_gitea.yml
+
+- name: Publish demo platform facts
+  ansible.builtin.include_tasks: set_demo_facts.yml

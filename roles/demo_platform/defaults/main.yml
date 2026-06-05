@@ -1,0 +1,10 @@
+---
+validate_certs: false
+demo_platform_write_artifacts: true
+aap_username_override: ""
+aap_password_override: ""
+
+uninstall_assume_yes: false
+uninstall_keep_gitea_data: false
+uninstall_delete_gitea_namespace: true
+uninstall_remove_artifacts: true

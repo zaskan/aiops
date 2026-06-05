@@ -1,0 +1,43 @@
+---
+- name: Verify OpenShift cluster access
+  ansible.builtin.include_tasks: check_openshift.yml
+
+- name: Confirm demo app uninstall
+  ansible.builtin.pause:
+    prompt: |
+      This will remove itsm-app (namespace {{ itsm_app_namespace }}),
+      chat-app (namespace {{ chat_app_namespace }}), and gitea (namespace {{ gitea_namespace }}).
+      Gitea PVCs will be {{ 'kept' if uninstall_keep_gitea_data | bool else 'deleted' }}.
+      Continue? [y/N]
+  register: demo_uninstall_confirm
+  when: not uninstall_assume_yes | bool
+
+- name: Abort uninstall when not confirmed
+  ansible.builtin.fail:
+    msg: Uninstall aborted.
+  when:
+    - not uninstall_assume_yes | bool
+    - demo_uninstall_confirm.user_input | default('') | lower not in ['y', 'yes']
+
+- name: Uninstall itsm-app
+  ansible.builtin.include_tasks: uninstall_itsm_app.yml
+
+- name: Uninstall chat-app
+  ansible.builtin.include_tasks: uninstall_chat_app.yml
+
+- name: Uninstall gitea
+  ansible.builtin.include_tasks: uninstall_gitea.yml
+
+- name: Remove generated facts artifact
+  ansible.builtin.file:
+    path: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    state: absent
+  when: uninstall_remove_artifacts | bool
+
+- name: Display uninstall summary
+  ansible.builtin.debug:
+    msg:
+      - "Uninstall complete."
+      - "Removed itsm-app from namespace {{ itsm_app_namespace }}."
+      - "Removed chat-app from namespace {{ chat_app_namespace }}."
+      - "Removed gitea from namespace {{ gitea_namespace }}."

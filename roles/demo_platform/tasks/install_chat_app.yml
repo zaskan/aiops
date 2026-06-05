@@ -1,0 +1,225 @@
+---
+- name: Check whether chat-app deployment exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - deployment
+      - demo-chat
+      - -n
+      - "{{ chat_app_namespace }}"
+      - -o
+      - jsonpath={.status.availableReplicas}
+  register: demo_chat_available
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether chat-app needs installation
+  ansible.builtin.set_fact:
+    demo_chat_needs_install: >-
+      {{
+        demo_chat_available.rc != 0
+        or (demo_chat_available.stdout | default('0') | int) < 1
+      }}
+
+- name: Install chat-app from GitHub
+  when: demo_chat_needs_install | bool
+  block:
+    - name: Apply chat-app manifests from GitHub
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - "-f"
+          - "{{ chat_app_manifest_base }}/{{ item }}"
+      loop:
+        - namespace.yaml
+        - secret.yaml
+        - pvc.yaml
+        - deployment.yaml
+        - service.yaml
+        - route.yaml
+
+    - name: Create or update chat-app secrets
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: demo-chat-secrets
+            namespace: "{{ chat_app_namespace }}"
+          type: Opaque
+          stringData:
+            jwt-secret: "{{ chat_app_jwt_secret }}"
+
+    - name: Check whether chat-app BuildConfig exists
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ chat_app_namespace }}"
+          - get
+          - bc/demo-chat
+          - -o
+          - name
+      register: demo_chat_bc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create chat-app BuildConfig from Git source
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ chat_app_namespace }}"
+          - new-build
+          - "{{ chat_app_source_repo_url }}"
+          - --strategy=docker
+          - --name=demo-chat
+          - "-l"
+          - app=demo-chat
+      when: demo_chat_bc_check.rc != 0
+      register: demo_chat_new_build
+      changed_when: demo_chat_new_build.rc == 0
+
+    - name: Import Python base image for chat-app build
+      ansible.builtin.command:
+        argv:
+          - oc
+          - import-image
+          - python:3.12-slim-bookworm
+          - --from=docker.io/library/python:3.12-slim-bookworm
+          - --confirm
+          - -n
+          - "{{ chat_app_namespace }}"
+      register: demo_chat_import_base
+      changed_when: demo_chat_import_base.rc == 0
+      failed_when: false
+
+    - name: Build chat-app image from Git
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ chat_app_namespace }}"
+          - start-build
+          - demo-chat
+          - --follow
+      register: demo_chat_start_build
+      changed_when: demo_chat_start_build.rc == 0
+
+    - name: Enable local ImageStream lookup for demo-chat
+      ansible.builtin.command:
+        argv:
+          - oc
+          - patch
+          - imagestream/demo-chat
+          - -n
+          - "{{ chat_app_namespace }}"
+          - -p
+          - '{"spec":{"lookupPolicy":{"local":true}}}'
+      register: demo_chat_is_patch
+      changed_when: "'patched' in demo_chat_is_patch.stdout"
+      failed_when: false
+
+    - name: Set chat-app seed admin environment variables
+      ansible.builtin.command:
+        argv:
+          - oc
+          - set
+          - env
+          - deployment/demo-chat
+          - -n
+          - "{{ chat_app_namespace }}"
+          - "SEED_ADMIN_USERNAME={{ chat_app_seed_admin_username }}"
+          - "SEED_ADMIN_PASSWORD={{ chat_app_seed_admin_password }}"
+      register: demo_chat_seed_env
+      changed_when: "'updated' in demo_chat_seed_env.stdout or 'restarted' in demo_chat_seed_env.stdout"
+
+    - name: Wait for chat-app deployment rollout
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ chat_app_namespace }}"
+          - rollout
+          - status
+          - deployment/demo-chat
+          - --timeout=300s
+      changed_when: false
+
+- name: Get chat-app route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - demo-chat
+      - -n
+      - "{{ chat_app_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_chat_route
+  changed_when: false
+
+- name: Fail when chat-app route host is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      chat-app is not available. Could not resolve Route host in namespace
+      {{ chat_app_namespace }}. Check: oc get pods,route -n {{ chat_app_namespace }}
+  when: demo_chat_route.stdout | trim == ""
+
+- name: Set chat-app URL fact
+  ansible.builtin.set_fact:
+    chat_app_url: "https://{{ demo_chat_route.stdout | trim }}"
+
+- name: Verify chat-app health endpoint
+  ansible.builtin.uri:
+    url: "{{ chat_app_url }}/healthz"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: demo_chat_health
+  retries: 12
+  delay: 10
+  until: demo_chat_health.status == 200 and demo_chat_health.content is search('ok')
+
+- name: Fail when chat-app health check fails
+  ansible.builtin.fail:
+    msg: >-
+      chat-app health check failed at {{ chat_app_url }}/healthz.
+      Check: oc logs -n {{ chat_app_namespace }} -l app=demo-chat --tail=80
+  when: demo_chat_health.status != 200 or demo_chat_health.content is not search('ok')
+
+- name: Verify chat-app login endpoint
+  ansible.builtin.uri:
+    url: "{{ chat_app_url }}/api/v1/auth/login"
+    method: POST
+    validate_certs: "{{ validate_certs }}"
+    headers:
+      Content-Type: application/json
+    body_format: json
+    body:
+      username: "{{ chat_app_seed_admin_username }}"
+      password: "{{ chat_app_seed_admin_password }}"
+    status_code: 200
+    return_content: true
+  register: demo_chat_login
+  retries: 6
+  delay: 10
+  until: demo_chat_login.status == 200 and demo_chat_login.content is search('access_token')
+
+- name: Fail when chat-app login check fails
+  ansible.builtin.fail:
+    msg: >-
+      chat-app login check failed at {{ chat_app_url }}/api/v1/auth/login.
+      Verify seed admin credentials and pod logs in namespace {{ chat_app_namespace }}.
+  when: demo_chat_login.status != 200 or demo_chat_login.content is not search('access_token')
+
+- name: Set chat-app credential facts
+  ansible.builtin.set_fact:
+    chat_app_username: "{{ chat_app_seed_admin_username }}"
+    chat_app_password: "{{ chat_app_seed_admin_password }}"
+  no_log: true

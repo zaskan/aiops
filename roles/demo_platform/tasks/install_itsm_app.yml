@@ -1,0 +1,241 @@
+---
+- name: Check whether itsm-app deployment exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - deployment
+      - itsm-app
+      - -n
+      - "{{ itsm_app_namespace }}"
+      - -o
+      - jsonpath={.status.availableReplicas}
+  register: demo_itsm_available
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether itsm-app needs installation
+  ansible.builtin.set_fact:
+    demo_itsm_needs_install: >-
+      {{
+        demo_itsm_available.rc != 0
+        or (demo_itsm_available.stdout | default('0') | int) < 1
+      }}
+
+- name: Install itsm-app from GitHub
+  when: demo_itsm_needs_install | bool
+  block:
+    - name: Apply itsm-app namespace manifest
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - "-f"
+          - "{{ itsm_app_manifest_base }}/namespace.yaml"
+
+    - name: Create or update itsm-app secrets
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: itsm-secrets
+            namespace: "{{ itsm_app_namespace }}"
+          type: Opaque
+          stringData:
+            session-secret: "{{ itsm_app_session_secret }}"
+            mcp-token: "{{ itsm_app_mcp_token }}"
+            bootstrap-admin-user: "{{ itsm_app_bootstrap_admin_user }}"
+            bootstrap-admin-password: "{{ itsm_app_bootstrap_admin_password }}"
+
+    - name: Check whether itsm-app BuildConfig exists
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_app_namespace }}"
+          - get
+          - bc/itsm-app
+          - -o
+          - name
+      register: demo_itsm_bc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create itsm-app BuildConfig from Git source
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_app_namespace }}"
+          - new-build
+          - "{{ itsm_app_source_repo_url }}"
+          - --strategy=docker
+          - --name=itsm-app
+          - "-l"
+          - app=itsm-app
+      when: demo_itsm_bc_check.rc != 0
+      register: demo_itsm_new_build
+      changed_when: demo_itsm_new_build.rc == 0
+
+    - name: Import Python base image for itsm-app build
+      ansible.builtin.command:
+        argv:
+          - oc
+          - import-image
+          - python:3.12-slim-bookworm
+          - --from=docker.io/library/python:3.12-slim-bookworm
+          - --confirm
+          - -n
+          - "{{ itsm_app_namespace }}"
+      register: demo_itsm_import_base
+      changed_when: demo_itsm_import_base.rc == 0
+      failed_when: false
+
+    - name: Build itsm-app image from Git
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_app_namespace }}"
+          - start-build
+          - itsm-app
+          - --follow
+      register: demo_itsm_start_build
+      changed_when: demo_itsm_start_build.rc == 0
+
+    - name: Apply itsm-app workload manifests
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - "-f"
+          - "{{ itsm_app_manifest_base }}/{{ item }}"
+      loop:
+        - deployment.yaml
+        - service.yaml
+        - route.yaml
+
+    - name: Wait for itsm-app deployment rollout
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_app_namespace }}"
+          - rollout
+          - status
+          - deployment/itsm-app
+          - --timeout=300s
+      changed_when: false
+
+- name: Get itsm-app route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - itsm-app
+      - -n
+      - "{{ itsm_app_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_itsm_route
+  changed_when: false
+
+- name: Fail when itsm-app route host is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      itsm-app is not available. Could not resolve Route host in namespace
+      {{ itsm_app_namespace }}. Check: oc get pods,route -n {{ itsm_app_namespace }}
+  when: demo_itsm_route.stdout | trim == ""
+
+- name: Set itsm-app URL fact
+  ansible.builtin.set_fact:
+    itsm_app_url: "https://{{ demo_itsm_route.stdout | trim }}"
+
+- name: Verify itsm-app health endpoint
+  ansible.builtin.uri:
+    url: "{{ itsm_app_url }}/healthz"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: demo_itsm_health
+  retries: 12
+  delay: 10
+  until: demo_itsm_health.status == 200 and demo_itsm_health.content is search('ok')
+
+- name: Fail when itsm-app health check fails
+  ansible.builtin.fail:
+    msg: >-
+      itsm-app health check failed at {{ itsm_app_url }}/healthz.
+      Check: oc logs -n {{ itsm_app_namespace }} -l app=itsm-app --tail=80
+  when: demo_itsm_health.status != 200 or demo_itsm_health.content is not search('ok')
+
+- name: Read itsm-app bootstrap credentials from secret
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - itsm-secrets
+      - -n
+      - "{{ itsm_app_namespace }}"
+      - -o
+      - jsonpath={.data.bootstrap-admin-user}
+  register: demo_itsm_user_b64
+  changed_when: false
+  no_log: true
+
+- name: Read itsm-app bootstrap password from secret
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - itsm-secrets
+      - -n
+      - "{{ itsm_app_namespace }}"
+      - -o
+      - jsonpath={.data.bootstrap-admin-password}
+  register: demo_itsm_pass_b64
+  changed_when: false
+  no_log: true
+
+- name: Read itsm-app MCP token from secret
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - secret
+      - itsm-secrets
+      - -n
+      - "{{ itsm_app_namespace }}"
+      - -o
+      - jsonpath={.data.mcp-token}
+  register: demo_itsm_mcp_b64
+  changed_when: false
+  no_log: true
+
+- name: Set itsm-app credential facts
+  ansible.builtin.set_fact:
+    itsm_app_username: >-
+      {{
+        (demo_itsm_user_b64.stdout | b64decode)
+        if demo_itsm_user_b64.stdout | trim != ''
+        else itsm_app_bootstrap_admin_user
+      }}
+    itsm_app_password: >-
+      {{
+        (demo_itsm_pass_b64.stdout | b64decode)
+        if demo_itsm_pass_b64.stdout | trim != ''
+        else itsm_app_bootstrap_admin_password
+      }}
+    itsm_mcp_token: >-
+      {{
+        (demo_itsm_mcp_b64.stdout | b64decode)
+        if demo_itsm_mcp_b64.stdout | trim != ''
+        else itsm_app_mcp_token
+      }}
+  no_log: true
