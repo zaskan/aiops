@@ -7,3 +7,6 @@ vm_manifest_password_length: 16
 vm_manifest_git_user_name: aiops-automation
 vm_manifest_git_user_email: aiops@example.com
 vm_manifest_validate_certs: false
+vm_manifest_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+vm_manifest_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}

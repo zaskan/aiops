@@ -94,7 +94,7 @@
 
     - name: Provision itsm-app user and outbound webhook
       ansible.builtin.include_role:
-        name: itsm_ansible_role
+        name: demos.utils.itsm_ansible_role
 
     - name: Create test incident in itsm-app
       ansible.builtin.uri:

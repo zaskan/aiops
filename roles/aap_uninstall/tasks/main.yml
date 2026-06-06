@@ -66,7 +66,7 @@
         {{ 'removed' if aap_uninstall_org_present | bool else 'not found (already absent)' }}
       - "Removed workflows: {{ aap_httpd_pipeline_workflow }}, {{ aap_vm_pipeline_workflow }}"
       - "Removed project: {{ aap_vm_pipeline_project }}"
-      - "Removed inventories: {{ aap_httpd_pipeline_inventory }}, {{ aap_vm_pipeline_inventory }}"
+      - "Removed inventories: {{ aap_vm_pipeline_inventory }}, {{ aap_vm_pipeline_infrastructure_inventory }}"
       - >-
         Removed credentials: {{ aap_casc_credential_openshift }}, {{ aap_casc_credential_aap }},
         {{ aap_casc_credential_ah_published }}, {{ aap_casc_credential_ah_validated }},

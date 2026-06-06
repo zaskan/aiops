@@ -12,12 +12,13 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_gitea_repos.yml`     | Create Gitea repos for AIOps demo              |
 | `playbooks/casc/configure_infrastructure_gitops.yml` | Argo CD Application for Infrastructure/vms |
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
-| `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP inventory, job templates, Deploy Apache App workflow |
+| `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Apache App workflow (inventory not created) |
 | `playbooks/casc/playbooks/install_httpd.yml` | Install httpd and git on a RHEL host |
 | `playbooks/casc/playbooks/deploy_apache_app.yml` | Clone Gitea app repo into Apache docroot |
 | `playbooks/casc/playbooks/start_httpd.yml` | Enable and start httpd |
 | `playbooks/casc/playbooks/push_vm_manifest.yml` | Render VM manifest and push to Gitea Infrastructure |
 | `playbooks/casc/playbooks/sync_infrastructure_vms.yml` | Refresh Argo CD sync for Infrastructure VMs |
+| `playbooks/casc/playbooks/register_itsm_vm_asset.yml` | Register VM as ITSM asset and sync AIOps Infrastructure inventory |
 | `playbooks/casc/configure_chat_aiops.yml`   | Provision chat-app user, channel, webhook  |
 | `playbooks/casc/configure_itsm_aiops.yml`   | Provision itsm-app user, webhook, E2E test |
 | `playbooks/uninstall.yml`    | Remove demo apps, AAP AIOps org, OpenShift AAP SA, and artifact |
@@ -65,6 +66,10 @@ ansible-galaxy collection install -r collections/requirements.yml \
   --token "$PUBLIC_AH_OFFLINE_TOKEN"
 ```
 
+Collections include `kubernetes.core`, `awx.awx` (from Automation Hub), and **`demos.utils`** (from [GitHub](https://github.com/zaskan/demos.utils)) for ITSM asset type setup during install (`demos.utils.itsm_ansible_role` on the control node).
+
+**AAP execution environment:** the **AIOps Playbooks** EE needs at least `kubernetes.core` (for OpenShift API calls in register/sync playbooks). Mirror [`playbooks/casc/playbooks/collections/requirements.yml`](playbooks/casc/playbooks/collections/requirements.yml) when building the EE. Asset registration in `register_itsm_vm_asset.yml` uses built-in `uri` tasks (no `demos.utils` required at job runtime). The `itsm_inventory.py` dynamic inventory script is stdlib-only.
+
 ## Install demo
 
 ```bash
@@ -77,14 +82,15 @@ The playbook will:
 
 1. Verify OpenShift, AAP 2.7, OpenShift GitOps, and OpenShift Virtualization
 2. Install itsm-app, chat-app, and gitea if they are not already running
-3. Health-check each application
-4. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
-5. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key for AAP
-6. Mint a permanent OpenShift ServiceAccount token and update the artifact
-7. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type)
-8. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM
-9. Create AAP **AIOps Playbooks** project, VM provisioning job templates, and **Provision VM** workflow
-10. Create AAP **AIOps RHEL** inventory, Apache httpd job templates, and **Deploy Apache App** workflow
+3. Create the ITSM **Virtual Machine** asset type (hostname, ip_address, cpus, memory custom fields)
+4. Health-check each application
+5. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
+6. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key for AAP
+7. Mint a permanent OpenShift ServiceAccount token and update the artifact
+8. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
+9. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+10. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
+11. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`** and secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`). RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -212,7 +218,7 @@ Clone URLs follow the pattern `https://<gitea-host>/<admin-user>/<repo>.git`.
 
 ## VM provisioning pipeline (GitOps + AAP)
 
-End-to-end flow: render a KubeVirt `VirtualMachine` manifest, push it to **Infrastructure/vms** in Gitea, sync via Argo CD, and optionally run from AAP as a workflow.
+End-to-end flow: render a KubeVirt `VirtualMachine` manifest, push it to **Infrastructure/vms** in Gitea, sync via Argo CD, register the VM as an ITSM asset, refresh the **AIOps Infrastructure** inventory, and optionally run from AAP as a workflow.
 
 **Prerequisite chain:**
 
@@ -223,7 +229,9 @@ For partial re-runs after editing local playbooks, use `playbooks/casc/configure
 
 AAP job templates run playbooks from the Gitea **Playbooks** SCM project. Gitea URL and credentials come from the AAP **Gitea** credential (injected as `gitea_url`, `gitea_username`, `gitea_password` extra vars). Static settings (VM namespace, Argo CD app name, etc.) live in **`defaults/main.yml`** in the Playbooks repo. OpenShift access uses the **OpenShift Cluster** credential. Local `ansible-playbook` runs can fall back to `artifacts/demo_platform_facts.yml` when the Gitea credential is not injected.
 
-After changing playbooks under `playbooks/casc/playbooks/`, re-run `configure_gitea_repos.yml` to push updates to Gitea; AAP syncs the **AIOps Playbooks** project on launch (`scm_update_on_launch`).
+After changing playbooks under `playbooks/casc/playbooks/`, re-run `configure_gitea_repos.yml` to push updates to Gitea (including `itsm_inventory.py`); AAP syncs the **AIOps Playbooks** project on launch (`scm_update_on_launch`).
+
+The **ITSM App** credential injects `ITSM_API_BASE_URL`, `ITSM_API_USER`, and `ITSM_API_PASSWORD` (env and extra vars) for `itsm_inventory.py` and `register_itsm_vm_asset.yml`.
 
 ### Push a VM manifest manually
 
@@ -233,6 +241,8 @@ ansible-playbook playbooks/casc/configure_infrastructure_gitops.yml
 ansible-playbook playbooks/casc/playbooks/push_vm_manifest.yml \
   -e vm_name=demo-vm1 -e cpus=2 -e mem=4
 ansible-playbook playbooks/casc/playbooks/sync_infrastructure_vms.yml
+ansible-playbook playbooks/casc/playbooks/register_itsm_vm_asset.yml \
+  -e vm_name=demo-vm1 -e cpus=2 -e mem=4
 ```
 
 ### AAP workflow
@@ -242,9 +252,14 @@ ansible-playbook playbooks/casc/playbooks/sync_infrastructure_vms.yml
 | Resource | Name |
 | -------- | ---- |
 | Project | AIOps Playbooks (Gitea SCM) |
+| Inventory | AIOps Localhost (push/sync/register localhost playbooks) |
+| Inventory | AIOps Infrastructure (SCM source **ITSM Assets** → `itsm_inventory.py`) |
 | Job template | Push VM Manifest (survey: vm_name, cpus, mem) |
 | Job template | Sync Infrastructure VMs (OpenShift Cluster credential) |
-| Workflow | Provision VM (Push → Sync on success) |
+| Job template | Register ITSM VM Asset (ITSM App + OpenShift Cluster + AAP Gateway credentials) |
+| Workflow | Provision VM (Push → Sync → Register on success) |
+
+Assets registered with `external_inventory: true` appear in **AIOps Infrastructure** after the register job syncs the ITSM Assets inventory source.
 
 ```bash
 ansible-playbook playbooks/casc/configure_aap_vm_workflow.yml
@@ -258,7 +273,7 @@ Deploy an Apache (`httpd`) application on an **existing RHEL server**: install p
 
 1. `playbooks/install.yml` — includes credentials, Gitea sync, **AIOps Playbooks** project, and both AAP workflows
 
-Add your target VM as a host in the **AIOps RHEL** inventory in AAP before launching the workflow. SSH access uses the **Virtual Machines** credential (same key as KubeVirt-provisioned VMs; default user `fedora`).
+The workflow uses inventory **AIOps Infrastructure**, populated from ITSM assets after **Provision VM** registers a VM (`external_inventory: true`). Launch the workflow with `target_host` set to the VM asset name (hostname in that inventory). SSH access uses the **Virtual Machines** credential (same key as KubeVirt-provisioned VMs; default user `fedora`).
 
 For partial re-runs after editing httpd playbooks, use `configure_gitea_repos.yml` and `configure_aap_httpd_workflow.yml`.
 
@@ -268,7 +283,7 @@ For partial re-runs after editing httpd playbooks, use `configure_gitea_repos.ym
 
 | Resource | Name |
 | -------- | ---- |
-| Inventory | AIOps RHEL (add hosts manually in AAP) |
+| Inventory | **AIOps Infrastructure** (ITSM Assets SCM source) |
 | Job template | Install httpd (Virtual Machines credential) |
 | Job template | Deploy Apache App Repo (Virtual Machines + Gitea credentials) |
 | Job template | Start httpd (Virtual Machines credential) |
@@ -278,7 +293,7 @@ Workflow survey:
 
 | Variable | Required | Default | Purpose |
 | -------- | -------- | ------- | ------- |
-| `target_host` | yes | — | Inventory hostname in **AIOps RHEL** |
+| `target_host` | yes | — | Hostname in **AIOps Infrastructure** (VM asset name) |
 | `app_repo` | yes | — | Gitea repository name (e.g. `AIOps_App`) |
 | `app_branch` | no | `main` | Git branch to deploy |
 
@@ -464,7 +479,7 @@ ansible-playbook playbooks/casc/uninstall_aap_aiops.yml
 - **chat-app** — deletes namespace `demo-chat` and all resources within it
 - **gitea** — deletes namespace `gitea` (or workloads only when keeping PVCs)
 - **aiops-demo** — deletes namespace `aiops-demo` (VM SSH secret and any provisioned VMs)
-- **AAP AIOps** (when `uninstall_remove_aap=true`) — removes workflows, job templates, project, inventories, credentials, organization **AIOps**, and custom credential types
+- **AAP AIOps** (when `uninstall_remove_aap=true`) — removes workflows, job templates, project, inventories (including **AIOps Infrastructure** and its ITSM Assets source), credentials, organization **AIOps**, and custom credential types
 - **OpenShift AAP automation** (when `uninstall_remove_openshift_sa=true`) — removes ServiceAccount `aap-aiops-automation`, token secret `aap-aiops-openshift-token`, and ClusterRoleBinding
 
 ## Configuration
@@ -495,6 +510,7 @@ aiops/
 ├── group_vars/all/gitea_repos.yml
 ├── group_vars/all/chat_aiops.yml
 ├── group_vars/all/itsm_aiops.yml
+├── group_vars/all/itsm_assets.yml
 ├── inventory/hosts
 ├── playbooks/
 │   ├── install.yml                  # install demo apps + full AAP setup
@@ -515,7 +531,7 @@ aiops/
 │   │       ├── install_*.yml            # app install + verify
 │   │       └── uninstall_*.yml          # app removal
 │   ├── chat_app/                    # chat-app REST API provisioning
-│   ├── itsm_ansible_role/           # itsm-app REST API provisioning
+│   ├── itsm_ansible_role/           # DEPRECATED — use demos.utils.itsm_ansible_role collection
 │   └── itsm_chat_bridge/            # itsm → chat webhook relay
 └── artifacts/                     # generated facts (gitignored)
 ```

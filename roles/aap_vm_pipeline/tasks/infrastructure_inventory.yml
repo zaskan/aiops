@@ -1,0 +1,26 @@
+---
+- name: Ensure AIOps Infrastructure inventory exists in AAP
+  awx.awx.inventory:
+    name: "{{ aap_vm_pipeline_infrastructure_inventory }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+
+- name: Ensure ITSM Assets inventory source exists in AAP
+  awx.awx.inventory_source:
+    name: "{{ aap_vm_pipeline_inventory_source }}"
+    description: ITSM assets marked for external inventory
+    inventory: "{{ aap_vm_pipeline_infrastructure_inventory }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    source: scm
+    source_project: "{{ aap_vm_pipeline_project }}"
+    source_path: "{{ aap_vm_pipeline_inventory_script }}"
+    credential: "{{ aap_vm_pipeline_credential_itsm }}"
+    overwrite: true
+    update_on_launch: true
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"

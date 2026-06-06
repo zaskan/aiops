@@ -3,7 +3,7 @@ aap_httpd_pipeline_organization: AIOps
 aap_httpd_pipeline_validate_certs: false
 aap_httpd_pipeline_controller_api_prefix: /api/controller/
 
-aap_httpd_pipeline_inventory: AIOps RHEL
+aap_httpd_pipeline_inventory: AIOps Infrastructure
 aap_httpd_pipeline_project: AIOps Playbooks
 
 aap_httpd_pipeline_jt_install: Install httpd
@@ -20,7 +20,7 @@ aap_httpd_pipeline_workflow_survey_spec:
   description: Target RHEL server and Gitea application repository
   spec:
     - question_name: target_host
-      question_description: Inventory hostname of the RHEL server
+      question_description: Hostname in AIOps Infrastructure (ITSM VM asset name)
       required: true
       type: text
       variable: target_host

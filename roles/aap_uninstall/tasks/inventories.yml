@@ -1,7 +1,17 @@
 ---
-- name: Remove AIOps RHEL inventory from AAP
+- name: Remove ITSM Assets inventory source from AIOps Infrastructure
+  awx.awx.inventory_source:
+    name: "{{ aap_vm_pipeline_inventory_source }}"
+    inventory: "{{ aap_vm_pipeline_infrastructure_inventory }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+
+- name: Remove AIOps Infrastructure inventory from AAP
   awx.awx.inventory:
-    name: "{{ aap_httpd_pipeline_inventory }}"
+    name: "{{ aap_vm_pipeline_infrastructure_inventory }}"
     organization: "{{ aap_uninstall_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"

@@ -8,5 +8,6 @@
     - ../group_vars/all/gitea_repos.yml
     - ../group_vars/all/aap_vm_pipeline.yml
     - ../group_vars/all/aap_httpd_pipeline.yml
+    - ../group_vars/all/itsm_assets.yml
   roles:
     - role: demo_platform

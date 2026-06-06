@@ -1,0 +1,21 @@
+---
+- name: Validate required VM survey variables
+  ansible.builtin.assert:
+    that:
+      - vm_name is defined
+      - vm_name | length > 0
+      - cpus is defined
+      - mem is defined
+    fail_msg: vm_name, cpus, and mem are required (Provision VM workflow survey).
+
+- name: Load ITSM API credentials
+  ansible.builtin.include_tasks: load_itsm_credential.yml
+
+- name: Discover VM IP address from OpenShift VMI
+  ansible.builtin.include_tasks: discover_vm_ip.yml
+
+- name: Register VM as ITSM asset
+  ansible.builtin.include_tasks: register_asset.yml
+
+- name: Sync AIOps Infrastructure inventory from ITSM
+  ansible.builtin.include_tasks: sync_inventory.yml

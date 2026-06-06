@@ -1,9 +1,0 @@
----
-- name: Ensure AIOps RHEL inventory exists in AAP
-  awx.awx.inventory:
-    name: "{{ aap_httpd_pipeline_inventory }}"
-    organization: "{{ aap_httpd_pipeline_organization }}"
-    state: present
-    controller_host: "{{ aap_httpd_pipeline_controller_host }}"
-    controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
-    validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"

@@ -4,24 +4,70 @@
     vm_manifest_gitea_host: >-
       {{ vm_manifest_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
 
+- name: Build authenticated Gitea clone URL for Infrastructure repository
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_internal_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+        if (vm_manifest_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
 - name: Remove temporary Infrastructure clone directory
   ansible.builtin.file:
     path: "{{ vm_manifest_workdir }}/repo"
     state: absent
 
 - name: Clone Gitea Infrastructure repository
-  ansible.builtin.git:
-    repo: >-
-      https://{{ vm_manifest_gitea_username | urlencode }}:{{
-      vm_manifest_gitea_password | urlencode }}@{{ vm_manifest_gitea_host }}/{{
-      vm_manifest_gitea_owner | urlencode }}/{{ vm_manifest_gitea_repo | urlencode }}.git
-    dest: "{{ vm_manifest_workdir }}/repo"
-    version: "{{ vm_manifest_gitea_branch }}"
-    single_branch: true
-    force: true
-  environment:
-    GIT_SSL_NO_VERIFY: "{{ 'true' if not vm_manifest_validate_certs | bool else 'false' }}"
-  no_log: true
+  block:
+    - name: Clone Gitea Infrastructure repository from Gitea
+      ansible.builtin.git:
+        repo: "{{ vm_manifest_gitea_clone_repo }}"
+        dest: "{{ vm_manifest_workdir }}/repo"
+        version: "{{ vm_manifest_gitea_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              vm_manifest_gitea_use_internal | default(false) | bool
+              or vm_manifest_validate_certs | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+  rescue:
+    - name: Report Gitea Infrastructure repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ vm_manifest_gitea_owner }}/{{ vm_manifest_gitea_repo }}
+          (branch {{ vm_manifest_gitea_branch }}). Verify the Gitea credential URL is
+          https://gitea-gitea.apps.<cluster-domain> (not *.apps.apps.*), the Infrastructure
+          repository exists, and the job can reach Gitea
+          {% if vm_manifest_gitea_use_internal | default(false) | bool -%}
+          at http://{{ vm_manifest_gitea_internal_host }}.
+          {% else -%}
+          at https://{{ vm_manifest_gitea_host }}.
+          {% endif -%}
+          Re-run playbooks/install.yml or playbooks/casc/configure_aap_credentials.yml
+          to refresh the Gitea credential after correcting the route.
 
 - name: Ensure vms directory exists in Infrastructure repository
   ansible.builtin.file:

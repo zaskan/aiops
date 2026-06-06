@@ -14,6 +14,9 @@
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
+- name: Configure ITSM Virtual Machine asset type
+  ansible.builtin.include_tasks: configure_itsm_asset_types.yml
+
 - name: Ensure chat-app is installed and healthy
   ansible.builtin.include_tasks: install_chat_app.yml
 

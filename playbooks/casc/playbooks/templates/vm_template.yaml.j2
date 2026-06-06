@@ -21,6 +21,15 @@ spec:
             - name: cloudinit-disk
               disk:
                 bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+              ports:
+                - port: 22
+                  protocol: TCP
+      networks:
+        - name: default
+          pod: {}
       volumes:
         - name: container-boot-disk
           containerDisk:

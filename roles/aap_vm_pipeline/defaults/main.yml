@@ -44,5 +44,13 @@ aap_vm_pipeline_workflow_survey_spec:
 aap_vm_pipeline_credential_gitea: Gitea
 aap_vm_pipeline_credential_gitea_scm: Gitea SCM
 aap_vm_pipeline_credential_openshift: OpenShift Cluster
+aap_vm_pipeline_credential_itsm: ITSM App
+aap_vm_pipeline_credential_aap: AAP Gateway
+
+aap_vm_pipeline_infrastructure_inventory: AIOps Infrastructure
+aap_vm_pipeline_inventory_source: ITSM Assets
+aap_vm_pipeline_inventory_script: itsm_inventory.py
+aap_vm_pipeline_jt_register_itsm: Register ITSM VM Asset
+aap_vm_pipeline_playbook_register_itsm: register_itsm_vm_asset.yml
 
 aap_vm_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

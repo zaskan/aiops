@@ -1,0 +1,26 @@
+---
+itsm_vm_asset_type_name: Virtual Machine
+itsm_asset_types:
+  - name: "{{ itsm_vm_asset_type_name }}"
+    description: KubeVirt-provisioned virtual machine
+    fields:
+      - { field_key: hostname, label: Hostname, field_type: text }
+      - { field_key: ip_address, label: IP address, field_type: text }
+      - { field_key: cpus, label: CPUs, field_type: number }
+      - { field_key: memory, label: Memory GiB, field_type: number }
+
+itsm_ansible_role_check_connection: true
+itsm_ansible_role_admin_settings: false
+itsm_ansible_role_users: false
+itsm_ansible_role_asset_types: true
+itsm_ansible_role_assets: false
+itsm_ansible_role_inventory: false
+itsm_ansible_role_kb: false
+itsm_ansible_role_incidents: false
+itsm_ansible_role_followups: false
+itsm_ansible_role_task_templates: false
+itsm_ansible_role_change_templates: false
+itsm_ansible_role_request_templates: false
+itsm_ansible_role_service_requests: false
+itsm_ansible_role_changes: false
+itsm_ansible_role_change_tasks: false

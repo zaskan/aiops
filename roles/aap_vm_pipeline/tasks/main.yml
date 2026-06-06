@@ -10,6 +10,9 @@
     - name: Ensure AIOps localhost inventory exists
       ansible.builtin.include_tasks: inventory.yml
 
+    - name: Ensure AIOps Infrastructure inventory and ITSM inventory source exist
+      ansible.builtin.include_tasks: infrastructure_inventory.yml
+
     - name: Ensure Gitea Source Control credential exists in AAP
       ansible.builtin.include_tasks: scm_credential.yml
 
@@ -29,5 +32,6 @@
     msg:
       - "Organization: {{ aap_vm_pipeline_organization }}"
       - "Project: {{ aap_vm_pipeline_project }}"
-      - "Job templates: {{ aap_vm_pipeline_jt_push_vm }}, {{ aap_vm_pipeline_jt_sync_vms }}"
+      - "Job templates: {{ aap_vm_pipeline_jt_push_vm }}, {{ aap_vm_pipeline_jt_sync_vms }}, {{ aap_vm_pipeline_jt_register_itsm }}"
+      - "Inventories: {{ aap_vm_pipeline_inventory }}, {{ aap_vm_pipeline_infrastructure_inventory }}"
       - "Workflow: {{ aap_vm_pipeline_workflow }}"

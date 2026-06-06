@@ -30,7 +30,8 @@
         if (aap_vm_pipeline_gitea_scm_use_internal | default(true) | bool)
         else (
           demo_platform.gitea.url
-          | regex_replace('^https://gitea-gitea\.apps\.apps\.', 'https://gitea-gitea.apps.')
+          | replace('.apps.apps.', '.apps.')
+          | regex_replace('/$', '')
           ~ '/' ~ demo_platform.gitea.username ~ '/' ~ aap_vm_pipeline_gitea_repo ~ '.git'
         )
       }}

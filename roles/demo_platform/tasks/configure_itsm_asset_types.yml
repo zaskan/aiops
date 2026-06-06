@@ -1,0 +1,16 @@
+---
+- name: Load demo platform facts artifact for ITSM asset types
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Map itsm-app API connection from artifact
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+  no_log: true
+
+- name: Configure ITSM Virtual Machine asset type
+  ansible.builtin.include_role:
+    name: demos.utils.itsm_ansible_role

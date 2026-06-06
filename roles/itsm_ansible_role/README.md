@@ -1,5 +1,7 @@
 # ITSM Ansible role
 
+> **Deprecated.** This vendored copy uses the legacy `/api/v1/inventory` API. Use the [`demos.utils`](https://github.com/zaskan/demos.utils) collection role **`demos.utils.itsm_ansible_role`** instead (assets API, custom fields, and `itsm_inventory.py`). Install via `ansible-galaxy collection install -r collections/requirements.yml`.
+
 An Ansible role that creates ITSM objects via the REST API (`/api/v1`) using HTTP Basic auth and variables. Intended for demos and empty-database bootstrap — **mostly non-idempotent** (each run POSTs new rows). **Users** are an exception: existing usernames are skipped after `GET /api/v1/users`, so re-running the playbook does not fail on duplicate users.
 
 ## Requirements

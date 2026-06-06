@@ -1,0 +1,8 @@
+---
+itsm_vm_asset_type_name: Virtual Machine
+itsm_vm_asset_ip_wait_retries: 60
+itsm_vm_asset_ip_wait_delay: 10
+
+aap_vm_pipeline_organization: AIOps
+aap_vm_pipeline_infrastructure_inventory: AIOps Infrastructure
+aap_vm_pipeline_inventory_source: ITSM Assets

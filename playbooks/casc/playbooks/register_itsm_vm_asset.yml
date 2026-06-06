@@ -1,0 +1,8 @@
+---
+- name: Register provisioned VM as ITSM asset and refresh infrastructure inventory
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  roles:
+    - role: itsm_vm_asset

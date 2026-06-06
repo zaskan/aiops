@@ -1,0 +1,45 @@
+---
+- name: Load OpenShift API credentials for VMI lookup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_openshift_credential.yml
+
+- name: Wait for VM IP address from KubeVirt VMI
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    name: "{{ vm_name }}"
+    namespace: "{{ vm_namespace }}"
+  register: itsm_vm_asset_vmi_lookup
+  until: >
+    itsm_vm_asset_vmi_lookup.resources | default([]) | length > 0
+    and (
+      itsm_vm_asset_vmi_lookup.resources[0].status.interfaces | default([])
+      | selectattr('ipAddress', 'defined')
+      | rejectattr('ipAddress', 'equalto', '')
+      | list
+      | length
+    ) > 0
+  retries: "{{ itsm_vm_asset_ip_wait_retries }}"
+  delay: "{{ itsm_vm_asset_ip_wait_delay }}"
+
+- name: Extract VM IP address from VMI interface status
+  ansible.builtin.set_fact:
+    itsm_vm_asset_ip: >-
+      {{
+        (
+          itsm_vm_asset_vmi_lookup.resources[0].status.interfaces | default([])
+          | selectattr('ipAddress', 'defined')
+          | rejectattr('ipAddress', 'equalto', '')
+          | map(attribute='ipAddress')
+          | list
+          | first
+        )
+      }}
+
+- name: Display discovered VM IP address
+  ansible.builtin.debug:
+    msg: "VM {{ vm_name }} IP address: {{ itsm_vm_asset_ip }}"

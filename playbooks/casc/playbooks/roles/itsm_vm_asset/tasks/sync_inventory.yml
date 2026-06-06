@@ -1,0 +1,60 @@
+---
+- name: Load AAP controller connection for inventory sync
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_aap_controller_credential.yml
+
+- name: Obtain AAP gateway OAuth token for inventory sync
+  ansible.builtin.uri:
+    url: "{{ aap_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_controller_username }}"
+    password: "{{ aap_controller_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      description: register-itsm-vm-asset inventory sync
+      scope: write
+    status_code: 201
+  register: itsm_vm_asset_gateway_token_create
+  no_log: true
+
+- name: Set AAP controller OAuth token fact for inventory sync
+  ansible.builtin.set_fact:
+    itsm_vm_asset_controller_oauthtoken: "{{ itsm_vm_asset_gateway_token_create.json.token }}"
+  no_log: true
+
+- name: Lookup ITSM Assets inventory source in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/inventory_sources/?name={{
+      aap_vm_pipeline_inventory_source | urlencode }}&inventory__name={{
+      aap_vm_pipeline_infrastructure_inventory | urlencode }}&inventory__organization__name={{
+      aap_vm_pipeline_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_vm_asset_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: itsm_vm_asset_inventory_source_lookup
+
+- name: Fail when ITSM Assets inventory source was not found in AAP
+  ansible.builtin.fail:
+    msg: >-
+      Inventory source '{{ aap_vm_pipeline_inventory_source }}' was not found on inventory
+      '{{ aap_vm_pipeline_infrastructure_inventory }}'. Run playbooks/install.yml or
+      configure_aap_vm_workflow.yml to create the AIOps Infrastructure inventory.
+  when: itsm_vm_asset_inventory_source_lookup.json.count | default(0) == 0
+
+- name: Trigger ITSM Assets inventory source sync
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/inventory_sources/{{
+      itsm_vm_asset_inventory_source_lookup.json.results[0].id }}/update/
+    method: POST
+    headers:
+      Authorization: "Bearer {{ itsm_vm_asset_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: [201, 202]
+  register: itsm_vm_asset_inventory_source_update
