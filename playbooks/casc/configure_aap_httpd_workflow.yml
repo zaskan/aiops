@@ -1,0 +1,8 @@
+---
+- name: Configure AAP Apache httpd deployment workflow
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/aap_httpd_pipeline.yml
+  roles:
+    - role: aap_httpd_pipeline

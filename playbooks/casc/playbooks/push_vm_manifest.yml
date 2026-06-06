@@ -1,0 +1,8 @@
+---
+- name: Generate and push VM manifest to Gitea Infrastructure
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  roles:
+    - role: vm_manifest

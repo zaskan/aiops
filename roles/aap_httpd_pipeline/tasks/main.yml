@@ -1,0 +1,28 @@
+---
+- name: Run AAP httpd pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Configure AAP inventory, job templates, and workflow for Apache deployment
+  block:
+    - name: Ensure AIOps RHEL inventory exists
+      ansible.builtin.include_tasks: inventory.yml
+
+    - name: Ensure Apache deployment job templates exist
+      ansible.builtin.include_tasks: job_templates.yml
+
+    - name: Ensure Deploy Apache App workflow exists
+      ansible.builtin.include_tasks: workflow.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_httpd_pipeline_controller_api_prefix }}"
+
+- name: Display AAP httpd pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_httpd_pipeline_organization }}"
+      - "Project: {{ aap_httpd_pipeline_project }}"
+      - "Inventory: {{ aap_httpd_pipeline_inventory }}"
+      - "Job templates: {{ aap_httpd_pipeline_jt_install }}, {{ aap_httpd_pipeline_jt_deploy }}, {{ aap_httpd_pipeline_jt_start }}"
+      - "Workflow: {{ aap_httpd_pipeline_workflow }}"

@@ -1,0 +1,43 @@
+---
+- name: Create Gitea repository when absent
+  ansible.builtin.uri:
+    url: "{{ gitea_api_base }}/api/v1/user/repos"
+    method: POST
+    user: "{{ gitea_admin_username }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ gitea_validate_certs }}"
+    body_format: json
+    body:
+      name: "{{ item }}"
+      auto_init: "{{ gitea_repos_auto_init | bool }}"
+      default_branch: "{{ gitea_repos_default_branch }}"
+      private: "{{ gitea_repos_private | bool }}"
+    status_code:
+      - 201
+      - 409
+  loop: "{{ gitea_repos_list }}"
+  register: gitea_repos_create
+  no_log: true
+
+- name: Verify Gitea repository exists
+  ansible.builtin.uri:
+    url: >-
+      {{ gitea_api_base }}/api/v1/repos/{{ gitea_owner | urlencode }}/{{ item | urlencode }}
+    method: GET
+    user: "{{ gitea_admin_username }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ gitea_validate_certs }}"
+    status_code: 200
+  loop: "{{ gitea_repos_list }}"
+  register: gitea_repos_verify
+
+- name: Build Gitea repository clone URL list for summary
+  ansible.builtin.set_fact:
+    gitea_repos_clone_urls: >-
+      {{
+        gitea_repos_list
+        | map('regex_replace', '^(.*)$', gitea_api_base ~ '/' ~ gitea_owner ~ '/\1.git')
+        | list
+      }}

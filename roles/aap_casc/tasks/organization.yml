@@ -1,0 +1,42 @@
+---
+- name: List gateway organizations to find AIOps
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_casc_controller_host }}/api/gateway/v1/organizations/?name={{
+      aap_casc_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_casc_controller_oauthtoken }}"
+    validate_certs: "{{ aap_casc_validate_certs }}"
+    status_code: 200
+  register: aap_casc_gateway_orgs
+
+- name: Create AIOps organization in AAP gateway
+  ansible.builtin.uri:
+    url: "{{ aap_casc_controller_host }}/api/gateway/v1/organizations/"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ aap_casc_controller_oauthtoken }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "{{ aap_casc_organization }}"
+      description: AIOps demo platform organization
+    validate_certs: "{{ aap_casc_validate_certs }}"
+    status_code: 201
+  when: aap_casc_gateway_orgs.json.count | default(0) == 0
+
+- name: Wait for AIOps organization to sync to controller API
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_casc_controller_host }}/api/controller/v2/organizations/?name={{
+      aap_casc_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_casc_controller_oauthtoken }}"
+    validate_certs: "{{ aap_casc_validate_certs }}"
+    status_code: 200
+  register: aap_casc_controller_orgs
+  until: aap_casc_controller_orgs.json.count | default(0) > 0
+  retries: 15
+  delay: 2

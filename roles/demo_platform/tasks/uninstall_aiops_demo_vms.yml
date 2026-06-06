@@ -1,0 +1,5 @@
+---
+- name: Uninstall aiops-demo VM namespace
+  ansible.builtin.include_tasks: uninstall_namespace.yml
+  vars:
+    uninstall_target_namespace: "{{ aiops_demo_namespace }}"

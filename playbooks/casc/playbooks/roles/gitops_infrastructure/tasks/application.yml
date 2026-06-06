@@ -1,0 +1,28 @@
+---
+- name: Ensure Argo CD Application for Infrastructure VMs exists
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_infrastructure_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_infrastructure_validate_certs }}"
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: "{{ gitops_infrastructure_app_name }}"
+        namespace: "{{ gitops_infrastructure_app_namespace }}"
+      spec:
+        project: "{{ gitops_infrastructure_argocd_project }}"
+        source:
+          repoURL: "{{ gitops_infrastructure_repo_url }}"
+          targetRevision: "{{ gitops_infrastructure_source_branch }}"
+          path: "{{ gitops_infrastructure_source_path }}"
+          directory:
+            recurse: true
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: "{{ gitops_infrastructure_dest_namespace }}"
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true

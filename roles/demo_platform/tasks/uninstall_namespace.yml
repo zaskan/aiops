@@ -1,0 +1,22 @@
+---
+- name: Check whether {{ uninstall_target_namespace }} namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ uninstall_target_namespace }}"
+  register: uninstall_ns_info
+
+- name: Delete {{ uninstall_target_namespace }} namespace and all resources
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ uninstall_target_namespace }}"
+    wait: true
+    wait_timeout: 600
+  when: uninstall_ns_info.resources | length > 0
+
+- name: Report {{ uninstall_target_namespace }} namespace not found
+  ansible.builtin.debug:
+    msg: "Namespace '{{ uninstall_target_namespace }}' not found; skipping."
+  when: uninstall_ns_info.resources | length == 0

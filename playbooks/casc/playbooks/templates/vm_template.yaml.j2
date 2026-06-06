@@ -1,0 +1,47 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{ vm_name }}
+  namespace: {{ vm_namespace }}
+spec:
+  runStrategy: Always
+  template:
+    spec:
+      domain:
+        cpu:
+          cores: {{ cpus }}
+        resources:
+          requests:
+            memory: {{ mem }}Gi
+        devices:
+          disks:
+            - name: container-boot-disk
+              disk:
+                bus: virtio
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+      volumes:
+        - name: container-boot-disk
+          containerDisk:
+            image: {{ image }}
+            imagePullPolicy: IfNotPresent
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              chpasswd:
+                expire: false
+              password: {{ password }}
+              user: fedora
+              runcmd:
+                - setsebool -P virt_qemu_ga_manage_ssh on
+      accessCredentials:
+        - sshPublicKey:
+            propagationMethod:
+              qemuGuestAgent:
+                users:
+                  - fedora
+            source:
+              secret:
+                secretName: {{ ssh_secret_name }}

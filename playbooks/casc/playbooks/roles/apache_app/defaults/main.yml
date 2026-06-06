@@ -1,0 +1,7 @@
+---
+apache_app_docroot: /var/www/html
+apache_app_package: httpd
+apache_app_git_package: git
+apache_app_service: httpd
+apache_app_default_branch: main
+apache_app_validate_certs: false

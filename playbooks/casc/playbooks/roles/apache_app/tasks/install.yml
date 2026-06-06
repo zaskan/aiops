@@ -1,0 +1,7 @@
+---
+- name: Install httpd and git packages
+  ansible.builtin.dnf:
+    name:
+      - "{{ apache_app_package }}"
+      - "{{ apache_app_git_package }}"
+    state: present

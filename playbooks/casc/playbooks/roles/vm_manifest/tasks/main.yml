@@ -1,0 +1,17 @@
+---
+- name: Run VM manifest preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Generate VM password and render manifest
+  ansible.builtin.include_tasks: render.yml
+
+- name: Push rendered manifest to Gitea Infrastructure repository
+  ansible.builtin.include_tasks: push.yml
+
+- name: Display VM manifest summary
+  ansible.builtin.debug:
+    msg:
+      - "VM name: {{ vm_name }}"
+      - "Manifest path: {{ vm_manifest_gitea_repo }}/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+      - "Target namespace: {{ vm_namespace }}"
+      - "Gitea repo URL: {{ vm_manifest_gitea_repo_url }}"

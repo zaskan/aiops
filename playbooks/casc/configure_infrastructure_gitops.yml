@@ -1,0 +1,8 @@
+---
+- name: Configure Argo CD for Infrastructure VMs repository
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/gitops_infrastructure.yml
+  roles:
+    - role: gitops_infrastructure

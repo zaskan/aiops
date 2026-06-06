@@ -1,0 +1,18 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Fail when required extra vars are missing
+  ansible.builtin.assert:
+    that:
+      - vm_name | default('') | trim | length > 0
+      - cpus | default('') | string | trim | length > 0
+      - mem | default('') | string | trim | length > 0
+    fail_msg: >-
+      vm_name, cpus, and mem are required extra vars. Example:
+      -e vm_name=demo-vm1 -e cpus=2 -e mem=4
+
+- name: Build Gitea Infrastructure repository URL
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_repo_url: >-
+      {{ vm_manifest_gitea_api_base }}/{{ vm_manifest_gitea_owner }}/{{ vm_manifest_gitea_repo }}.git

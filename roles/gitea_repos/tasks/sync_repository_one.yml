@@ -1,0 +1,142 @@
+---
+- name: Validate sync source for {{ gitea_repo_seed.name }}
+  ansible.builtin.assert:
+    that:
+      - (gitea_repo_seed.source_url | default('') | trim | length > 0)
+        != (gitea_repo_seed.source_path | default('') | trim | length > 0)
+    fail_msg: >-
+      Gitea sync '{{ gitea_repo_seed.name }}' must define exactly one of source_url or
+      source_path.
+
+- name: Set sync source label for {{ gitea_repo_seed.name }}
+  ansible.builtin.set_fact:
+    gitea_repo_sync_source_label: >-
+      {{
+        gitea_repo_seed.source_url
+        if (gitea_repo_seed.source_url | default('') | trim | length > 0)
+        else gitea_repo_seed.source_path
+      }}
+
+- name: Sync {{ gitea_repo_seed.name }} from {{ gitea_repo_sync_source_label }}
+  block:
+    - name: Set Gitea host for authenticated git clone
+      ansible.builtin.set_fact:
+        gitea_api_host: "{{ gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+
+    - name: Remove temporary sync directories for {{ gitea_repo_seed.name }}
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source"
+        - "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-dest"
+
+    - name: Clone upstream source for {{ gitea_repo_seed.name }}
+      when: gitea_repo_seed.source_url | default('') | trim | length > 0
+      ansible.builtin.git:
+        repo: "{{ gitea_repo_seed.source_url }}"
+        dest: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source"
+        version: "{{ gitea_repo_seed.branch | default(gitea_repos_default_branch) }}"
+        single_branch: true
+        force: true
+
+    - name: Remove upstream git metadata for {{ gitea_repo_seed.name }}
+      when: gitea_repo_seed.source_url | default('') | trim | length > 0
+      ansible.builtin.file:
+        path: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source/.git"
+        state: absent
+
+    - name: Check local sync source directory for {{ gitea_repo_seed.name }}
+      when: gitea_repo_seed.source_path | default('') | trim | length > 0
+      ansible.builtin.stat:
+        path: "{{ gitea_repo_seed.source_path }}"
+      register: gitea_repo_sync_source_dir
+
+    - name: Fail when local sync source directory is missing for {{ gitea_repo_seed.name }}
+      ansible.builtin.fail:
+        msg: >-
+          Local sync source directory '{{ gitea_repo_seed.source_path }}' not found for
+          Gitea repository '{{ gitea_repo_seed.name }}'.
+      when:
+        - gitea_repo_seed.source_path | default('') | trim | length > 0
+        - not gitea_repo_sync_source_dir.stat.exists | default(false)
+
+    - name: Copy local source files for {{ gitea_repo_seed.name }}
+      when: gitea_repo_seed.source_path | default('') | trim | length > 0
+      ansible.builtin.copy:
+        src: "{{ gitea_repo_seed.source_path }}/"
+        dest: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source/"
+        mode: preserve
+
+    - name: Clone Gitea destination repository for {{ gitea_repo_seed.name }}
+      ansible.builtin.git:
+        repo: >-
+          https://{{ gitea_admin_username | urlencode }}:{{
+          gitea_admin_password | urlencode }}@{{ gitea_api_host }}/{{ gitea_owner | urlencode }}/{{
+          gitea_repo_seed.name | urlencode }}.git
+        dest: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-dest"
+        version: "{{ gitea_repos_default_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: "{{ 'true' if not gitea_validate_certs | bool else 'false' }}"
+      no_log: true
+
+    - name: Build rsync options for {{ gitea_repo_seed.name }}
+      ansible.builtin.set_fact:
+        gitea_repo_sync_rsync_opts: >-
+          {{
+            ['--exclude=.git']
+            + (
+              gitea_repo_seed.preserve_paths | default([])
+              | map('regex_replace', '^(.*)$', '--exclude=\1/')
+              | list
+            )
+          }}
+
+    - name: Mirror source content into Gitea clone for {{ gitea_repo_seed.name }}
+      ansible.posix.synchronize:
+        src: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source/"
+        dest: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-dest/"
+        delete: true
+        rsync_opts: "{{ gitea_repo_sync_rsync_opts }}"
+      delegate_to: localhost
+
+    - name: Commit and push synced content to {{ gitea_repo_seed.name }}
+      ansible.builtin.shell: |
+        set -euo pipefail
+        git config user.email "{{ gitea_repos_sync_git_user_email }}"
+        git config user.name "{{ gitea_repos_sync_git_user_name }}"
+        git add .
+        git commit -m "Sync {{ gitea_repo_seed.name }} from {{ gitea_repo_sync_source_label }}"
+        git -c http.sslVerify={{ 'true' if gitea_validate_certs | bool else 'false' }} push origin "{{ gitea_repos_default_branch }}"
+      args:
+        chdir: "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-dest"
+      register: gitea_repo_sync_push
+      changed_when: gitea_repo_sync_push.rc == 0
+      failed_when: >
+        (gitea_repo_sync_push.rc not in [0, 1])
+        or (
+          gitea_repo_sync_push.rc != 0
+          and ('nothing to commit' not in (gitea_repo_sync_push.stdout | default('') | lower))
+          and ('nothing to commit' not in (gitea_repo_sync_push.stderr | default('') | lower))
+          and ('up to date' not in (gitea_repo_sync_push.stdout | default('') | lower))
+          and ('up to date' not in (gitea_repo_sync_push.stderr | default('') | lower))
+        )
+      no_log: true
+
+    - name: Remove temporary sync directories for {{ gitea_repo_seed.name }} after push
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-source"
+        - "{{ gitea_repos_sync_workdir }}/{{ gitea_repo_seed.name }}-dest"
+
+    - name: Record {{ gitea_repo_seed.name }} as synced
+      ansible.builtin.set_fact:
+        gitea_repos_synced_names: >-
+          {{
+            (gitea_repos_synced_names | default([]))
+            + [gitea_repo_seed.name]
+          }}

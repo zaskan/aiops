@@ -1,0 +1,64 @@
+---
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_host: >-
+      {{ vm_manifest_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Remove temporary Infrastructure clone directory
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository
+  ansible.builtin.git:
+    repo: >-
+      https://{{ vm_manifest_gitea_username | urlencode }}:{{
+      vm_manifest_gitea_password | urlencode }}@{{ vm_manifest_gitea_host }}/{{
+      vm_manifest_gitea_owner | urlencode }}/{{ vm_manifest_gitea_repo | urlencode }}.git
+    dest: "{{ vm_manifest_workdir }}/repo"
+    version: "{{ vm_manifest_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: "{{ 'true' if not vm_manifest_validate_certs | bool else 'false' }}"
+  no_log: true
+
+- name: Ensure vms directory exists in Infrastructure repository
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/repo/{{ vm_manifest_gitea_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy rendered VM manifest into Infrastructure repository
+  ansible.builtin.copy:
+    src: "{{ vm_manifest_workdir }}/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    dest: "{{ vm_manifest_workdir }}/repo/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    mode: "0644"
+
+- name: Commit and push VM manifest to Gitea Infrastructure repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ vm_manifest_git_user_email }}"
+    git config user.name "{{ vm_manifest_git_user_name }}"
+    git add "{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    git commit -m "Add or update VM manifest {{ vm_name }}"
+    git -c http.sslVerify={{ 'true' if vm_manifest_validate_certs | bool else 'false' }} push origin "{{ vm_manifest_gitea_branch }}"
+  args:
+    chdir: "{{ vm_manifest_workdir }}/repo"
+  register: vm_manifest_git_push
+  changed_when: vm_manifest_git_push.rc == 0
+  failed_when: >
+    (vm_manifest_git_push.rc not in [0, 1])
+    or (
+      vm_manifest_git_push.rc != 0
+      and ('nothing to commit' not in (vm_manifest_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (vm_manifest_git_push.stderr | default('') | lower))
+      and ('up to date' not in (vm_manifest_git_push.stdout | default('') | lower))
+      and ('up to date' not in (vm_manifest_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory after push
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/repo"
+    state: absent

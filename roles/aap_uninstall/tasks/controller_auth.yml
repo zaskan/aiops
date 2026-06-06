@@ -1,0 +1,21 @@
+---
+- name: Obtain AAP gateway OAuth token for awx.awx modules
+  ansible.builtin.uri:
+    url: "{{ aap_uninstall_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_uninstall_controller_username }}"
+    password: "{{ aap_uninstall_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+    body_format: json
+    body:
+      description: aap-uninstall ansible automation
+      scope: write
+    status_code: 201
+  register: aap_uninstall_gateway_token_create
+  no_log: true
+
+- name: Set AAP controller OAuth token fact
+  ansible.builtin.set_fact:
+    aap_uninstall_controller_oauthtoken: "{{ aap_uninstall_gateway_token_create.json.token }}"
+  no_log: true

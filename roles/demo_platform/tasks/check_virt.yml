@@ -1,0 +1,77 @@
+---
+- name: Check OpenShift Virtualization operator namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ openshift_virt_operator_namespace }}"
+  register: demo_virt_operator_namespace
+
+- name: Fail when OpenShift Virtualization namespace is missing
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift Virtualization is not available. Expected namespace
+      {{ openshift_virt_operator_namespace }} with a ready HyperConverged
+      custom resource. Install the OpenShift Virtualization operator and wait
+      for HyperConverged to become Available.
+  when: demo_virt_operator_namespace.resources | default([]) | length == 0
+
+- name: Get HyperConverged custom resource
+  kubernetes.core.k8s_info:
+    api_version: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    name: "{{ openshift_virt_hyperconverged_name }}"
+    namespace: "{{ openshift_virt_operator_namespace }}"
+  register: demo_virt_hco
+
+- name: Fail when HyperConverged custom resource is missing
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift Virtualization is not available. HyperConverged resource
+      '{{ openshift_virt_hyperconverged_name }}' was not found in namespace
+      {{ openshift_virt_operator_namespace }}.
+  when: demo_virt_hco.resources | default([]) | length == 0
+
+- name: Evaluate HyperConverged Available condition
+  ansible.builtin.set_fact:
+    demo_virt_hco_available: >-
+      {{
+        (
+          demo_virt_hco.resources[0].status.conditions
+          | default([])
+          | selectattr('type', 'equalto', 'Available')
+          | selectattr('status', 'equalto', 'True')
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Fail when HyperConverged is not Available
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift Virtualization HyperConverged '{{ openshift_virt_hyperconverged_name }}'
+      is not Available in namespace {{ openshift_virt_operator_namespace }}.
+      Check: oc get hyperconverged -n {{ openshift_virt_operator_namespace }}
+      and operator pod status.
+  when: not demo_virt_hco_available | bool
+
+- name: Check virt-api deployment in OpenShift Virtualization namespace
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: virt-api
+    namespace: "{{ openshift_virt_operator_namespace }}"
+  register: demo_virt_api_deploy
+
+- name: Fail when virt-api deployment is missing or not ready
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift Virtualization virt-api deployment is not ready in namespace
+      {{ openshift_virt_operator_namespace }}. Check: oc get deployment,pods -n
+      {{ openshift_virt_operator_namespace }}
+  when: >
+    demo_virt_api_deploy.resources | default([]) | length == 0
+    or (demo_virt_api_deploy.resources[0].status.availableReplicas | default(0) | int) < 1
+
+- name: Set OpenShift Virtualization facts
+  ansible.builtin.set_fact:
+    openshift_virt_available: true

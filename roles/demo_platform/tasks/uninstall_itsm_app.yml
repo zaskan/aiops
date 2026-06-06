@@ -1,29 +1,5 @@
 ---
-- name: Check whether itsm-app namespace exists
-  ansible.builtin.command:
-    argv:
-      - oc
-      - get
-      - namespace
-      - "{{ itsm_app_namespace }}"
-  register: demo_itsm_ns_check
-  changed_when: false
-  failed_when: false
-
-- name: Delete itsm-app namespace and all resources
-  ansible.builtin.command:
-    argv:
-      - oc
-      - delete
-      - namespace
-      - "{{ itsm_app_namespace }}"
-      - --wait=true
-      - --ignore-not-found=true
-  register: demo_itsm_uninstall
-  changed_when: demo_itsm_uninstall.rc == 0 and 'deleted' in demo_itsm_uninstall.stdout
-  when: demo_itsm_ns_check.rc == 0
-
-- name: Report itsm-app not installed
-  ansible.builtin.debug:
-    msg: "itsm-app namespace '{{ itsm_app_namespace }}' not found; skipping."
-  when: demo_itsm_ns_check.rc != 0
+- name: Uninstall itsm-app
+  ansible.builtin.include_tasks: uninstall_namespace.yml
+  vars:
+    uninstall_target_namespace: "{{ itsm_app_namespace }}"

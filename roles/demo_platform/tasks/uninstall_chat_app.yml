@@ -1,29 +1,5 @@
 ---
-- name: Check whether chat-app namespace exists
-  ansible.builtin.command:
-    argv:
-      - oc
-      - get
-      - namespace
-      - "{{ chat_app_namespace }}"
-  register: demo_chat_ns_check
-  changed_when: false
-  failed_when: false
-
-- name: Delete chat-app namespace and all resources
-  ansible.builtin.command:
-    argv:
-      - oc
-      - delete
-      - namespace
-      - "{{ chat_app_namespace }}"
-      - --wait=true
-      - --ignore-not-found=true
-  register: demo_chat_uninstall
-  changed_when: demo_chat_uninstall.rc == 0 and 'deleted' in demo_chat_uninstall.stdout
-  when: demo_chat_ns_check.rc == 0
-
-- name: Report chat-app not installed
-  ansible.builtin.debug:
-    msg: "chat-app namespace '{{ chat_app_namespace }}' not found; skipping."
-  when: demo_chat_ns_check.rc != 0
+- name: Uninstall chat-app
+  ansible.builtin.include_tasks: uninstall_namespace.yml
+  vars:
+    uninstall_target_namespace: "{{ chat_app_namespace }}"

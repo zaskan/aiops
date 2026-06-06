@@ -1,0 +1,55 @@
+---
+- name: Resolve demo platform facts artifact for OpenShift cleanup
+  ansible.builtin.set_fact:
+    uninstall_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Check demo platform facts artifact exists for OpenShift cleanup
+  ansible.builtin.stat:
+    path: "{{ uninstall_artifact_file }}"
+  register: uninstall_artifact_stat
+
+- name: Load demo platform facts artifact for OpenShift cleanup
+  ansible.builtin.include_vars:
+    file: "{{ uninstall_artifact_file }}"
+  when:
+    - uninstall_artifact_stat.stat.exists
+    - demo_platform is not defined
+
+- name: Set AAP OpenShift automation namespace fact
+  ansible.builtin.set_fact:
+    uninstall_openshift_sa_namespace: "{{ demo_platform.aap.namespace | default('aap') }}"
+  when: demo_platform is defined
+
+- name: Default AAP OpenShift automation namespace when artifact is absent
+  ansible.builtin.set_fact:
+    uninstall_openshift_sa_namespace: aap
+  when: demo_platform is not defined
+
+- name: Remove AAP automation ServiceAccount token secret
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Secret
+    name: "{{ aap_casc_openshift_token_secret }}"
+    namespace: "{{ uninstall_openshift_sa_namespace }}"
+    wait: true
+    wait_timeout: 120
+
+- name: Remove AAP automation ClusterRoleBinding
+  kubernetes.core.k8s:
+    state: absent
+    api_version: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    name: "{{ aap_casc_openshift_sa_name }}-{{ aap_casc_openshift_cluster_role }}"
+    wait: true
+    wait_timeout: 120
+
+- name: Remove AAP automation ServiceAccount
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: ServiceAccount
+    name: "{{ aap_casc_openshift_sa_name }}"
+    namespace: "{{ uninstall_openshift_sa_namespace }}"
+    wait: true
+    wait_timeout: 120

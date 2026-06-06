@@ -1,0 +1,37 @@
+---
+aap_uninstall_validate_certs: false
+aap_uninstall_controller_api_prefix: /api/controller/
+aap_uninstall_artifacts_file: >-
+  {{ (demo_platform_artifacts_dir | default(playbook_dir ~ '/../artifacts', true))
+     ~ '/demo_platform_facts.yml' }}
+
+aap_uninstall_organization: "{{ aap_casc_organization | default('AIOps') }}"
+
+aap_uninstall_legacy_jt_deploy_apache_app: Deploy Apache App
+
+aap_uninstall_credential_type_chat: Chat App
+aap_uninstall_credential_type_gitea: Gitea
+aap_uninstall_credential_type_gitops: Openshift Gitops
+aap_uninstall_credential_type_itsm: Itsm App
+
+aap_uninstall_credentials:
+  - name: "{{ aap_casc_credential_openshift }}"
+    credential_type: OpenShift or Kubernetes API Bearer Token
+  - name: "{{ aap_casc_credential_aap }}"
+    credential_type: Red Hat Ansible Automation Platform
+  - name: "{{ aap_casc_credential_ah_published }}"
+    credential_type: Ansible Galaxy/Automation Hub API Token
+  - name: "{{ aap_casc_credential_ah_validated }}"
+    credential_type: Ansible Galaxy/Automation Hub API Token
+  - name: "{{ aap_casc_credential_chat }}"
+    credential_type: Chat App
+  - name: "{{ aap_casc_credential_gitea }}"
+    credential_type: Gitea
+  - name: "{{ aap_casc_credential_gitops }}"
+    credential_type: Openshift Gitops
+  - name: "{{ aap_casc_credential_itsm }}"
+    credential_type: Itsm App
+  - name: "{{ aap_casc_credential_vms }}"
+    credential_type: Machine
+  - name: "{{ aap_vm_pipeline_credential_gitea_scm }}"
+    credential_type: Source Control

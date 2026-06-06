@@ -1,0 +1,31 @@
+---
+- name: Merge permanent OpenShift token into demo platform facts
+  ansible.builtin.set_fact:
+    demo_platform: >-
+      {{
+        demo_platform | combine({
+          'openshift': demo_platform.openshift | combine({
+            'token': aap_casc_openshift_bearer_token,
+            'service_account': aap_casc_openshift_sa_name,
+            'token_secret': aap_casc_openshift_token_secret,
+            'token_namespace': aap_casc_openshift_namespace
+          })
+        }, recursive=True)
+      }}
+  no_log: true
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ aap_casc_artifact_file | dirname }}"
+    state: directory
+    mode: "0750"
+
+- name: Write updated demo platform facts artifact
+  ansible.builtin.copy:
+    dest: "{{ aap_casc_artifact_file }}"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  no_log: true

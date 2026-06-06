@@ -1,0 +1,33 @@
+---
+- name: Ensure Push VM Manifest job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_vm_pipeline_jt_push_vm }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    project: "{{ aap_vm_pipeline_project }}"
+    inventory: "{{ aap_vm_pipeline_inventory }}"
+    playbook: "{{ aap_vm_pipeline_playbook_push }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    credentials:
+      - "{{ aap_vm_pipeline_credential_gitea }}"
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Ensure Sync Infrastructure VMs job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    project: "{{ aap_vm_pipeline_project }}"
+    inventory: "{{ aap_vm_pipeline_inventory }}"
+    playbook: "{{ aap_vm_pipeline_playbook_sync }}"
+    job_type: run
+    state: present
+    credentials:
+      - "{{ aap_vm_pipeline_credential_openshift }}"
+      - "{{ aap_vm_pipeline_credential_gitea }}"
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"

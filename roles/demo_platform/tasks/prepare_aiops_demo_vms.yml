@@ -1,0 +1,191 @@
+---
+- name: Ensure aiops-demo namespace exists for VMs
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ aiops_demo_namespace }}"
+
+- name: Check whether authorized-keys secret already exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ aiops_demo_vms_rsa_secret_name }}"
+    namespace: "{{ aiops_demo_namespace }}"
+  register: demo_vms_authorized_keys_secret
+
+- name: Check whether legacy vms-rsa secret exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ aiops_demo_vms_legacy_secret_name }}"
+    namespace: "{{ aiops_demo_namespace }}"
+  register: demo_vms_legacy_rsa_secret
+  when: demo_vms_authorized_keys_secret.resources | default([]) | length == 0
+
+- name: Migrate legacy vms-rsa secret to authorized-keys format
+  when:
+    - demo_vms_authorized_keys_secret.resources | default([]) | length == 0
+    - demo_vms_legacy_rsa_secret.resources | default([]) | length > 0
+  block:
+    - name: Set VM RSA key facts from legacy vms-rsa secret
+      ansible.builtin.set_fact:
+        aiops_demo_vms_rsa_private_key: >-
+          {{ demo_vms_legacy_rsa_secret.resources[0].data['ssh-privatekey'] | b64decode }}
+        aiops_demo_vms_rsa_public_key: >-
+          {{ demo_vms_legacy_rsa_secret.resources[0].data['ssh-publickey'] | b64decode | trim }}
+      no_log: true
+
+    - name: Create authorized-keys secret from legacy public key
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ aiops_demo_vms_rsa_secret_name }}"
+            namespace: "{{ aiops_demo_namespace }}"
+          data: "{{ { aiops_demo_vms_secret_data_key: aiops_demo_vms_rsa_public_key | b64encode } }}"
+      no_log: true
+
+    - name: Remove legacy vms-rsa secret
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Secret
+        name: "{{ aiops_demo_vms_legacy_secret_name }}"
+        namespace: "{{ aiops_demo_namespace }}"
+
+    - name: Record that VM SSH keys were migrated from legacy secret
+      ansible.builtin.set_fact:
+        demo_vms_rsa_keys_created_this_run: true
+
+- name: Create authorized-keys secret when absent
+  when:
+    - demo_vms_authorized_keys_secret.resources | default([]) | length == 0
+    - demo_vms_legacy_rsa_secret.resources | default([]) | length == 0
+  block:
+    - name: Ensure temporary directory for VM RSA key generation
+      ansible.builtin.file:
+        path: "{{ aiops_demo_vms_rsa_temp_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Generate RSA key pair for VM access
+      ansible.builtin.openssh_keypair:
+        path: "{{ aiops_demo_vms_rsa_temp_dir }}/id_rsa"
+        type: rsa
+        size: "{{ aiops_demo_vms_rsa_key_size }}"
+        force: true
+      no_log: true
+
+    - name: Read generated VM SSH private key
+      ansible.builtin.slurp:
+        src: "{{ aiops_demo_vms_rsa_temp_dir }}/id_rsa"
+      register: demo_vms_rsa_private_key_file
+      no_log: true
+
+    - name: Read generated VM SSH public key
+      ansible.builtin.slurp:
+        src: "{{ aiops_demo_vms_rsa_temp_dir }}/id_rsa.pub"
+      register: demo_vms_rsa_public_key_file
+      no_log: true
+
+    - name: Set VM RSA key facts from generated key pair
+      ansible.builtin.set_fact:
+        aiops_demo_vms_rsa_private_key: >-
+          {{ demo_vms_rsa_private_key_file.content | b64decode }}
+        aiops_demo_vms_rsa_public_key: >-
+          {{ demo_vms_rsa_public_key_file.content | b64decode | trim }}
+      no_log: true
+
+    - name: Create authorized-keys secret in aiops-demo namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ aiops_demo_vms_rsa_secret_name }}"
+            namespace: "{{ aiops_demo_namespace }}"
+          data: "{{ { aiops_demo_vms_secret_data_key: aiops_demo_vms_rsa_public_key | b64encode } }}"
+      no_log: true
+
+    - name: Remove temporary VM RSA key files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ aiops_demo_vms_rsa_temp_dir }}/id_rsa"
+        - "{{ aiops_demo_vms_rsa_temp_dir }}/id_rsa.pub"
+        - "{{ aiops_demo_vms_rsa_temp_dir }}"
+      no_log: true
+
+    - name: Record that VM SSH keys were generated this run
+      ansible.builtin.set_fact:
+        demo_vms_rsa_keys_created_this_run: true
+
+- name: Default VM SSH keys created flag to false
+  ansible.builtin.set_fact:
+    demo_vms_rsa_keys_created_this_run: false
+  when: demo_vms_rsa_keys_created_this_run is not defined
+
+- name: Load authorized-keys secret from cluster
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ aiops_demo_vms_rsa_secret_name }}"
+    namespace: "{{ aiops_demo_namespace }}"
+  register: demo_vms_authorized_keys_secret_loaded
+
+- name: Set VM SSH public key fact from authorized-keys secret
+  ansible.builtin.set_fact:
+    aiops_demo_vms_rsa_public_key: >-
+      {{
+        demo_vms_authorized_keys_secret_loaded.resources[0].data[aiops_demo_vms_secret_data_key]
+        | b64decode
+        | trim
+      }}
+  no_log: true
+
+- name: Load VM SSH private key from artifact when secret already existed
+  when: not demo_vms_rsa_keys_created_this_run | bool
+  block:
+    - name: Check demo platform facts artifact exists for VM private key
+      ansible.builtin.stat:
+        path: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+      register: demo_vms_artifact_stat
+
+    - name: Fail when artifact is missing VM SSH private key source
+      ansible.builtin.fail:
+        msg: >-
+          Secret {{ aiops_demo_vms_rsa_secret_name }} exists in {{ aiops_demo_namespace }}
+          but {{ demo_platform_artifacts_dir }}/demo_platform_facts.yml is missing or lacks
+          demo_platform.virtualization.ssh_privatekey. Delete the secret and re-run the install
+          playbook to regenerate keys, or restore the artifact private key.
+      when: not demo_vms_artifact_stat.stat.exists
+
+    - name: Load demo platform facts artifact for VM private key
+      ansible.builtin.include_vars:
+        file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+      no_log: true
+
+    - name: Fail when VM SSH private key is missing from artifact
+      ansible.builtin.fail:
+        msg: >-
+          Secret {{ aiops_demo_vms_rsa_secret_name }} exists in {{ aiops_demo_namespace }}
+          but demo_platform.virtualization.ssh_privatekey is missing from
+          {{ demo_platform_artifacts_dir }}/demo_platform_facts.yml. Delete the secret and
+          re-run the install playbook to regenerate keys, or restore the artifact private key.
+      when: demo_platform.virtualization.ssh_privatekey | default('') | trim | length == 0
+
+    - name: Set VM SSH private key fact from artifact
+      ansible.builtin.set_fact:
+        aiops_demo_vms_rsa_private_key: "{{ demo_platform.virtualization.ssh_privatekey }}"
+      no_log: true
+
+- name: Record VM SSH secret as provisioned
+  ansible.builtin.set_fact:
+    aiops_demo_vms_rsa_secret_ready: true

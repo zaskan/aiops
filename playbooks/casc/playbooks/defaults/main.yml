@@ -1,0 +1,22 @@
+---
+image: quay.io/zaskan/fedora-cloud-containerdisk:v43
+vm_namespace: aiops-demo
+ssh_secret_name: authorized-keys
+gitops_infrastructure_dest_namespace: "{{ vm_namespace }}"
+
+gitops_infrastructure_app_name: infrastructure-vms
+gitops_infrastructure_app_namespace: openshift-gitops
+gitops_infrastructure_argocd_project: default
+gitops_infrastructure_gitea_repo: Infrastructure
+gitops_infrastructure_source_path: vms
+gitops_infrastructure_source_branch: main
+gitops_infrastructure_repo_secret_name: gitea-infrastructure
+gitops_infrastructure_validate_certs: false
+gitops_infrastructure_gitea_insecure: true
+
+apache_app_docroot: /var/www/html
+apache_app_package: httpd
+apache_app_git_package: git
+apache_app_service: httpd
+apache_app_default_branch: main
+apache_app_validate_certs: false

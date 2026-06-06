@@ -8,6 +8,9 @@
 - name: Verify OpenShift GitOps
   ansible.builtin.include_tasks: check_gitops.yml
 
+- name: Verify OpenShift Virtualization
+  ansible.builtin.include_tasks: check_virt.yml
+
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
@@ -17,5 +20,31 @@
 - name: Ensure gitea is installed and healthy
   ansible.builtin.include_tasks: install_gitea.yml
 
+- name: Prepare aiops-demo namespace and VM SSH secret
+  ansible.builtin.include_tasks: prepare_aiops_demo_vms.yml
+
 - name: Publish demo platform facts
   ansible.builtin.include_tasks: set_demo_facts.yml
+
+- name: Configure AAP AIOps organization and credentials
+  ansible.builtin.include_role:
+    name: aap_casc
+  vars:
+    aap_casc_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Sync Gitea repositories for AAP playbooks SCM
+  ansible.builtin.include_tasks: configure_gitea_repos.yml
+  vars:
+    gitea_repos_local_base: "{{ playbook_dir }}/casc"
+
+- name: Configure AAP VM provisioning workflow
+  ansible.builtin.include_role:
+    name: aap_vm_pipeline
+  vars:
+    aap_vm_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Apache httpd deployment workflow
+  ansible.builtin.include_role:
+    name: aap_httpd_pipeline
+  vars:
+    aap_httpd_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

@@ -1,0 +1,11 @@
+---
+- name: Sync Infrastructure VMs via Argo CD
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Refresh and wait for Infrastructure VMs Argo CD Application
+      ansible.builtin.include_role:
+        name: gitops_infrastructure
+        tasks_from: sync.yml

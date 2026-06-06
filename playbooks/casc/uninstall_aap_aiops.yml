@@ -1,0 +1,13 @@
+---
+- name: Remove AAP AIOps organization and demo pipeline resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_uninstall_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+  vars_files:
+    - ../../group_vars/all/aap_uninstall.yml
+    - ../../group_vars/all/aap_casc.yml
+    - ../../group_vars/all/aap_vm_pipeline.yml
+    - ../../group_vars/all/aap_httpd_pipeline.yml
+  roles:
+    - role: aap_uninstall

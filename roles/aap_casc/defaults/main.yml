@@ -1,0 +1,27 @@
+---
+aap_casc_validate_certs: false
+
+aap_casc_organization: AIOps
+
+aap_casc_openshift_sa_name: aap-aiops-automation
+aap_casc_openshift_token_secret: aap-aiops-openshift-token
+aap_casc_openshift_cluster_role: cluster-admin
+
+aap_casc_ah_auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+aap_casc_ah_published_url: https://console.redhat.com/api/automation-hub/content/published/
+aap_casc_ah_validated_url: https://console.redhat.com/api/automation-hub/content/validated/
+
+aap_casc_credential_openshift: OpenShift Cluster
+aap_casc_credential_aap: AAP Gateway
+aap_casc_credential_ah_published: Automation Hub Published Content
+aap_casc_credential_ah_validated: Automation Hub Validated Content
+aap_casc_credential_chat: Chat App
+aap_casc_credential_gitea: Gitea
+aap_casc_credential_gitops: OpenShift GitOps
+aap_casc_credential_itsm: ITSM App
+aap_casc_credential_vms: Virtual Machines
+
+aap_casc_openshift_token_wait_retries: 30
+aap_casc_openshift_token_wait_delay: 2
+
+aap_casc_controller_api_prefix: /api/controller/

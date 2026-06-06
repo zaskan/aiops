@@ -1,0 +1,21 @@
+---
+- name: Obtain AAP gateway OAuth token for awx.awx modules
+  ansible.builtin.uri:
+    url: "{{ aap_casc_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_casc_controller_username }}"
+    password: "{{ aap_casc_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_casc_validate_certs }}"
+    body_format: json
+    body:
+      description: aap-casc ansible automation
+      scope: write
+    status_code: 201
+  register: aap_casc_gateway_token_create
+  no_log: true
+
+- name: Set AAP controller OAuth token fact
+  ansible.builtin.set_fact:
+    aap_casc_controller_oauthtoken: "{{ aap_casc_gateway_token_create.json.token }}"
+  no_log: true

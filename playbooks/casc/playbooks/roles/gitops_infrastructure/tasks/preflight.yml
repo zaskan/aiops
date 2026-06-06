@@ -1,0 +1,20 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Build Gitea Infrastructure repository URL for Argo CD
+  ansible.builtin.set_fact:
+    gitops_infrastructure_repo_url: >-
+      {{ gitops_infrastructure_gitea_api_base }}/{{ gitops_infrastructure_gitea_owner }}/{{ gitops_infrastructure_gitea_repo }}.git
+  when: gitops_infrastructure_repo_url is not defined
+
+- name: Verify required GitOps infrastructure variables are set
+  ansible.builtin.assert:
+    that:
+      - gitops_infrastructure_repo_url | default('') | trim | length > 0
+      - gitops_infrastructure_gitea_username | default('') | trim | length > 0
+      - gitops_infrastructure_gitea_password | default('') | trim | length > 0
+      - gitops_infrastructure_dest_namespace | default('') | trim | length > 0
+    fail_msg: >-
+      Missing GitOps infrastructure variables. Attach the Gitea credential in AAP or provide
+      gitops_infrastructure_gitea_* and gitops_infrastructure_dest_namespace.

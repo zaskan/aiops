@@ -1,0 +1,7 @@
+---
+- name: Sync each configured Gitea repository from its source
+  ansible.builtin.include_tasks: sync_repository_one.yml
+  loop: "{{ gitea_repos_seeds }}"
+  loop_control:
+    loop_var: gitea_repo_seed
+    label: "{{ gitea_repo_seed.name }}"

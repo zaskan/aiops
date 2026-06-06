@@ -1,0 +1,33 @@
+---
+- name: Verify Gitea health endpoint
+  ansible.builtin.uri:
+    url: "{{ gitea_api_base }}/api/healthz"
+    method: GET
+    validate_certs: "{{ gitea_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: gitea_repos_health
+
+- name: Fail when Gitea health check does not pass
+  ansible.builtin.fail:
+    msg: >-
+      Gitea health check failed at {{ gitea_api_base }}/api/healthz.
+      Expected response containing 'pass'.
+  when: gitea_repos_health.content is not search('pass')
+
+- name: Authenticate to Gitea API as admin
+  ansible.builtin.uri:
+    url: "{{ gitea_api_base }}/api/v1/user"
+    method: GET
+    user: "{{ gitea_admin_username }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ gitea_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: gitea_repos_user
+  no_log: true
+
+- name: Set Gitea repository owner from authenticated user
+  ansible.builtin.set_fact:
+    gitea_owner: "{{ gitea_repos_user.json.login }}"

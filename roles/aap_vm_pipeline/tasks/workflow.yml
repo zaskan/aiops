@@ -1,0 +1,49 @@
+---
+- name: Ensure Provision VM workflow job template exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_vm_pipeline_workflow }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    inventory: "{{ aap_vm_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_vm_pipeline_workflow_survey_spec }}"
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+
+- name: Ensure Sync Infrastructure VMs workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: sync_infrastructure_vms
+    workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+
+- name: Clear Push VM Manifest workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: push_vm_manifest
+    workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_push_vm }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+
+- name: Ensure Push VM Manifest workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: push_vm_manifest
+    workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_push_vm }}"
+    success_nodes:
+      - sync_infrastructure_vms
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"

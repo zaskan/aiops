@@ -8,3 +8,18 @@ uninstall_assume_yes: false
 uninstall_keep_gitea_data: false
 uninstall_delete_gitea_namespace: true
 uninstall_remove_artifacts: true
+uninstall_remove_aap: true
+uninstall_aap_remove_credential_types: true
+
+# OpenShift Virtualization preflight
+openshift_virt_operator_namespace: openshift-cnv
+openshift_virt_hyperconverged_name: kubevirt-hyperconverged
+
+# aiops-demo VM namespace and SSH secret
+aiops_demo_namespace: aiops-demo
+aiops_demo_vms_rsa_secret_name: authorized-keys
+aiops_demo_vms_secret_data_key: key
+aiops_demo_vms_legacy_secret_name: vms-rsa
+aiops_demo_vms_rsa_key_size: 4096
+aiops_demo_vms_rsa_temp_dir: /tmp/aiops-demo-vms-rsa
+aiops_demo_vms_ssh_username: fedora

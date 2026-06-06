@@ -1,0 +1,33 @@
+---
+- name: Run AAP CASC preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Mint permanent OpenShift ServiceAccount token
+  ansible.builtin.include_tasks: openshift_token.yml
+
+- name: Update demo platform artifact with permanent OpenShift token
+  ansible.builtin.include_tasks: update_artifact.yml
+
+- name: Configure AAP organization, credential types, and credentials
+  block:
+    - name: Ensure AIOps organization exists in AAP
+      ansible.builtin.include_tasks: organization.yml
+
+    - name: Ensure custom AAP credential types exist
+      ansible.builtin.include_tasks: credential_types.yml
+
+    - name: Ensure AAP credentials exist for demo platform services
+      ansible.builtin.include_tasks: credentials.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_casc_controller_api_prefix }}"
+
+- name: Display AAP CASC configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "AAP organization: {{ aap_casc_organization }}"
+      - "OpenShift SA: {{ aap_casc_openshift_sa_name }} (namespace {{ aap_casc_openshift_namespace }})"
+      - "Artifact updated: {{ aap_casc_artifact_file }}"
+      - "Credentials in AAP: {{ aap_casc_credential_names | join(', ') }}"

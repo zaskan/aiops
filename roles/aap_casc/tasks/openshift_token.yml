@@ -1,0 +1,83 @@
+---
+- name: Ensure namespace exists for automation ServiceAccount
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ aap_casc_openshift_namespace }}"
+
+- name: Create automation ServiceAccount for AAP
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: "{{ aap_casc_openshift_sa_name }}"
+        namespace: "{{ aap_casc_openshift_namespace }}"
+
+- name: Grant cluster role to automation ServiceAccount
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: "{{ aap_casc_openshift_sa_name }}-{{ aap_casc_openshift_cluster_role }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: "{{ aap_casc_openshift_cluster_role }}"
+      subjects:
+        - kind: ServiceAccount
+          name: "{{ aap_casc_openshift_sa_name }}"
+          namespace: "{{ aap_casc_openshift_namespace }}"
+
+- name: Create long-lived ServiceAccount token secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ aap_casc_openshift_token_secret }}"
+        namespace: "{{ aap_casc_openshift_namespace }}"
+        annotations:
+          kubernetes.io/service-account.name: "{{ aap_casc_openshift_sa_name }}"
+      type: kubernetes.io/service-account-token
+
+- name: Wait for ServiceAccount token to be issued in secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ aap_casc_openshift_token_secret }}"
+    namespace: "{{ aap_casc_openshift_namespace }}"
+  register: aap_casc_sa_token_secret
+  until: aap_casc_sa_token_secret.resources[0].data.token is defined
+  retries: "{{ aap_casc_openshift_token_wait_retries }}"
+  delay: "{{ aap_casc_openshift_token_wait_delay }}"
+
+- name: Decode permanent OpenShift bearer token
+  ansible.builtin.set_fact:
+    aap_casc_openshift_bearer_token: >-
+      {{ aap_casc_sa_token_secret.resources[0].data.token | b64decode | trim }}
+  no_log: true
+
+- name: Verify permanent OpenShift token authenticates
+  ansible.builtin.command:
+    argv:
+      - oc
+      - whoami
+      - --token={{ aap_casc_openshift_bearer_token }}
+  register: aap_casc_oc_whoami
+  changed_when: false
+  no_log: true
+
+- name: Fail when permanent OpenShift token is invalid
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift ServiceAccount token verification failed (oc whoami returned rc
+      {{ aap_casc_oc_whoami.rc }}).
+  when: aap_casc_oc_whoami.rc != 0

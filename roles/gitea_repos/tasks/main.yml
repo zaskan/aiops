@@ -1,0 +1,25 @@
+---
+- name: Run Gitea repository preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Create Gitea repositories
+  ansible.builtin.include_tasks: repositories.yml
+
+- name: Sync Gitea repositories from configured sources
+  ansible.builtin.include_tasks: sync_repositories.yml
+  when: gitea_repos_seeds | default([]) | length > 0
+
+- name: Display Gitea repository configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "Gitea URL: {{ gitea_api_base }}"
+      - "Repository owner: {{ gitea_owner }}"
+      - "Repositories: {{ gitea_repos_list | join(', ') }}"
+      - >-
+        Synced from source: {{
+          gitea_repos_synced_names | default([]) | join(', ')
+          if (gitea_repos_synced_names | default([]) | length > 0)
+          else 'none'
+        }}
+      - "Clone URLs:"
+      - "{{ gitea_repos_clone_urls }}"

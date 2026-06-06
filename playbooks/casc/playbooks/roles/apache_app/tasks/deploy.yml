@@ -1,0 +1,69 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Capture raw application repository input from workflow survey
+  ansible.builtin.set_fact:
+    app_repo_raw: "{{ app_repo | default('') | trim }}"
+
+- name: Strip URL scheme and .git suffix from repository input
+  ansible.builtin.set_fact:
+    app_repo_normalized: "{{ app_repo_raw | regex_replace('^https?://', '') | regex_replace('\\.git$', '') | trim }}"
+
+- name: Extract Gitea repository name from owner/path or URL segments
+  ansible.builtin.set_fact:
+    apache_app_repo: "{{ app_repo_normalized | split('/') | last | trim }}"
+
+- name: Set application branch from survey or default
+  ansible.builtin.set_fact:
+    apache_app_branch: "{{ app_branch | default(apache_app_default_branch) | trim }}"
+
+- name: Fail when required deploy variables are missing or invalid
+  ansible.builtin.assert:
+    that:
+      - apache_app_repo | length > 0
+      - apache_app_repo is not search('://')
+      - apache_app_repo is not search('/')
+    fail_msg: >-
+      app_repo must be the Gitea repository name (e.g. AIOps_App). Received
+      "{{ app_repo_raw }}", normalized to "{{ apache_app_repo }}".
+
+- name: Build Gitea host from credential URL
+  ansible.builtin.set_fact:
+    apache_app_gitea_host: "{{ gitea_credential_url | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+
+- name: Build authenticated Gitea clone URL for application repository
+  ansible.builtin.set_fact:
+    apache_app_repo_clone_url: >-
+      https://{{ gitea_credential_username | urlencode }}:{{
+      gitea_credential_password | urlencode }}@{{ apache_app_gitea_host }}/{{
+      gitea_credential_username | urlencode }}/{{ apache_app_repo | urlencode }}.git
+  no_log: true
+
+- name: Clone application repository into docroot on target host
+  block:
+    - name: Remove existing docroot before fresh clone
+      ansible.builtin.file:
+        path: "{{ apache_app_docroot }}"
+        state: absent
+
+    - name: Clone application repository into docroot
+      ansible.builtin.git:
+        repo: "{{ apache_app_repo_clone_url }}"
+        dest: "{{ apache_app_docroot }}"
+        version: "{{ apache_app_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: "{{ 'true' if not apache_app_validate_certs | bool else 'false' }}"
+      no_log: true
+      register: apache_app_git_clone
+
+  rescue:
+    - name: Report application repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ apache_app_repo }} (branch {{ apache_app_branch }}) on
+          {{ inventory_hostname }}. Ensure git is installed, the VM can reach
+          https://{{ apache_app_gitea_host }}, the repository exists in Gitea, and the
+          survey app_repo is the repository name only (e.g. AIOps_App).

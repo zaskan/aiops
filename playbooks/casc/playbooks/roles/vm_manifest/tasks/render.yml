@@ -1,0 +1,25 @@
+---
+- name: Generate random VM password
+  ansible.builtin.set_fact:
+    password: >-
+      {{
+        lookup(
+          'ansible.builtin.password',
+          '/dev/null',
+          length=vm_manifest_password_length,
+          chars=['ascii_letters', 'digits']
+        )
+      }}
+  no_log: true
+
+- name: Ensure VM manifest work directory exists
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/{{ vm_manifest_gitea_path }}"
+    state: directory
+    mode: "0750"
+
+- name: Render VM manifest from template
+  ansible.builtin.template:
+    src: "{{ vm_manifest_template_file | default(playbook_dir ~ '/templates/vm_template.yaml.j2') }}"
+    dest: "{{ vm_manifest_workdir }}/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    mode: "0640"

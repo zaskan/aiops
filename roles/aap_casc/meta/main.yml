@@ -1,0 +1,4 @@
+---
+collections:
+  - awx.awx
+  - kubernetes.core

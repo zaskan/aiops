@@ -1,8 +1,0 @@
----
-- name: OpenShift + AAP demo preflight and preparation
-  hosts: localhost
-  gather_facts: false
-  vars_files:
-    - ../group_vars/all/demo_platform.yml
-  roles:
-    - role: demo_platform

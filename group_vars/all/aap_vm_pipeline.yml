@@ -1,0 +1,22 @@
+---
+aap_vm_pipeline_organization: AIOps
+aap_vm_pipeline_validate_certs: false
+aap_vm_pipeline_controller_api_prefix: /api/controller/
+
+aap_vm_pipeline_inventory: AIOps Localhost
+aap_vm_pipeline_project: AIOps Playbooks
+aap_vm_pipeline_gitea_repo: Playbooks
+aap_vm_pipeline_scm_branch: main
+aap_vm_pipeline_gitea_scm_use_internal: true
+aap_vm_pipeline_gitea_scm_internal_host: gitea-http.gitea.svc.cluster.local:3000
+
+aap_vm_pipeline_jt_push_vm: Push VM Manifest
+aap_vm_pipeline_jt_sync_vms: Sync Infrastructure VMs
+aap_vm_pipeline_workflow: Provision VM
+
+aap_vm_pipeline_playbook_push: push_vm_manifest.yml
+aap_vm_pipeline_playbook_sync: sync_infrastructure_vms.yml
+
+aap_vm_pipeline_credential_gitea: Gitea
+aap_vm_pipeline_credential_gitea_scm: Gitea SCM
+aap_vm_pipeline_credential_openshift: OpenShift Cluster

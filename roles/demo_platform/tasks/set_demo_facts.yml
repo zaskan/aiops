@@ -35,6 +35,13 @@
         url: "{{ gitea_url }}"
         username: "{{ gitea_username }}"
         password: "{{ gitea_password }}"
+      virtualization:
+        operator_namespace: "{{ openshift_virt_operator_namespace }}"
+        vm_namespace: "{{ aiops_demo_namespace }}"
+        ssh_secret_name: "{{ aiops_demo_vms_rsa_secret_name }}"
+        username: "{{ aiops_demo_vms_ssh_username }}"
+        ssh_privatekey: "{{ aiops_demo_vms_rsa_private_key }}"
+        ssh_publickey: "{{ aiops_demo_vms_rsa_public_key }}"
     cacheable: true
   no_log: true
 
@@ -62,6 +69,7 @@
       - "OpenShift API: {{ openshift_api_server }} (user: {{ openshift_user }})"
       - "AAP Gateway: {{ aap_gateway_url }}"
       - "OpenShift GitOps: {{ gitops_url }}"
+      - "OpenShift Virtualization: {{ openshift_virt_operator_namespace }} (VM namespace {{ aiops_demo_namespace }})"
       - "itsm-app: {{ itsm_app_url }}"
       - "chat-app: {{ chat_app_url }}"
       - "gitea: {{ gitea_url }}"

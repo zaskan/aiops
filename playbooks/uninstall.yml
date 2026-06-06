@@ -1,0 +1,14 @@
+---
+- name: Uninstall demo applications from OpenShift
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all/demo_platform.yml
+    - ../group_vars/all/aap_uninstall.yml
+    - ../group_vars/all/aap_casc.yml
+    - ../group_vars/all/aap_vm_pipeline.yml
+    - ../group_vars/all/aap_httpd_pipeline.yml
+  tasks:
+    - ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: uninstall_main

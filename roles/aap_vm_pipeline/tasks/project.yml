@@ -1,0 +1,34 @@
+---
+- name: Ensure AIOps Playbooks project exists in AAP
+  awx.awx.project:
+    name: "{{ aap_vm_pipeline_project }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    scm_type: git
+    scm_url: "{{ aap_vm_pipeline_gitea_scm_url }}"
+    scm_branch: "{{ aap_vm_pipeline_scm_branch }}"
+    scm_clean: true
+    scm_update_on_launch: true
+    credential: "{{ aap_vm_pipeline_credential_gitea_scm }}"
+    state: present
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Update AIOps Playbooks project from SCM
+  awx.awx.project_update:
+    project: "{{ aap_vm_pipeline_project }}"
+    organization: "{{ aap_vm_pipeline_organization }}"
+    wait: true
+    controller_host: "{{ aap_vm_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+  register: aap_vm_pipeline_project_update
+
+- name: Fail when AIOps Playbooks SCM sync did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      AIOps Playbooks project SCM sync failed ({{
+        aap_vm_pipeline_project_update.msg | default('unknown error')
+      }}). SCM URL: {{ aap_vm_pipeline_gitea_scm_url }}
+  when: aap_vm_pipeline_project_update.failed | default(false)

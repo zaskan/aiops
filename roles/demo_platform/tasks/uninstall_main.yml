@@ -6,8 +6,17 @@
   ansible.builtin.pause:
     prompt: |
       This will remove itsm-app (namespace {{ itsm_app_namespace }}),
-      chat-app (namespace {{ chat_app_namespace }}), and gitea (namespace {{ gitea_namespace }}).
+      chat-app (namespace {{ chat_app_namespace }}), gitea (namespace {{ gitea_namespace }}),
+      and the VM namespace {{ aiops_demo_namespace }}.
       Gitea PVCs will be {{ 'kept' if uninstall_keep_gitea_data | bool else 'deleted' }}.
+      {% if uninstall_remove_aap | bool -%}
+      AAP organization AIOps and all demo job templates, workflows, credentials,
+      and custom credential types will be removed.
+      {% endif -%}
+      {% if uninstall_remove_openshift_sa | bool -%}
+      OpenShift ServiceAccount {{ aap_casc_openshift_sa_name }} and token secret
+      {{ aap_casc_openshift_token_secret }} will be removed.
+      {% endif -%}
       Continue? [y/N]
   register: demo_uninstall_confirm
   when: not uninstall_assume_yes | bool
@@ -28,6 +37,20 @@
 - name: Uninstall gitea
   ansible.builtin.include_tasks: uninstall_gitea.yml
 
+- name: Uninstall aiops-demo VM namespace
+  ansible.builtin.include_tasks: uninstall_aiops_demo_vms.yml
+
+- name: Remove AAP AIOps organization and resources
+  ansible.builtin.include_role:
+    name: aap_uninstall
+  vars:
+    aap_uninstall_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when: uninstall_remove_aap | bool
+
+- name: Remove OpenShift ServiceAccount and token created for AAP
+  ansible.builtin.include_tasks: uninstall_openshift_aap_sa.yml
+  when: uninstall_remove_openshift_sa | bool
+
 - name: Remove generated facts artifact
   ansible.builtin.file:
     path: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
@@ -41,3 +64,10 @@
       - "Removed itsm-app from namespace {{ itsm_app_namespace }}."
       - "Removed chat-app from namespace {{ chat_app_namespace }}."
       - "Removed gitea from namespace {{ gitea_namespace }}."
+      - "Removed VM namespace {{ aiops_demo_namespace }}."
+      - >-
+        AAP AIOps teardown:
+        {{ 'completed' if uninstall_remove_aap | bool else 'skipped (uninstall_remove_aap=false)' }}
+      - >-
+        OpenShift AAP automation SA:
+        {{ 'removed' if uninstall_remove_openshift_sa | bool else 'skipped (uninstall_remove_openshift_sa=false)' }}

@@ -1,0 +1,64 @@
+---
+- name: Resolve demo platform facts artifact path
+  ansible.builtin.set_fact:
+    aap_casc_artifact_file: >-
+      {{
+        aap_casc_artifact_file
+        | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml', true)
+      }}
+
+- name: Read PUBLIC_AH_OFFLINE_TOKEN from environment
+  ansible.builtin.set_fact:
+    aap_casc_ah_offline_token: "{{ lookup('ansible.builtin.env', 'PUBLIC_AH_OFFLINE_TOKEN', default='') }}"
+  no_log: true
+
+- name: Fail when PUBLIC_AH_OFFLINE_TOKEN is not set
+  ansible.builtin.fail:
+    msg: >-
+      PUBLIC_AH_OFFLINE_TOKEN environment variable is required for AAP CASC configuration
+      (Automation Hub collection install and Hub credentials). Export your console.redhat.com
+      offline token and re-run.
+  when: aap_casc_ah_offline_token | default('') | trim | length == 0
+
+- name: Check demo platform facts artifact exists
+  ansible.builtin.stat:
+    path: "{{ aap_casc_artifact_file }}"
+  register: aap_casc_artifact_stat
+
+- name: Fail when demo platform facts artifact is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ aap_casc_artifact_file }} not found. Run playbooks/install.yml
+      first to generate platform facts.
+  when: not aap_casc_artifact_stat.stat.exists
+
+- name: Load demo platform facts from artifact when not already in memory
+  ansible.builtin.include_vars:
+    file: "{{ aap_casc_artifact_file }}"
+  when: demo_platform is not defined
+
+- name: Set AAP controller connection facts from artifact
+  ansible.builtin.set_fact:
+    aap_casc_controller_host: "{{ demo_platform.aap.gateway_url }}"
+    aap_casc_controller_username: "{{ demo_platform.aap.username }}"
+    aap_casc_controller_password: "{{ demo_platform.aap.password }}"
+    aap_casc_openshift_namespace: "{{ demo_platform.aap.namespace }}"
+  no_log: true
+
+- name: Fail when VM SSH private key is missing from demo platform facts
+  ansible.builtin.fail:
+    msg: >-
+      demo_platform.virtualization.ssh_privatekey is missing. Re-run
+      playbooks/install.yml to populate VM SSH keys in the artifact.
+  when: demo_platform.virtualization.ssh_privatekey | default('') | trim | length == 0
+
+- name: Verify AAP Controller API responds
+  ansible.builtin.uri:
+    url: "{{ aap_casc_controller_host }}/api/controller/v2/ping/"
+    method: GET
+    user: "{{ aap_casc_controller_username }}"
+    password: "{{ aap_casc_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_casc_validate_certs }}"
+    status_code: 200
+  no_log: true

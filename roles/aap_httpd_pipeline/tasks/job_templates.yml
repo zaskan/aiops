@@ -1,0 +1,49 @@
+---
+- name: Ensure Install httpd job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_httpd_pipeline_jt_install }}"
+    organization: "{{ aap_httpd_pipeline_organization }}"
+    project: "{{ aap_httpd_pipeline_project }}"
+    inventory: "{{ aap_httpd_pipeline_inventory }}"
+    playbook: "{{ aap_httpd_pipeline_playbook_install }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    credentials:
+      - "{{ aap_httpd_pipeline_credential_vms }}"
+    controller_host: "{{ aap_httpd_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
+
+- name: Ensure Deploy Apache App job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_httpd_pipeline_jt_deploy }}"
+    organization: "{{ aap_httpd_pipeline_organization }}"
+    project: "{{ aap_httpd_pipeline_project }}"
+    inventory: "{{ aap_httpd_pipeline_inventory }}"
+    playbook: "{{ aap_httpd_pipeline_playbook_deploy }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    credentials:
+      - "{{ aap_httpd_pipeline_credential_vms }}"
+      - "{{ aap_httpd_pipeline_credential_gitea }}"
+    controller_host: "{{ aap_httpd_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
+
+- name: Ensure Start httpd job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_httpd_pipeline_jt_start }}"
+    organization: "{{ aap_httpd_pipeline_organization }}"
+    project: "{{ aap_httpd_pipeline_project }}"
+    inventory: "{{ aap_httpd_pipeline_inventory }}"
+    playbook: "{{ aap_httpd_pipeline_playbook_start }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    credentials:
+      - "{{ aap_httpd_pipeline_credential_vms }}"
+    controller_host: "{{ aap_httpd_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"

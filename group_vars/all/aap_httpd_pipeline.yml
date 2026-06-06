@@ -1,0 +1,19 @@
+---
+aap_httpd_pipeline_organization: AIOps
+aap_httpd_pipeline_validate_certs: false
+aap_httpd_pipeline_controller_api_prefix: /api/controller/
+
+aap_httpd_pipeline_inventory: AIOps RHEL
+aap_httpd_pipeline_project: AIOps Playbooks
+
+aap_httpd_pipeline_jt_install: Install httpd
+aap_httpd_pipeline_jt_deploy: Deploy Apache App Repo
+aap_httpd_pipeline_jt_start: Start httpd
+aap_httpd_pipeline_workflow: Deploy Apache App
+
+aap_httpd_pipeline_playbook_install: install_httpd.yml
+aap_httpd_pipeline_playbook_deploy: deploy_apache_app.yml
+aap_httpd_pipeline_playbook_start: start_httpd.yml
+
+aap_httpd_pipeline_credential_vms: Virtual Machines
+aap_httpd_pipeline_credential_gitea: Gitea

@@ -1,0 +1,43 @@
+---
+aap_httpd_pipeline_organization: AIOps
+aap_httpd_pipeline_validate_certs: false
+aap_httpd_pipeline_controller_api_prefix: /api/controller/
+
+aap_httpd_pipeline_inventory: AIOps RHEL
+aap_httpd_pipeline_project: AIOps Playbooks
+
+aap_httpd_pipeline_jt_install: Install httpd
+aap_httpd_pipeline_jt_deploy: Deploy Apache App Repo
+aap_httpd_pipeline_jt_start: Start httpd
+aap_httpd_pipeline_workflow: Deploy Apache App
+
+aap_httpd_pipeline_playbook_install: install_httpd.yml
+aap_httpd_pipeline_playbook_deploy: deploy_apache_app.yml
+aap_httpd_pipeline_playbook_start: start_httpd.yml
+
+aap_httpd_pipeline_workflow_survey_spec:
+  name: Deploy Apache App
+  description: Target RHEL server and Gitea application repository
+  spec:
+    - question_name: target_host
+      question_description: Inventory hostname of the RHEL server
+      required: true
+      type: text
+      variable: target_host
+    - question_name: app_repo
+      question_description: Gitea repository name only (e.g. AIOps_App), not a URL
+      required: true
+      type: text
+      variable: app_repo
+      default: AIOps_App
+    - question_name: app_branch
+      question_description: Git branch to deploy
+      required: false
+      type: text
+      variable: app_branch
+      default: main
+
+aap_httpd_pipeline_credential_vms: Virtual Machines
+aap_httpd_pipeline_credential_gitea: Gitea
+
+aap_httpd_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

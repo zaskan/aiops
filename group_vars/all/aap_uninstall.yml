@@ -1,0 +1,5 @@
+---
+uninstall_remove_aap: true
+uninstall_aap_remove_credential_types: true
+
+aap_uninstall_organization: AIOps

@@ -1,0 +1,17 @@
+---
+gitea_repos_list:
+  - Infrastructure
+  - Playbooks
+  - Rulebooks
+  - AIOps_App
+
+gitea_repos_default_branch: main
+gitea_repos_private: false
+gitea_repos_auto_init: true
+gitea_validate_certs: false
+
+gitea_repos_sync_workdir: /tmp/gitea-sync
+gitea_repos_sync_git_user_name: aiops-automation
+gitea_repos_sync_git_user_email: aiops@example.com
+
+gitea_repos_sync_repo_defs: []

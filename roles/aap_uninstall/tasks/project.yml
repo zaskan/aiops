@@ -1,0 +1,9 @@
+---
+- name: Remove AIOps Playbooks project from AAP
+  awx.awx.project:
+    name: "{{ aap_vm_pipeline_project }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"

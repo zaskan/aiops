@@ -1,0 +1,6 @@
+---
+- name: Enable and start httpd service
+  ansible.builtin.systemd:
+    name: "{{ apache_app_service }}"
+    enabled: true
+    state: started

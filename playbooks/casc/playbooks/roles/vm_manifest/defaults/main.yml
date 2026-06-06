@@ -1,0 +1,9 @@
+---
+vm_manifest_gitea_repo: Infrastructure
+vm_manifest_gitea_path: vms
+vm_manifest_gitea_branch: main
+vm_manifest_workdir: /tmp/vm-manifest
+vm_manifest_password_length: 16
+vm_manifest_git_user_name: aiops-automation
+vm_manifest_git_user_email: aiops@example.com
+vm_manifest_validate_certs: false

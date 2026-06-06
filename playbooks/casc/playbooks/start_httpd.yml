@@ -1,0 +1,12 @@
+---
+- name: Start httpd on target server
+  hosts: "{{ target_host }}"
+  gather_facts: true
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Enable and start httpd service
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: start

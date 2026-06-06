@@ -1,0 +1,34 @@
+---
+- name: Remove Apache httpd pipeline job templates from AAP
+  awx.awx.job_template:
+    name: "{{ item }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  loop:
+    - "{{ aap_httpd_pipeline_jt_install }}"
+    - "{{ aap_httpd_pipeline_jt_deploy }}"
+    - "{{ aap_httpd_pipeline_jt_start }}"
+
+- name: Remove VM pipeline job templates from AAP
+  awx.awx.job_template:
+    name: "{{ item }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  loop:
+    - "{{ aap_vm_pipeline_jt_push_vm }}"
+    - "{{ aap_vm_pipeline_jt_sync_vms }}"
+
+- name: Remove legacy Deploy Apache App job template from AAP if present
+  awx.awx.job_template:
+    name: "{{ aap_uninstall_legacy_jt_deploy_apache_app }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
