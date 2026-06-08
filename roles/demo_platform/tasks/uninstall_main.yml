@@ -40,6 +40,12 @@
 - name: Uninstall aiops-demo VM namespace
   ansible.builtin.include_tasks: uninstall_aiops_demo_vms.yml
 
+- name: Disable Ansible MCP server on AAP custom resource
+  ansible.builtin.include_tasks: uninstall_aap_mcp.yml
+  when:
+    - uninstall_remove_aap | bool
+    - demo_platform_artifacts_dir is defined
+
 - name: Remove AAP AIOps organization and resources
   ansible.builtin.include_role:
     name: aap_uninstall

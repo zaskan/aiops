@@ -1,0 +1,176 @@
+---
+- name: Map itsm-app API connection for AIOps configuration
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+  no_log: true
+
+- name: Map chat-app API connection for AIOps preflight
+  ansible.builtin.set_fact:
+    chat_api_base: "{{ demo_platform.chat_app.url }}"
+    chat_admin_username: "{{ demo_platform.chat_app.username }}"
+    chat_admin_password: "{{ demo_platform.chat_app.password }}"
+    chat_validate_certs: false
+  no_log: true
+
+- name: Authenticate to chat-app as admin
+  ansible.builtin.uri:
+    url: "{{ chat_api_base }}/api/v1/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ chat_admin_username }}"
+      password: "{{ chat_admin_password }}"
+    validate_certs: false
+    status_code: 200
+  register: itsm_aiops_chat_login
+  no_log: true
+
+- name: List chat-app channels for preflight
+  ansible.builtin.uri:
+    url: "{{ chat_api_base }}/api/v1/channels"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_aiops_chat_login.json.access_token }}"
+    validate_certs: false
+    status_code: 200
+  register: itsm_aiops_chat_channels
+
+- name: Find operations channel in chat-app
+  ansible.builtin.set_fact:
+    itsm_aiops_operations_channel: >-
+      {{
+        itsm_aiops_chat_channels.json
+        | selectattr('name', 'equalto', chat_aiops_channel_name)
+        | list
+        | first
+        | default({}, true)
+      }}
+
+- name: Fail when chat AIOps channel is not configured
+  ansible.builtin.fail:
+    msg: >-
+      chat-app channel '{{ chat_aiops_channel_name }}' with anonymous webhook is not
+      configured. Ensure configure_chat_aiops completed successfully before
+      configure_itsm_aiops.
+  when: itsm_aiops_operations_channel | length == 0
+
+- name: Fail when chat anonymous webhook is not enabled
+  ansible.builtin.fail:
+    msg: >-
+      chat-app channel '{{ chat_aiops_channel_name }}' does not have anonymous webhook
+      enabled. Ensure configure_chat_aiops completed successfully before
+      configure_itsm_aiops.
+  when: not itsm_aiops_operations_channel.allow_anonymous_webhook | default(false) | bool
+
+- name: Deploy itsm-app to chat-app webhook bridge
+  ansible.builtin.include_role:
+    name: itsm_chat_bridge
+
+- name: Provision itsm-app user and outbound webhook
+  ansible.builtin.include_role:
+    name: demos.utils.itsm_ansible_role
+  vars:
+    itsm_ansible_role_check_connection: true
+    itsm_ansible_role_admin_settings: true
+    itsm_ansible_role_users: true
+    itsm_ansible_role_asset_types: false
+    itsm_ansible_role_assets: false
+    itsm_ansible_role_inventory: false
+    itsm_ansible_role_kb: false
+    itsm_ansible_role_incidents: false
+    itsm_ansible_role_followups: false
+    itsm_ansible_role_task_templates: false
+    itsm_ansible_role_change_templates: false
+    itsm_ansible_role_request_templates: false
+    itsm_ansible_role_service_requests: false
+    itsm_ansible_role_changes: false
+    itsm_ansible_role_change_tasks: false
+    itsm_webhooks:
+      - url: "{{ itsm_chat_bridge_url }}"
+        label: chat operations via bridge
+        enabled: true
+    itsm_webhooks_remove_unlisted: false
+
+- name: Create test incident in itsm-app
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/incidents"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body:
+      title: "{{ itsm_test_incident_title }}"
+      description: "{{ itsm_test_incident_description }}"
+      severity: "{{ itsm_test_incident_severity }}"
+    status_code: 201
+    return_content: true
+  register: itsm_aiops_test_incident_create
+
+- name: Record test incident public_id
+  ansible.builtin.set_fact:
+    itsm_aiops_test_incident_ref: "{{ itsm_aiops_test_incident_create.json.public_id }}"
+
+- name: Wait for incident notification in chat operations channel
+  ansible.builtin.uri:
+    url: >-
+      {{ chat_api_base }}/api/v1/channels/{{ chat_aiops_channel_name | urlencode }}/messages?limit=30
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_aiops_chat_login.json.access_token }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: itsm_aiops_chat_messages
+  until: >
+    (
+      itsm_aiops_chat_messages.json['items']
+      | default([])
+      | selectattr('body', 'search', itsm_aiops_test_incident_ref)
+      | list
+      | length
+    ) > 0
+  retries: "{{ itsm_chat_webhook_verify_retries }}"
+  delay: "{{ itsm_chat_webhook_verify_delay }}"
+
+- name: Fail when chat message for test incident was not received
+  ansible.builtin.fail:
+    msg: >-
+      No chat message containing '{{ itsm_aiops_test_incident_ref }}' appeared in channel
+      '{{ chat_aiops_channel_name }}' within {{
+      itsm_chat_webhook_verify_retries * itsm_chat_webhook_verify_delay }}s.
+      Check itsm-chat-bridge logs: oc logs -n {{ itsm_chat_bridge_namespace }}
+      deployment/{{ itsm_chat_bridge_name }}
+  when: >
+    (
+      itsm_aiops_chat_messages.json['items']
+      | default([])
+      | selectattr('body', 'search', itsm_aiops_test_incident_ref)
+      | list
+      | length
+    ) == 0
+
+- name: Close test incident in itsm-app
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/incidents/{{ itsm_aiops_test_incident_ref | urlencode }}/close"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body: {}
+    status_code: 200
+
+- name: Display itsm AIOps configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "itsm user: {{ itsm_aiops_username }}"
+      - "itsm webhook (bridge): {{ itsm_chat_bridge_url }}"
+      - "chat webhook: {{ itsm_chat_webhook_url }}"
+      - "test incident: {{ itsm_aiops_test_incident_ref }} (closed)"
+      - "chat verification: message received in #{{ chat_aiops_channel_name }}"

@@ -1,0 +1,43 @@
+---
+- name: Assert Ansible MCP server route host is defined
+  ansible.builtin.assert:
+    that:
+      - aap_mcp_url is defined
+      - aap_mcp_url | string | trim | length > 0
+    fail_msg: >-
+      Ansible MCP server URL was not discovered from Route {{ aap_instance_name }}-mcp.
+
+- name: Assert Ansible MCP server deployment is available
+  ansible.builtin.assert:
+    that:
+      - aap_mcp_deployment_name is defined
+      - aap_mcp_deployment_name | string | trim | length > 0
+    fail_msg: >-
+      Ansible MCP server deployment was not found in namespace {{ aap_namespace }}.
+      Check AnsibleMCPServer {{ aap_instance_name }}-mcp reconciliation.
+
+- name: Probe Ansible MCP job_management toolset endpoint
+  ansible.builtin.uri:
+    url: "{{ aap_mcp_toolset_urls.job_management | default(aap_mcp_url ~ '/job_management/mcp') }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_mcp_token }}"
+      Accept: application/json
+    validate_certs: "{{ validate_certs }}"
+    status_code: [200, 401, 403, 405, 406]
+  register: aap_mcp_probe
+  retries: 12
+  delay: 10
+  until: aap_mcp_probe.status in [200, 401, 403, 405, 406]
+  failed_when: false
+  no_log: true
+
+- name: Fail when Ansible MCP server endpoint is unreachable
+  ansible.builtin.fail:
+    msg: >-
+      Ansible MCP server endpoint {{ aap_mcp_url }}/job_management/mcp is unreachable
+      (status={{ aap_mcp_probe.status | default('none') }},
+      msg={{ aap_mcp_probe.msg | default('connection failed') }}). Verify Route
+      {{ aap_instance_name }}-mcp,
+      deployment {{ aap_mcp_deployment_name }}, and OAuth token scope.
+  when: aap_mcp_probe.status is not defined or aap_mcp_probe.status == -1

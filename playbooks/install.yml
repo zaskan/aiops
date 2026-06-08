@@ -4,6 +4,8 @@
   gather_facts: false
   vars_files:
     - ../group_vars/all/demo_platform.yml
+    - ../group_vars/all/chat_aiops.yml
+    - ../group_vars/all/itsm_aiops.yml
     - ../group_vars/all/aap_casc.yml
     - ../group_vars/all/gitea_repos.yml
     - ../group_vars/all/aap_vm_pipeline.yml

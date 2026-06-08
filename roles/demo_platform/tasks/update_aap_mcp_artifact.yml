@@ -1,0 +1,53 @@
+---
+- name: Check demo platform facts artifact exists for MCP update
+  ansible.builtin.stat:
+    path: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  register: aap_mcp_artifact_stat
+
+- name: Fail when demo platform facts artifact is missing
+  ansible.builtin.fail:
+    msg: >-
+      artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml first
+      or pass demo_platform_artifacts_file pointing to an existing artifact.
+  when: not aap_mcp_artifact_stat.stat.exists | default(false)
+
+- name: Load demo platform facts artifact for MCP update
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+
+- name: Merge Ansible MCP facts into demo platform artifact
+  ansible.builtin.set_fact:
+    demo_platform: >-
+      {{
+        demo_platform
+        | combine(
+            {
+              'aap': (
+                demo_platform.aap | default({})
+                | combine(
+                    {
+                      'mcp': {
+                        'url': aap_mcp_url,
+                        'allow_write_operations': aap_mcp_allow_write_operations | bool,
+                        'token': aap_mcp_token,
+                        'toolsets': aap_mcp_toolset_urls | default({}),
+                      }
+                    },
+                    recursive=True
+                  )
+              )
+            },
+            recursive=True
+          )
+      }}
+  no_log: true
+
+- name: Write updated demo platform facts artifact with MCP details
+  ansible.builtin.copy:
+    dest: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  no_log: true

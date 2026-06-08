@@ -1,0 +1,43 @@
+---
+- name: Map chat-app API connection for AIOps configuration
+  ansible.builtin.set_fact:
+    chat_api_base: "{{ demo_platform.chat_app.url }}"
+    chat_admin_username: "{{ demo_platform.chat_app.username }}"
+    chat_admin_password: "{{ demo_platform.chat_app.password }}"
+    chat_validate_certs: false
+  no_log: true
+
+- name: Provision aiops user, operations channel, and anonymous webhook
+  ansible.builtin.include_role:
+    name: chat_app
+
+- name: Verify anonymous webhook accepts unauthenticated posts
+  ansible.builtin.uri:
+    url: >-
+      {{ demo_platform.chat_app.url }}/api/v1/webhooks/channels/{{
+      chat_aiops_channel_name | urlencode }}/messages
+    method: POST
+    body_format: json
+    body:
+      body: AIOps bootstrap verification
+    validate_certs: false
+    status_code: 201
+    timeout: 30
+  register: chat_aiops_webhook_verify
+
+- name: Fail when anonymous webhook verification fails
+  ansible.builtin.fail:
+    msg: >-
+      Anonymous webhook verification failed for channel '{{ chat_aiops_channel_name }}'.
+      Confirm allow_anonymous_webhook is enabled and user '{{ chat_aiops_username }}'
+      is a channel member. Webhook URL:
+      {{ demo_platform.chat_app.url }}/api/v1/webhooks/channels/{{ chat_aiops_channel_name }}/messages
+  when: chat_aiops_webhook_verify.status | default(0) != 201
+
+- name: Display chat AIOps configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "User: {{ chat_aiops_username }}"
+      - "Channel: {{ chat_aiops_channel_name }}"
+      - "Anonymous webhook URL: {{ demo_platform.chat_app.url }}/api/v1/webhooks/channels/{{ chat_aiops_channel_name }}/messages"
+      - 'Example: curl -X POST -H "Content-Type: application/json" -d ''{"body":"hello"}'' {{ demo_platform.chat_app.url }}/api/v1/webhooks/channels/{{ chat_aiops_channel_name }}/messages'

@@ -1,0 +1,213 @@
+---
+- name: Look up discovered AnsibleAutomationPlatform custom resource
+  kubernetes.core.k8s_info:
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+    name: "{{ aap_instance_name }}"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_aap_cr_lookup
+
+- name: Fail when AnsibleAutomationPlatform custom resource is missing
+  ansible.builtin.fail:
+    msg: >-
+      AnsibleAutomationPlatform {{ aap_namespace }}/{{ aap_instance_name }} was not found.
+      Run check_aap.yml before enabling the MCP server.
+  when: aap_mcp_aap_cr_lookup.resources | default([]) | length == 0
+
+- name: Capture current MCP settings from AnsibleAutomationPlatform CR
+  ansible.builtin.set_fact:
+    aap_mcp_cr_spec: "{{ aap_mcp_aap_cr_lookup.resources[0].spec.mcp | default({}) }}"
+
+- name: Derive current MCP enablement flags from AnsibleAutomationPlatform CR
+  ansible.builtin.set_fact:
+    aap_mcp_cr_disabled: "{{ aap_mcp_cr_spec.disabled | default(true) | bool }}"
+    aap_mcp_cr_allow_write: "{{ aap_mcp_cr_spec.allow_write_operations | default(false) | bool }}"
+    aap_mcp_cr_ignore_cert_errors: >-
+      {{
+        (
+          aap_mcp_cr_spec.extra_settings | default([])
+          | selectattr('setting', 'equalto', 'IGNORE_CERTIFICATE_ERRORS')
+          | map(attribute='value')
+          | list
+          | first
+          | default(false)
+        ) | bool
+      }}
+
+- name: Delete AnsibleMCPServer when MCP permissions changed on existing deployment
+  when:
+    - not aap_mcp_cr_disabled | bool
+    - aap_mcp_cr_allow_write | bool != aap_mcp_allow_write_operations | bool
+  block:
+    - name: Remove AnsibleMCPServer custom resource before permission update
+      kubernetes.core.k8s:
+        state: absent
+        api_version: "{{ aap_mcp_server_api_version }}"
+        kind: AnsibleMCPServer
+        name: "{{ aap_instance_name }}-mcp"
+        namespace: "{{ aap_namespace }}"
+        wait: true
+        wait_timeout: 300
+
+    - name: Wait for AnsibleMCPServer custom resource to be removed
+      kubernetes.core.k8s_info:
+        api_version: "{{ aap_mcp_server_api_version }}"
+        kind: AnsibleMCPServer
+        name: "{{ aap_instance_name }}-mcp"
+        namespace: "{{ aap_namespace }}"
+      register: aap_mcp_cr_delete_wait
+      until: aap_mcp_cr_delete_wait.resources | default([]) | length == 0
+      retries: 30
+      delay: 10
+
+- name: Enable Ansible MCP server on AnsibleAutomationPlatform custom resource
+  kubernetes.core.k8s:
+    state: patched
+    merge_type: merge
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+    name: "{{ aap_instance_name }}"
+    namespace: "{{ aap_namespace }}"
+    definition:
+      spec:
+        mcp:
+          disabled: false
+          allow_write_operations: "{{ aap_mcp_allow_write_operations | bool }}"
+          extra_settings:
+            - setting: IGNORE_CERTIFICATE_ERRORS
+              value: "{{ aap_mcp_ignore_certificate_errors | bool }}"
+  when: >
+    aap_mcp_cr_disabled | bool
+    or aap_mcp_cr_allow_write | bool != aap_mcp_allow_write_operations | bool
+    or aap_mcp_cr_ignore_cert_errors | bool != aap_mcp_ignore_certificate_errors | bool
+
+- name: Wait for AnsibleMCPServer custom resource to be created
+  kubernetes.core.k8s_info:
+    api_version: "{{ aap_mcp_server_api_version }}"
+    kind: AnsibleMCPServer
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_server_cr_wait
+  until: aap_mcp_server_cr_wait.resources | default([]) | length > 0
+  retries: "{{ aap_mcp_wait_retries }}"
+  delay: "{{ aap_mcp_wait_delay }}"
+  failed_when: false
+
+- name: Diagnose AnsibleMCPServer creation failure
+  when: aap_mcp_server_cr_wait.resources | default([]) | length == 0
+  block:
+    - name: Look up AnsibleAutomationPlatform status for MCP failure diagnosis
+      kubernetes.core.k8s_info:
+        api_version: aap.ansible.com/v1alpha1
+        kind: AnsibleAutomationPlatform
+        name: "{{ aap_instance_name }}"
+        namespace: "{{ aap_namespace }}"
+      register: aap_mcp_failure_aap_cr
+
+    - name: Fail when AnsibleMCPServer custom resource was not created
+      ansible.builtin.fail:
+        msg: >-
+          AnsibleMCPServer {{ aap_instance_name }}-mcp was not created in namespace
+          {{ aap_namespace }} after {{ aap_mcp_wait_retries }} retries
+          (apiVersion={{ aap_mcp_server_api_version }}).
+          AAP operator status:
+          {{
+            (
+              aap_mcp_failure_aap_cr.resources | default([])
+              | first
+              | default({})
+            ).status.conditions | default([]) | to_nice_yaml
+          }}.
+          Run oc describe ansibleautomationplatform {{ aap_instance_name }} -n {{ aap_namespace }}
+          and resolve any Failure before re-running install.
+
+- name: Wait for Ansible MCP server deployment to become available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_deployment_wait
+  until: >
+    (
+      aap_mcp_deployment_wait.resources | default([])
+      | first
+      | default({})
+    ).status.availableReplicas | default(0) | int > 0
+  retries: "{{ aap_mcp_wait_retries }}"
+  delay: "{{ aap_mcp_wait_delay }}"
+
+- name: Record Ansible MCP server deployment name
+  ansible.builtin.set_fact:
+    aap_mcp_deployment_name: "{{ aap_instance_name }}-mcp"
+
+- name: Look up Ansible MCP server route in AAP namespace
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_route_lookup
+
+- name: Fail when Ansible MCP server route is missing
+  ansible.builtin.fail:
+    msg: >-
+      Route {{ aap_instance_name }}-mcp was not found in namespace {{ aap_namespace }}.
+      Verify the AAP operator reconciled AnsibleMCPServer {{ aap_instance_name }}-mcp.
+  when: aap_mcp_route_lookup.resources | default([]) | length == 0
+
+- name: Record Ansible MCP server base URL
+  ansible.builtin.set_fact:
+    aap_mcp_url: "https://{{ aap_mcp_route_lookup.resources[0].spec.host }}"
+
+- name: Initialize Ansible MCP toolset endpoint URL map
+  ansible.builtin.set_fact:
+    aap_mcp_toolset_urls: {}
+
+- name: Build Ansible MCP toolset endpoint URLs
+  ansible.builtin.set_fact:
+    aap_mcp_toolset_urls: "{{ aap_mcp_toolset_urls | combine({item: aap_mcp_url ~ '/' ~ item ~ '/mcp'}) }}"
+  loop: "{{ aap_mcp_toolsets }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Use provided Ansible MCP OAuth token when override is set
+  ansible.builtin.set_fact:
+    aap_mcp_token: "{{ aap_mcp_token_override | string | trim }}"
+  when: aap_mcp_token_override | default('') | string | trim | length > 0
+  no_log: true
+
+- name: Create Ansible MCP OAuth token via AAP gateway API
+  when: aap_mcp_token | default('') | string | trim | length == 0
+  block:
+    - name: POST OAuth token for Ansible MCP server integration
+      ansible.builtin.uri:
+        url: "{{ aap_gateway_url }}/api/gateway/v1/tokens/"
+        method: POST
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs }}"
+        body_format: json
+        body:
+          description: "{{ aap_mcp_token_description }}"
+          scope: "{{ aap_mcp_token_scope }}"
+        status_code: 201
+      register: aap_mcp_token_create
+      no_log: true
+
+    - name: Record Ansible MCP OAuth token
+      ansible.builtin.set_fact:
+        aap_mcp_token: "{{ aap_mcp_token_create.json.token }}"
+      no_log: true
+
+- name: Verify Ansible MCP server health
+  ansible.builtin.include_tasks: check_aap_mcp.yml
+
+- name: Display Ansible MCP server summary
+  ansible.builtin.debug:
+    msg:
+      - "AAP MCP URL: {{ aap_mcp_url }}"
+      - "AAP MCP deployment: {{ aap_mcp_deployment_name | default('unknown') }}"
+      - "AAP MCP allow_write_operations: {{ aap_mcp_allow_write_operations }}"
+      - "AAP MCP toolsets: {{ aap_mcp_toolsets | join(', ') }}"

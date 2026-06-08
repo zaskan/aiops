@@ -1,0 +1,50 @@
+---
+- name: Enable Ansible MCP server and refresh demo platform facts
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/demo_platform.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    demo_platform_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  tasks:
+    - name: Verify OpenShift cluster access
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: check_openshift.yml
+
+    - name: Check demo platform facts artifact exists
+      ansible.builtin.stat:
+        path: "{{ demo_platform_artifacts_file }}"
+      register: configure_aap_mcp_artifact_stat
+
+    - name: Fail when demo platform facts artifact is missing
+      ansible.builtin.fail:
+        msg: >-
+          artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml first
+          to discover AAP connection details.
+      when: not configure_aap_mcp_artifact_stat.stat.exists
+
+    - name: Load AAP connection facts from demo platform artifact
+      ansible.builtin.include_vars:
+        file: "{{ demo_platform_artifacts_file }}"
+
+    - name: Map AAP connection facts for MCP configuration
+      ansible.builtin.set_fact:
+        aap_instance_name: "{{ demo_platform.aap.instance_name }}"
+        aap_namespace: "{{ demo_platform.aap.namespace }}"
+        aap_gateway_url: "{{ demo_platform.aap.gateway_url }}"
+        aap_controller_url: "{{ demo_platform.aap.controller_url | default(demo_platform.aap.gateway_url) }}"
+        aap_username: "{{ demo_platform.aap.username }}"
+        aap_password: "{{ demo_platform.aap.password }}"
+      no_log: true
+
+    - name: Enable and verify Ansible MCP server on discovered AAP instance
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: install_aap_mcp.yml
+
+    - name: Update demo platform facts artifact with MCP details
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: update_aap_mcp_artifact.yml

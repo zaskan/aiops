@@ -5,6 +5,10 @@
 - name: Verify Ansible Automation Platform 2.7
   ansible.builtin.include_tasks: check_aap.yml
 
+- name: Enable and verify Ansible MCP server on discovered AAP instance
+  ansible.builtin.include_tasks: install_aap_mcp.yml
+  when: aap_mcp_enabled | default(true) | bool
+
 - name: Verify OpenShift GitOps
   ansible.builtin.include_tasks: check_gitops.yml
 
@@ -34,6 +38,12 @@
 
 - name: Publish demo platform facts
   ansible.builtin.include_tasks: set_demo_facts.yml
+
+- name: Configure chat-app for AIOps demo
+  ansible.builtin.include_tasks: configure_chat_aiops.yml
+
+- name: Configure itsm-app for AIOps demo
+  ansible.builtin.include_tasks: configure_itsm_aiops.yml
 
 - name: Configure AAP AIOps organization and credentials
   ansible.builtin.include_role:

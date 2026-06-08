@@ -9,6 +9,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | -------------------------------------- | ------------------------------------------ |
 | `playbooks/install.yml` | Install demo apps, artifact, Gitea repos, and full AAP AIOps setup |
 | `playbooks/casc/configure_aap_credentials.yml` | AAP AIOps org, credentials, OpenShift SA token |
+| `playbooks/casc/configure_aap_mcp.yml` | Enable AAP MCP server on existing deployment and refresh artifact |
 | `playbooks/casc/configure_gitea_repos.yml`     | Create Gitea repos for AIOps demo              |
 | `playbooks/casc/configure_infrastructure_gitops.yml` | Argo CD Application for Infrastructure/vms |
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
@@ -33,7 +34,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 ### Preflight (hard fail if missing)
 
 - OpenShift cluster access (`oc login` required)
-- Ansible Automation Platform 2.7 (auto-discovered)
+- Ansible Automation Platform 2.7 (auto-discovered), with MCP server enabled during install (Technology Preview)
 - OpenShift GitOps (Argo CD)
 - OpenShift Virtualization (HyperConverged Available in `openshift-cnv`)
 - **OVN-Kubernetes** as default CNI (`networkType: OVNKubernetes`)
@@ -90,18 +91,19 @@ ansible-playbook playbooks/install.yml
 The playbook will:
 
 1. Verify OpenShift, AAP 2.7, OpenShift GitOps, and OpenShift Virtualization
-2. Install itsm-app, chat-app, and gitea if they are not already running
-3. Create ITSM asset types **Virtual Machine** and **Apache Application** (with custom fields)
-4. Health-check each application
-5. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
-6. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
-7. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key for AAP
-8. Mint a permanent OpenShift ServiceAccount token and update the artifact
-9. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
-10. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
-11. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
-12. Publish ITSM Knowledge Base article **Provision a virtual machine (AIOps Provision VM workflow)** for internal RAG / AI agent (idempotent upsert)
-13. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
+2. Enable the **Ansible MCP server** on the discovered AAP instance (patch `AnsibleAutomationPlatform` CR, wait for Route `mcp`, create OAuth token)
+3. Install itsm-app, chat-app, and gitea if they are not already running
+4. Create ITSM asset types **Virtual Machine** and **Apache Application** (with custom fields)
+5. Health-check each application
+6. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
+7. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
+8. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key and **AAP MCP** URL/token
+9. Mint a permanent OpenShift ServiceAccount token and update the artifact
+10. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
+11. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+12. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
+13. Publish ITSM Knowledge Base article **Provision a virtual machine (AIOps Provision VM workflow)** for internal RAG / AI agent (idempotent upsert)
+14. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -144,6 +146,14 @@ demo_platform:
     eda_url: ...
     username: admin
     password: ...
+    mcp:
+      url: https://mcp-...apps...
+      allow_write_operations: true
+      token: ...
+      toolsets:
+        job_management: https://.../job_management/mcp
+        inventory_management: https://.../inventory_management/mcp
+        # system_monitoring, user_management, security_compliance, platform_configuration
   gitops:
     url: ...
     username: admin
@@ -171,6 +181,42 @@ demo_platform:
     ssh_privatekey: ...   # OpenSSH PEM; artifact + AAP only, not in cluster secret
     ssh_publickey: ...    # same line as authorized-keys data.key (decoded)
 ```
+
+### Ansible MCP server (Technology Preview)
+
+During install, the playbook patches the discovered `AnsibleAutomationPlatform` CR with `spec.mcp` (`disabled: false`, `allow_write_operations: true` for the demo), waits for the operator to create `AnsibleMCPServer` and Route **`mcp`**, mints an OAuth token via the AAP gateway API, and stores URL/token under `demo_platform.aap.mcp` in the artifact.
+
+Re-enable or refresh MCP without a full install:
+
+```bash
+ansible-playbook playbooks/casc/configure_aap_mcp.yml
+```
+
+Disable MCP during install with `-e aap_mcp_enabled=false`. Reuse an existing token with `AAP_MCP_TOKEN` (skips token creation).
+
+**Cursor `mcp.json` example** (export token from artifact first):
+
+```bash
+export AAP_MCP_TOKEN="$(python3 -c "import yaml; print(yaml.safe_load(open('artifacts/demo_platform_facts.yml'))['demo_platform']['aap']['mcp']['token'])")"
+```
+
+```json
+{
+  "mcpServers": {
+    "aap-job-mgmt": {
+      "type": "http",
+      "url": "https://YOUR_MCP_ROUTE/job_management/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:AAP_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Replace `YOUR_MCP_ROUTE` with `demo_platform.aap.mcp.url` (no trailing slash). Additional toolsets are listed under `demo_platform.aap.mcp.toolsets`.
+
+Reference: [Deploy Ansible MCP server on AAP 2.7](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7/extend-assembly_deploying_ansible_mcp_server).
 
 ## Configure AAP credentials (CASC)
 
@@ -616,6 +662,7 @@ Defaults live in `[group_vars/all/demo_platform.yml](group_vars/all/demo_platfor
 | `ITSM_AIOPS_PASSWORD`                                         | itsm aiops user password                 |
 | `GITEA_ADMIN_USER` / `GITEA_ADMIN_PASSWORD`                   | gitea admin                              |
 | `AAP_USERNAME` / `AAP_PASSWORD`                               | Override auto-discovered AAP credentials |
+| `AAP_MCP_TOKEN`                                               | Reuse existing OAuth token for AAP MCP (skip mint on install/configure) |
 | `PUBLIC_AH_OFFLINE_TOKEN`                                     | RH Automation Hub offline token (required for install + AAP Hub credentials) |
 
 

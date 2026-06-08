@@ -31,6 +31,24 @@ gitea_postgres_password: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_PASSW
 aap_password_override: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD', default='') }}"
 aap_username_override: "{{ lookup('ansible.builtin.env', 'AAP_USERNAME', default='') }}"
 
+aap_mcp_server_api_version: mcpserver.ansible.com/v1alpha1
+aap_mcp_deployment_label_selector: app.kubernetes.io/name=ansible-mcp
+aap_mcp_enabled: true
+aap_mcp_allow_write_operations: true
+aap_mcp_ignore_certificate_errors: true
+aap_mcp_token_scope: write
+aap_mcp_token_description: aiops-demo-mcp
+aap_mcp_token_override: "{{ lookup('ansible.builtin.env', 'AAP_MCP_TOKEN', default='') }}"
+aap_mcp_wait_retries: 60
+aap_mcp_wait_delay: 10
+aap_mcp_toolsets:
+  - job_management
+  - inventory_management
+  - system_monitoring
+  - user_management
+  - security_compliance
+  - platform_configuration
+
 openshift_virt_operator_namespace: openshift-cnv
 openshift_virt_hyperconverged_name: kubevirt-hyperconverged
 

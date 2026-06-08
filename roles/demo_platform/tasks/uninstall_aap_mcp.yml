@@ -1,0 +1,29 @@
+---
+- name: Check demo platform facts artifact exists for MCP disable
+  ansible.builtin.stat:
+    path: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  register: uninstall_aap_mcp_artifact_stat
+
+- name: Load demo platform facts artifact for MCP disable
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  when:
+    - uninstall_aap_mcp_artifact_stat.stat.exists | default(false)
+    - demo_platform is not defined
+
+- name: Disable Ansible MCP server on AnsibleAutomationPlatform custom resource
+  when:
+    - uninstall_aap_mcp_artifact_stat.stat.exists | default(false)
+    - demo_platform.aap.instance_name is defined
+    - demo_platform.aap.namespace is defined
+  kubernetes.core.k8s:
+    state: patched
+    merge_type: merge
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+    name: "{{ demo_platform.aap.instance_name }}"
+    namespace: "{{ demo_platform.aap.namespace }}"
+    definition:
+      spec:
+        mcp:
+          disabled: true

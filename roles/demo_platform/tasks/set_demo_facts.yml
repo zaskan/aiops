@@ -1,4 +1,16 @@
 ---
+- name: Build Ansible MCP facts for demo platform artifact
+  ansible.builtin.set_fact:
+    aap_mcp_facts:
+      url: "{{ aap_mcp_url }}"
+      allow_write_operations: "{{ aap_mcp_allow_write_operations | bool }}"
+      token: "{{ aap_mcp_token }}"
+      toolsets: "{{ aap_mcp_toolset_urls | default({}) }}"
+  when:
+    - aap_mcp_url is defined
+    - aap_mcp_token is defined
+  no_log: true
+
 - name: Publish demo platform facts
   ansible.builtin.set_fact:
     demo_platform:
@@ -15,6 +27,7 @@
         eda_url: "{{ aap_eda_url | default('') }}"
         username: "{{ aap_username }}"
         password: "{{ aap_password }}"
+        mcp: "{{ aap_mcp_facts | default({}) }}"
       gitops:
         url: "{{ gitops_url }}"
         namespace: openshift-gitops
@@ -68,6 +81,7 @@
     msg:
       - "OpenShift API: {{ openshift_api_server }} (user: {{ openshift_user }})"
       - "AAP Gateway: {{ aap_gateway_url }}"
+      - "AAP MCP: {{ aap_mcp_url | default('disabled') }}"
       - "OpenShift GitOps: {{ gitops_url }}"
       - "OpenShift Virtualization: {{ openshift_virt_operator_namespace }} (VM namespace {{ aiops_demo_namespace }})"
       - "itsm-app: {{ itsm_app_url }}"
