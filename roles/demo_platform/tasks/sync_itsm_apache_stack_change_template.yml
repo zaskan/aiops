@@ -1,0 +1,99 @@
+---
+- name: GET ITSM task templates for Apache stack change template sync
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/task-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_apache_stack_task_templates_list
+
+- name: GET ITSM change templates for Apache stack change template sync
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_apache_stack_change_templates_list
+
+- name: Resolve Apache stack change template id
+  ansible.builtin.set_fact:
+    itsm_apache_stack_change_template_id: >-
+      {{
+        (
+          itsm_apache_stack_change_templates_list.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_apache_stack_change_template_name)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Build ordered task template ids for Apache stack change template
+  ansible.builtin.set_fact:
+    itsm_apache_stack_change_template_task_ids: >-
+      {{
+        itsm_apache_stack_change_template_task_ids | default([]) + [
+          (
+            itsm_apache_stack_task_templates_list.json
+            | default([])
+            | selectattr('title', 'equalto', item)
+            | list
+            | first
+            | default({})
+          ).id
+        ]
+      }}
+  loop: "{{ itsm_change_templates[0].task_template_names }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - itsm_apache_stack_change_template_id is not none
+    - (
+        itsm_apache_stack_task_templates_list.json
+        | default([])
+        | selectattr('title', 'equalto', item)
+        | list
+        | length
+      ) > 0
+
+- name: PATCH Apache stack change template with full CTASK template list
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates/{{
+      itsm_apache_stack_change_template_id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body:
+      task_template_ids: "{{ itsm_apache_stack_change_template_task_ids }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - itsm_apache_stack_change_template_id is not none
+    - itsm_apache_stack_change_template_task_ids | default([]) | length > 0
+
+- name: Display synced Apache stack change template task order
+  ansible.builtin.debug:
+    msg: >-
+      Change template '{{ itsm_apache_stack_change_template_name }}' task_template_ids:
+      {{ itsm_apache_stack_change_template_task_ids | default([]) | join(', ') }}
+  when: itsm_apache_stack_change_template_task_ids is defined

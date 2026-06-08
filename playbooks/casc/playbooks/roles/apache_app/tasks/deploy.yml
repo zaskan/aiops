@@ -59,6 +59,17 @@
       no_log: true
       register: apache_app_git_clone
 
+    - name: Capture application repository git commit after clone
+      ansible.builtin.command: git -C {{ apache_app_docroot }} rev-parse HEAD
+      register: apache_app_git_head
+      changed_when: false
+
+    - name: Record application git commit for ITSM CTASK comment
+      ansible.builtin.set_fact:
+        itsm_app_git_commit: "{{ apache_app_git_head.stdout | trim }}"
+      delegate_to: localhost
+      delegate_facts: true
+
   rescue:
     - name: Report application repository clone failure
       ansible.builtin.fail:

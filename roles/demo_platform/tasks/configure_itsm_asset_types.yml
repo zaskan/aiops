@@ -1,16 +1,40 @@
 ---
-- name: Load demo platform facts artifact for ITSM asset types
+- name: Load ITSM asset type definitions when not already in play scope
   ansible.builtin.include_vars:
-    file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    file: "{{ (role_path | default(demo_platform_role_path)) }}/../../group_vars/all/itsm_assets.yml"
+  when: itsm_asset_types | default([]) | length == 0
 
-- name: Map itsm-app API connection from artifact
+- name: Load demo platform facts artifact when itsm-app connection is not in memory
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  when:
+    - itsm_app_url is not defined
+    - demo_platform is not defined
+
+- name: Map itsm-app API connection from install facts or artifact
   ansible.builtin.set_fact:
-    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
-    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
-    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_api_base_url: "{{ itsm_app_url | default(demo_platform.itsm_app.url) }}"
+    itsm_api_user: "{{ itsm_app_username | default(demo_platform.itsm_app.username) }}"
+    itsm_api_password: "{{ itsm_app_password | default(demo_platform.itsm_app.password) }}"
     itsm_validate_certs: false
   no_log: true
 
-- name: Configure ITSM Virtual Machine asset type
+- name: Configure ITSM Virtual Machine and Apache Application asset types
   ansible.builtin.include_role:
     name: demos.utils.itsm_ansible_role
+  vars:
+    itsm_ansible_role_check_connection: true
+    itsm_ansible_role_admin_settings: false
+    itsm_ansible_role_users: false
+    itsm_ansible_role_asset_types: true
+    itsm_ansible_role_assets: false
+    itsm_ansible_role_inventory: false
+    itsm_ansible_role_kb: false
+    itsm_ansible_role_incidents: false
+    itsm_ansible_role_followups: false
+    itsm_ansible_role_task_templates: false
+    itsm_ansible_role_change_templates: false
+    itsm_ansible_role_request_templates: false
+    itsm_ansible_role_service_requests: false
+    itsm_ansible_role_changes: false
+    itsm_ansible_role_change_tasks: false

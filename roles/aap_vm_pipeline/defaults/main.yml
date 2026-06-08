@@ -1,4 +1,7 @@
 ---
+aap_pipeline_scm_update_on_launch: false
+aap_pipeline_inventory_update_on_launch: false
+
 aap_vm_pipeline_organization: AIOps
 aap_vm_pipeline_validate_certs: false
 aap_vm_pipeline_controller_api_prefix: /api/controller/
@@ -31,15 +34,11 @@ aap_vm_pipeline_workflow_survey_spec:
       required: true
       type: integer
       variable: cpus
-      min: 1
-      max: 64
     - question_name: mem
       question_description: Memory in GiB
       required: true
       type: integer
       variable: mem
-      min: 1
-      max: 512
 
 aap_vm_pipeline_credential_gitea: Gitea
 aap_vm_pipeline_credential_gitea_scm: Gitea SCM

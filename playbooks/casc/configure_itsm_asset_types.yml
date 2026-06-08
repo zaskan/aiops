@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all/demo_platform.yml
+    - ../group_vars/all/itsm_assets.yml
+    - ../artifacts/demo_platform_facts.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    demo_platform_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    demo_platform_role_path: "{{ playbook_dir }}/../../roles/demo_platform"
+  tasks:
+    - ansible.builtin.include_tasks:
+        file: ../../roles/demo_platform/tasks/configure_itsm_asset_types.yml

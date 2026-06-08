@@ -50,6 +50,17 @@
 
 - name: Determine whether VM asset already exists in ITSM
   ansible.builtin.set_fact:
+    itsm_vm_asset_existing: >-
+      {{
+        (
+          itsm_vm_asset_existing_list.json
+          | default([])
+          | selectattr('name', 'equalto', vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
     itsm_vm_asset_already_exists: >-
       {{
         (
@@ -60,6 +71,15 @@
           | length
         ) > 0
       }}
+
+- name: Build Virtual Machine asset custom fields payload
+  ansible.builtin.set_fact:
+    itsm_vm_asset_custom_fields:
+      hostname: "{{ vm_name }}"
+      ip_address: "{{ itsm_vm_asset_ip }}"
+      ansible_host: "{{ itsm_vm_asset_ansible_host }}"
+      cpus: "{{ cpus | int }}"
+      memory: "{{ mem | int }}"
 
 - name: Create VM asset in ITSM
   ansible.builtin.uri:
@@ -75,11 +95,7 @@
       description: "IP: {{ itsm_vm_asset_ip }}"
       external_inventory: true
       asset_type_id: "{{ itsm_vm_asset_type_id | int }}"
-      custom_fields:
-        hostname: "{{ vm_name }}"
-        ip_address: "{{ itsm_vm_asset_ip }}"
-        cpus: "{{ cpus | int }}"
-        memory: "{{ mem | int }}"
+      custom_fields: "{{ itsm_vm_asset_custom_fields }}"
     status_code: [201]
     return_content: true
     headers:
@@ -88,11 +104,31 @@
   register: itsm_vm_asset_create
   when: not itsm_vm_asset_already_exists | bool
 
+- name: Update existing VM asset custom fields in ITSM
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets/{{ itsm_vm_asset_existing.id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: "IP: {{ itsm_vm_asset_ip }}"
+      custom_fields: "{{ itsm_vm_asset_custom_fields }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_vm_asset_update
+  when: itsm_vm_asset_already_exists | bool
+
 - name: Display ITSM VM asset registration result
   ansible.builtin.debug:
     msg: >-
       {{
         'Created ITSM asset ' ~ vm_name ~ ' (' ~ itsm_vm_asset_ip ~ ')'
         if not itsm_vm_asset_already_exists | bool
-        else 'ITSM asset ' ~ vm_name ~ ' already exists; skipped create'
+        else 'Updated ITSM asset ' ~ vm_name ~ ' (' ~ itsm_vm_asset_ip ~ ')'
       }}

@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ apache_exposure_service_name }}
+  namespace: {{ vm_namespace }}
+spec:
+  selector:
+    vm.kubevirt.io/name: {{ apache_exposure_vm_name }}
+  ports:
+    - port: {{ apache_exposure_service_port }}
+      targetPort: {{ apache_exposure_service_port }}
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ apache_exposure_route_name }}
+  namespace: {{ vm_namespace }}
+spec:
+  host: {{ apache_exposure_route_host }}
+  to:
+    kind: Service
+    name: {{ apache_exposure_service_name }}
+  port:
+    targetPort: {{ apache_exposure_service_port }}

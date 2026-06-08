@@ -104,6 +104,17 @@
     )
   no_log: true
 
+- name: Capture Infrastructure repository git commit after push
+  ansible.builtin.command: git rev-parse HEAD
+  args:
+    chdir: "{{ vm_manifest_workdir }}/repo"
+  register: vm_manifest_git_head
+  changed_when: false
+
+- name: Record Infrastructure git commit for ITSM CTASK comment
+  ansible.builtin.set_fact:
+    itsm_vm_git_commit: "{{ vm_manifest_git_head.stdout | trim }}"
+
 - name: Remove temporary Infrastructure clone directory after push
   ansible.builtin.file:
     path: "{{ vm_manifest_workdir }}/repo"

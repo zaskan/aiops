@@ -1,0 +1,7 @@
+---
+itsm_kb_vm_provisioning_title: Deploy Apache Application Stack (ITSM service request + AIOps)
+itsm_kb_vm_provisioning_tags: >-
+  Keywords: apache application stack, service request, itsm catalog, standard change,
+  ctask, ansible automation platform, aap, deploy apache application stack, provision vm,
+  kubevirt, openshift virtualization, httpd, gitea, argocd, gitops, itsm asset,
+  aiops infrastructure, change ref, CHG, REQ

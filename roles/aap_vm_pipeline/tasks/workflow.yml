@@ -6,6 +6,8 @@
     inventory: "{{ aap_vm_pipeline_inventory }}"
     survey_enabled: true
     survey_spec: "{{ aap_vm_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars }}"
+    ask_variables_on_launch: true
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
@@ -17,6 +19,13 @@
     workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
     organization: "{{ aap_vm_pipeline_organization }}"
     unified_job_template: "{{ aap_vm_pipeline_jt_register_itsm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_register_itsm }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
@@ -29,6 +38,10 @@
     workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
     organization: "{{ aap_vm_pipeline_organization }}"
     unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
@@ -41,6 +54,10 @@
     workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
     organization: "{{ aap_vm_pipeline_organization }}"
     unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
     success_nodes:
       - register_itsm_vm_asset
     state: present
@@ -54,6 +71,13 @@
     workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
     organization: "{{ aap_vm_pipeline_organization }}"
     unified_job_template: "{{ aap_vm_pipeline_jt_push_vm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_push_vm }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
@@ -66,6 +90,13 @@
     workflow_job_template: "{{ aap_vm_pipeline_workflow }}"
     organization: "{{ aap_vm_pipeline_organization }}"
     unified_job_template: "{{ aap_vm_pipeline_jt_push_vm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_push_vm }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
     success_nodes:
       - sync_infrastructure_vms
     state: present

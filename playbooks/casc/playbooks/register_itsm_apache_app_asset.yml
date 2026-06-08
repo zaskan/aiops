@@ -1,0 +1,54 @@
+---
+- name: Resolve target host and register Apache Application ITSM asset
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Resolve target host for Apache stack job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_apache_app_target_host.yml
+
+- name: Capture deployed application git commit from target VM
+  hosts: apache_app_targets
+  gather_facts: false
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Ensure git is installed on target VM for commit lookup
+      ansible.builtin.dnf:
+        name: "{{ apache_app_git_package }}"
+        state: present
+
+    - name: Verify application repository exists in Apache docroot
+      ansible.builtin.stat:
+        path: "{{ apache_app_docroot }}/.git"
+      register: apache_app_docroot_git
+
+    - name: Fail when application has not been deployed to docroot
+      ansible.builtin.fail:
+        msg: >-
+          No git repository found at {{ apache_app_docroot }} on {{ inventory_hostname }}.
+          Run Deploy Apache App Repo before Register ITSM Apache Application Asset.
+      when: not apache_app_docroot_git.stat.exists
+
+    - name: Read git commit from Apache docroot on target host
+      ansible.builtin.command: git -C {{ apache_app_docroot }} rev-parse HEAD
+      register: itsm_apache_app_git_head
+      changed_when: false
+
+- name: Register Apache Application as ITSM asset (parent Virtual Machine)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Set application git commit fact from target host
+      ansible.builtin.set_fact:
+        itsm_app_git_commit: "{{ hostvars[apache_app_target_host]['itsm_apache_app_git_head'].stdout | trim }}"
+
+    - name: Register Apache Application ITSM asset linked to parent VM
+      ansible.builtin.import_role:
+        name: itsm_apache_app_asset

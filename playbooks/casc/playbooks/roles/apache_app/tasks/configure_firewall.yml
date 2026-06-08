@@ -1,0 +1,24 @@
+---
+- name: Check whether firewalld is installed
+  ansible.builtin.stat:
+    path: /usr/bin/firewall-cmd
+  register: apache_app_firewalld_cmd
+
+- name: Configure firewalld http service when firewalld is present
+  when: apache_app_firewalld_cmd.stat.exists | default(false) | bool
+  block:
+    - name: Check whether firewalld allows http service
+      ansible.builtin.command: firewall-cmd --query-service=http
+      register: apache_app_firewall_http
+      failed_when: false
+      changed_when: false
+
+    - name: Allow http service in firewalld permanently
+      ansible.builtin.command: firewall-cmd --permanent --add-service=http
+      when: apache_app_firewall_http.rc != 0
+      register: apache_app_firewall_add
+      changed_when: true
+
+    - name: Reload firewalld after http service rule change
+      ansible.builtin.command: firewall-cmd --reload
+      when: apache_app_firewall_http.rc != 0

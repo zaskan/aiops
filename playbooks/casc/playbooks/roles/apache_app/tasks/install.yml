@@ -5,3 +5,6 @@
       - "{{ apache_app_package }}"
       - "{{ apache_app_git_package }}"
     state: present
+
+- name: Open http port in guest firewalld
+  ansible.builtin.include_tasks: configure_firewall.yml

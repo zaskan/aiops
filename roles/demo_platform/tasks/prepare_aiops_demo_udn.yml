@@ -1,0 +1,71 @@
+---
+- name: Ensure secondary UserDefinedNetwork exists for VM fixed IPs
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: k8s.ovn.org/v1
+      kind: UserDefinedNetwork
+      metadata:
+        name: "{{ aiops_demo_vm_udn_name }}"
+        namespace: "{{ aiops_demo_namespace }}"
+      spec:
+        topology: Layer2
+        layer2:
+          role: Secondary
+          ipam:
+            mode: Disabled
+
+- name: Wait for secondary UDN NetworkCreated condition
+  kubernetes.core.k8s_info:
+    api_version: k8s.ovn.org/v1
+    kind: UserDefinedNetwork
+    name: "{{ aiops_demo_vm_udn_name }}"
+    namespace: "{{ aiops_demo_namespace }}"
+  register: demo_udn_status
+  until: >
+    demo_udn_status.resources | default([]) | length > 0
+    and (
+      demo_udn_status.resources[0].status.conditions | default([])
+      | selectattr('type', 'equalto', 'NetworkCreated')
+      | selectattr('status', 'equalto', 'True')
+      | list
+      | length
+    ) > 0
+  retries: "{{ aiops_demo_vm_udn_ready_retries }}"
+  delay: "{{ aiops_demo_vm_udn_ready_delay }}"
+
+- name: Fail when secondary UDN did not become ready
+  ansible.builtin.fail:
+    msg: >-
+      UserDefinedNetwork {{ aiops_demo_vm_udn_name }} in {{ aiops_demo_namespace }}
+      is not ready. Check: oc get userdefinednetwork {{ aiops_demo_vm_udn_name }}
+      -n {{ aiops_demo_namespace }} -o yaml
+  when: >
+    demo_udn_status.resources | default([]) | length == 0
+    or (
+      demo_udn_status.resources[0].status.conditions | default([])
+      | selectattr('type', 'equalto', 'NetworkCreated')
+      | selectattr('status', 'equalto', 'True')
+      | list
+      | length
+    ) == 0
+
+- name: Verify NetworkAttachmentDefinition was created for secondary UDN
+  kubernetes.core.k8s_info:
+    api_version: k8s.cni.cncf.io/v1
+    kind: NetworkAttachmentDefinition
+    name: "{{ aiops_demo_vm_udn_name }}"
+    namespace: "{{ aiops_demo_namespace }}"
+  register: demo_udn_nad
+
+- name: Fail when UDN NetworkAttachmentDefinition is missing
+  ansible.builtin.fail:
+    msg: >-
+      NetworkAttachmentDefinition {{ aiops_demo_vm_udn_name }} was not created in
+      {{ aiops_demo_namespace }}. The OVN UserDefinedNetwork controller may be
+      failing; inspect UserDefinedNetwork status conditions.
+  when: demo_udn_nad.resources | default([]) | length == 0
+
+- name: Record secondary UDN as ready for VM fixed IPs
+  ansible.builtin.set_fact:
+    aiops_demo_vm_udn_ready: true

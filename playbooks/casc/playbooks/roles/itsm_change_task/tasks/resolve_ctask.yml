@@ -1,0 +1,44 @@
+---
+- name: GET ITSM change detail for CTASK resolution
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/changes/{{ itsm_change_ref | urlencode }}"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_change_task_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_change_task_change_detail
+
+- name: Resolve CTASK public id by title
+  ansible.builtin.set_fact:
+    itsm_change_task_ctask_ref: >-
+      {{
+        (
+          itsm_change_task_change_detail.json.tasks
+          | default([])
+          | selectattr('title', 'equalto', itsm_change_task_ctask_title)
+          | list
+          | first
+          | default({})
+        ).public_id | default('')
+      }}
+
+- name: Skip ITSM CTASK integration when mapped task is missing on the change
+  when: itsm_change_task_ctask_ref | length == 0
+  block:
+    - name: Warn when CTASK was not found on the change
+      ansible.builtin.debug:
+        msg: >-
+          CTASK '{{ itsm_change_task_ctask_title }}' was not found on change
+          {{ itsm_change_ref }} (common when the change predates a new workflow step).
+          Continuing without ITSM CTASK start/complete for this job. Submit a new service
+          request after re-running configure_itsm_apache_stack_templates.yml for full
+          CTASK tracking.
+
+    - name: Disable ITSM change task integration for this job
+      ansible.builtin.set_fact:
+        itsm_change_task_enabled: false

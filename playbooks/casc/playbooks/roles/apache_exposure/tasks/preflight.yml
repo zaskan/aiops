@@ -1,0 +1,86 @@
+---
+- name: Resolve target host for Apache stack job
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: resolve_apache_app_target_host.yml
+
+- name: Set VM name for Apache exposure from resolved target host
+  ansible.builtin.set_fact:
+    apache_exposure_vm_name: "{{ apache_app_target_host }}"
+
+- name: Fail when VM name could not be resolved for Apache exposure
+  ansible.builtin.assert:
+    that:
+      - apache_exposure_vm_name | string | trim | length > 0
+    fail_msg: >-
+      vm_name or target_host is required to expose Apache. Launch from Deploy Apache App workflow
+      with vm_name set, or pass -e vm_name=<vm_hostname>.
+
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Map Gitea facts to Apache exposure variables
+  ansible.builtin.set_fact:
+    apache_exposure_gitea_api_base: "{{ vm_manifest_gitea_api_base }}"
+    apache_exposure_gitea_username: "{{ vm_manifest_gitea_username }}"
+    apache_exposure_gitea_password: "{{ vm_manifest_gitea_password }}"
+    apache_exposure_gitea_owner: "{{ vm_manifest_gitea_owner }}"
+  no_log: true
+
+- name: Load OpenShift API credentials for GitOps sync and Route lookup
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+- name: Map OpenShift credentials to gitops_infrastructure variables
+  ansible.builtin.set_fact:
+    gitops_infrastructure_openshift_api_server: "{{ openshift_credential_host | default(omit) }}"
+    gitops_infrastructure_openshift_token: "{{ openshift_credential_token | default(omit) }}"
+  when: not openshift_credential_use_env_auth | bool
+  no_log: true
+
+- name: Resolve OpenShift cluster domain from demo platform facts artifact
+  when: openshift_cluster_domain is not defined
+  block:
+    - name: Resolve local demo platform facts artifact path
+      ansible.builtin.set_fact:
+        apache_exposure_artifact_file: >-
+          {{ openshift_credential_artifacts_file | default(playbook_dir ~ '/../../../artifacts/demo_platform_facts.yml', true) }}
+
+    - name: Check demo platform facts artifact exists
+      ansible.builtin.stat:
+        path: "{{ apache_exposure_artifact_file }}"
+      register: apache_exposure_artifact_stat
+
+    - name: Load demo platform facts for cluster domain
+      ansible.builtin.include_vars:
+        file: "{{ apache_exposure_artifact_file }}"
+      when: apache_exposure_artifact_stat.stat.exists | default(false)
+
+    - name: Set OpenShift cluster domain from artifact
+      ansible.builtin.set_fact:
+        openshift_cluster_domain: "{{ demo_platform.openshift.cluster_domain }}"
+      when: demo_platform is defined
+
+- name: Derive OpenShift cluster domain from Gitea credential hostname when artifact is unavailable
+  ansible.builtin.set_fact:
+    openshift_cluster_domain: >-
+      {{
+        gitea_credential_url
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*', '')
+        | regex_replace('^[^.]+\.', '')
+      }}
+  when: openshift_cluster_domain is not defined and gitea_credential_url is defined
+
+- name: Fail when OpenShift cluster domain is not configured
+  ansible.builtin.assert:
+    that:
+      - openshift_cluster_domain | default('') | string | trim | length > 0
+    fail_msg: >-
+      openshift_cluster_domain is required to build the Apache Route host. Ensure
+      artifacts/demo_platform_facts.yml defines demo_platform.openshift.cluster_domain.
+
+- name: Derive Apache exposure Service and Route naming
+  ansible.builtin.set_fact:
+    apache_exposure_service_name: "{{ apache_exposure_vm_name }}-http"
+    apache_exposure_route_name: "{{ apache_exposure_vm_name }}-http"
+    apache_exposure_route_host: "{{ apache_exposure_vm_name }}-http.{{ openshift_cluster_domain }}"

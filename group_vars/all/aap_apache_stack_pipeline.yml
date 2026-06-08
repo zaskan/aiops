@@ -1,0 +1,51 @@
+---
+aap_apache_stack_pipeline_organization: AIOps
+aap_apache_stack_pipeline_validate_certs: false
+aap_apache_stack_pipeline_controller_api_prefix: /api/controller/
+
+aap_apache_stack_pipeline_inventory: AIOps Localhost
+aap_apache_stack_pipeline_workflow: Deploy Apache Application Stack
+
+aap_apache_stack_pipeline_workflow_survey_spec:
+  name: Deploy Apache Application Stack
+  description: >-
+    Service-request-driven Apache Application stack (Provision VM then Deploy Apache App).
+    Submit ITSM request template Apache Application Stack first, then pass the created change ref.
+  spec:
+    - question_name: itsm_change_ref
+      question_description: ITSM change ref from submitted service request (e.g. CHG-1)
+      required: true
+      type: text
+      variable: itsm_change_ref
+    - question_name: itsm_service_request_ref
+      question_description: ITSM service request ref for audit (e.g. REQ-1)
+      required: false
+      type: text
+      variable: itsm_service_request_ref
+    - question_name: vm_name
+      question_description: Virtual machine name (also target_host for httpd deployment)
+      required: true
+      type: text
+      variable: vm_name
+    - question_name: cpus
+      question_description: Number of CPU cores
+      required: true
+      type: integer
+      variable: cpus
+    - question_name: mem
+      question_description: Memory in GiB
+      required: true
+      type: integer
+      variable: mem
+    - question_name: app_repo
+      question_description: Gitea application repository name (e.g. AIOps_App)
+      required: true
+      type: text
+      variable: app_repo
+      default: AIOps_App
+    - question_name: app_branch
+      question_description: Git branch to deploy
+      required: false
+      type: text
+      variable: app_branch
+      default: main

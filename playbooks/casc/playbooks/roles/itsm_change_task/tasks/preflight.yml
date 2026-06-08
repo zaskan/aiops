@@ -1,0 +1,26 @@
+---
+- name: Assert ITSM change task mapping variables are set
+  ansible.builtin.assert:
+    that:
+      - itsm_change_ref is defined
+      - itsm_change_ref | string | trim | length > 0
+      - itsm_ctask_template_name is defined
+      - itsm_ctask_template_name | string | trim | length > 0
+    fail_msg: >-
+      itsm_change_ref and itsm_ctask_template_name are required when ITSM change task
+      integration is enabled. Launch from Deploy Apache Application Stack with a change ref,
+      or omit itsm_change_ref for standalone workflow runs.
+
+- name: Load ITSM API credentials
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_itsm_credential.yml
+
+- name: Set CTASK title for lookup
+  ansible.builtin.set_fact:
+    itsm_change_task_ctask_title: "{{ itsm_ctask_template_name }}"
+
+- name: Load AAP controller credentials for job link aggregation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_aap_controller_credential.yml

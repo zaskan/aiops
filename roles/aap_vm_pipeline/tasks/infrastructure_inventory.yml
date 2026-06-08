@@ -19,7 +19,7 @@
     source_path: "{{ aap_vm_pipeline_inventory_script }}"
     credential: "{{ aap_vm_pipeline_credential_itsm }}"
     overwrite: true
-    update_on_launch: true
+    update_on_launch: "{{ aap_pipeline_inventory_update_on_launch | bool }}"
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"

@@ -1,0 +1,5 @@
+---
+- name: Refresh and wait for Infrastructure VMs Argo CD Application
+  ansible.builtin.include_role:
+    name: gitops_infrastructure
+    tasks_from: sync.yml

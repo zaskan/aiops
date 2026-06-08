@@ -4,3 +4,12 @@
     name: "{{ apache_app_service }}"
     enabled: true
     state: started
+
+- name: Wait for httpd to respond on localhost port 80
+  ansible.builtin.uri:
+    url: http://127.0.0.1/
+    status_code: [200, 403, 301, 302]
+  register: apache_app_http_check
+  until: apache_app_http_check.status in [200, 403, 301, 302]
+  retries: 12
+  delay: 5

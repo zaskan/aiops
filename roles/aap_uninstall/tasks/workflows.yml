@@ -1,4 +1,13 @@
 ---
+- name: Remove Deploy Apache Application Stack master workflow from AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_apache_stack_pipeline_workflow }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+
 - name: Remove Deploy Apache App workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_httpd_pipeline_workflow }}"

@@ -1,0 +1,110 @@
+---
+- name: Resolve parent workflow job id for aggregation
+  ansible.builtin.set_fact:
+    itsm_change_task_workflow_job_id: >-
+      {{
+        lookup('ansible.builtin.env', 'AWX_PARENT_JOB_ID')
+        | default(lookup('ansible.builtin.env', 'WORKFLOW_JOB_ID'), true)
+        | default('', true)
+      }}
+
+- name: Obtain AAP gateway OAuth token for workflow job aggregation
+  ansible.builtin.uri:
+    url: "{{ aap_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_controller_username }}"
+    password: "{{ aap_controller_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      description: itsm-change-task workflow aggregation
+      scope: write
+    status_code: 201
+  register: itsm_change_task_gateway_token
+  no_log: true
+  when: itsm_change_task_workflow_job_id | length > 0
+
+- name: Lookup workflow job nodes for AAP job links
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host | regex_replace('/$', '') }}/api/controller/v2/workflow_jobs/{{
+      itsm_change_task_workflow_job_id }}/workflow_nodes/?page_size=200
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_change_task_gateway_token.json.token }}"
+    validate_certs: false
+    status_code: [200]
+  register: itsm_change_task_workflow_nodes
+  when: itsm_change_task_workflow_job_id | length > 0
+
+- name: Initialize workflow job link lines
+  ansible.builtin.set_fact:
+    itsm_change_task_workflow_job_link_lines: []
+
+- name: Collect AAP job links from workflow nodes
+  ansible.builtin.set_fact:
+    itsm_change_task_workflow_job_link_lines: >-
+      {{
+        itsm_change_task_workflow_job_link_lines
+        + [
+            '- '
+            ~ (item.summary_fields.job.name | default('job'))
+            ~ ': '
+            ~ (aap_controller_host | regex_replace('/$', ''))
+            ~ '/#/jobs/playbook/'
+            ~ (item.summary_fields.job.id | string)
+          ]
+      }}
+  loop: "{{ itsm_change_task_workflow_nodes.json.results | default([]) }}"
+  when:
+    - itsm_change_task_workflow_nodes is defined
+    - item.summary_fields.job.id is defined
+
+- name: GET ITSM change detail for prior CTASK comments
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/changes/{{ itsm_change_ref | urlencode }}"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_change_task_final_change_detail
+
+- name: Build prior CTASK comment summary lines
+  ansible.builtin.set_fact:
+    itsm_change_task_prior_comment_lines: >-
+      {{
+        itsm_change_task_prior_comment_lines | default([])
+        + [
+            '- '
+            ~ item.title
+            ~ ': '
+            ~ (item.completion_comment | default('') | replace('\n', ' '))
+          ]
+      }}
+  loop: "{{ itsm_change_task_final_change_detail.json.tasks | default([]) }}"
+  when: item.completion_comment | default('') | length > 0
+
+- name: Build final CTASK completion comment with audit summary
+  ansible.builtin.set_fact:
+    itsm_change_task_completion_comment: |-
+      Apache Application stack deployment complete.
+      {% if itsm_service_request_ref is defined and itsm_service_request_ref | length > 0 %}Service request: {{ itsm_service_request_ref }}
+      {% endif %}Change: {{ itsm_change_ref }}
+      VM: {{ vm_name | default(target_host | default('unknown')) }}
+      {% if itsm_vm_git_commit is defined and itsm_vm_git_commit | length > 0 %}Infrastructure git commit: {{ itsm_vm_git_commit }}
+      {% endif %}{% if itsm_app_git_commit is defined and itsm_app_git_commit | length > 0 %}Application git commit: {{ itsm_app_git_commit }}
+      {% endif %}AAP job (this node): {{ itsm_change_task_job_url | default('n/a') }}
+      {% if itsm_change_task_workflow_job_link_lines | default([]) | length > 0 %}Workflow job links:
+      {{ itsm_change_task_workflow_job_link_lines | join('\n') }}
+      {% endif %}{% if itsm_change_task_prior_comment_lines | default([]) | length > 0 %}Prior CTASK comments:
+      {{ itsm_change_task_prior_comment_lines | join('\n') }}
+      {% endif %}
+
+- name: Complete final ITSM CTASK with aggregated audit comment
+  ansible.builtin.include_tasks: complete_ctask.yml

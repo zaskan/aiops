@@ -1,6 +1,22 @@
 ---
+- name: Start ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM CTASK for Install httpd
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Resolve target host for Apache stack job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_apache_app_target_host.yml
+
 - name: Install httpd on target server
-  hosts: "{{ target_host }}"
+  hosts: apache_app_targets
   gather_facts: true
   become: true
   vars_files:
@@ -10,3 +26,14 @@
       ansible.builtin.include_role:
         name: apache_app
         tasks_from: install
+
+- name: Complete ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Complete ITSM CTASK for Install httpd
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

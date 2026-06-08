@@ -4,5 +4,6 @@
   gather_facts: false
   vars_files:
     - ../../group_vars/all/aap_httpd_pipeline.yml
+    - ../../group_vars/all/itsm_apache_stack.yml
   roles:
     - role: aap_httpd_pipeline

@@ -8,11 +8,15 @@ aap_httpd_pipeline_project: AIOps Playbooks
 
 aap_httpd_pipeline_jt_install: Install httpd
 aap_httpd_pipeline_jt_deploy: Deploy Apache App Repo
+aap_httpd_pipeline_jt_expose: Expose Apache
+aap_httpd_pipeline_jt_register_itsm: Register ITSM Apache Application Asset
 aap_httpd_pipeline_jt_start: Start httpd
 aap_httpd_pipeline_workflow: Deploy Apache App
 
 aap_httpd_pipeline_playbook_install: install_httpd.yml
 aap_httpd_pipeline_playbook_deploy: deploy_apache_app.yml
+aap_httpd_pipeline_playbook_expose: expose_apache.yml
+aap_httpd_pipeline_playbook_register_itsm: register_itsm_apache_app_asset.yml
 aap_httpd_pipeline_playbook_start: start_httpd.yml
 
 aap_httpd_pipeline_workflow_survey_spec:
@@ -39,5 +43,6 @@ aap_httpd_pipeline_workflow_survey_spec:
 
 aap_httpd_pipeline_credential_vms: Virtual Machines
 aap_httpd_pipeline_credential_gitea: Gitea
+aap_httpd_pipeline_credential_openshift: OpenShift Cluster
 
 aap_httpd_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

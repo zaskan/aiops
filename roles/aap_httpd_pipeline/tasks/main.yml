@@ -21,5 +21,5 @@
       - "Organization: {{ aap_httpd_pipeline_organization }}"
       - "Project: {{ aap_httpd_pipeline_project }}"
       - "Inventory: {{ aap_httpd_pipeline_inventory }} (ITSM Assets SCM source; populated after VM registration)"
-      - "Job templates: {{ aap_httpd_pipeline_jt_install }}, {{ aap_httpd_pipeline_jt_deploy }}, {{ aap_httpd_pipeline_jt_start }}"
+      - "Job templates: {{ aap_httpd_pipeline_jt_install }}, {{ aap_httpd_pipeline_jt_deploy }}, {{ aap_httpd_pipeline_jt_expose }}, {{ aap_httpd_pipeline_jt_register_itsm }}, {{ aap_httpd_pipeline_jt_start }}"
       - "Workflow: {{ aap_httpd_pipeline_workflow }}"

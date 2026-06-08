@@ -3,9 +3,15 @@ kind: VirtualMachine
 metadata:
   name: {{ vm_name }}
   namespace: {{ vm_namespace }}
+  annotations:
+    {{ vm_ip_annotation }}: "{{ vm_ip }}"
 spec:
   runStrategy: Always
   template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |-
+          [{"name":"{{ vm_udn_name }}","namespace":"{{ vm_namespace }}","interface":"{{ vm_udn_pod_interface }}","ips":["{{ vm_ip }}/{{ vm_ip_prefix_length }}"]}]
     spec:
       domain:
         cpu:
@@ -27,9 +33,16 @@ spec:
               ports:
                 - port: 22
                   protocol: TCP
+                - port: 80
+                  protocol: TCP
+            - name: {{ vm_udn_pod_interface }}
+              bridge: {}
       networks:
         - name: default
           pod: {}
+        - name: {{ vm_udn_pod_interface }}
+          multus:
+            networkName: {{ vm_namespace }}/{{ vm_udn_name }}
       volumes:
         - name: container-boot-disk
           containerDisk:
@@ -45,6 +58,15 @@ spec:
               user: fedora
               runcmd:
                 - setsebool -P virt_qemu_ga_manage_ssh on
+            networkData: |
+              version: 2
+              ethernets:
+                {{ vm_primary_guest_interface }}:
+                  dhcp4: true
+                {{ vm_secondary_guest_interface }}:
+                  dhcp4: false
+                  addresses:
+                    - {{ vm_ip }}/{{ vm_ip_prefix_length }}
       accessCredentials:
         - sshPublicKey:
             propagationMethod:

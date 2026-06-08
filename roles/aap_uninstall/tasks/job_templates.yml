@@ -10,6 +10,8 @@
   loop:
     - "{{ aap_httpd_pipeline_jt_install }}"
     - "{{ aap_httpd_pipeline_jt_deploy }}"
+    - "{{ aap_httpd_pipeline_jt_expose }}"
+    - "{{ aap_httpd_pipeline_jt_register_itsm }}"
     - "{{ aap_httpd_pipeline_jt_start }}"
 
 - name: Remove VM pipeline job templates from AAP

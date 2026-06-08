@@ -1,0 +1,88 @@
+---
+itsm_apache_stack_kb_article_title: Deploy Apache Application Stack (AIOps service request)
+
+itsm_apache_stack_task_template_push_vm: AAP — Push VM Manifest
+itsm_apache_stack_task_template_sync_vms: AAP — Sync Infrastructure VMs
+itsm_apache_stack_task_template_register_itsm: AAP — Register ITSM VM Asset
+itsm_apache_stack_task_template_install_httpd: AAP — Install httpd
+itsm_apache_stack_task_template_deploy_app: AAP — Deploy Apache App Repo
+itsm_apache_stack_task_template_expose_apache: AAP — Expose Apache
+itsm_apache_stack_task_template_start_httpd: AAP — Start httpd
+
+itsm_apache_stack_change_template_name: Apache Application Stack — Standard Change
+itsm_apache_stack_request_template_name: Apache Application Stack
+
+# Declared on AAP job/workflow templates so workflow node extra_data may pass ITSM vars.
+aap_itsm_job_template_extra_vars:
+  itsm_change_ref: ""
+  itsm_service_request_ref: ""
+  itsm_ctask_template_name: ""
+
+aap_itsm_subworkflow_extra_vars:
+  itsm_change_ref: ""
+  itsm_service_request_ref: ""
+
+aap_vm_survey_job_extra_vars:
+  vm_name: ""
+  cpus: ""
+  mem: ""
+
+aap_httpd_survey_job_extra_vars:
+  target_host: ""
+  vm_name: ""
+  app_repo: ""
+  app_branch: ""
+
+aap_vm_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_vm_survey_job_extra_vars) }}"
+aap_httpd_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_httpd_survey_job_extra_vars) }}"
+
+itsm_task_templates:
+  - name: "{{ itsm_apache_stack_task_template_push_vm }}"
+    title: "{{ itsm_apache_stack_task_template_push_vm }}"
+    description: Push KubeVirt VM manifest to Gitea Infrastructure and capture git commit.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_apache_stack_task_template_sync_vms }}"
+    title: "{{ itsm_apache_stack_task_template_sync_vms }}"
+    description: Sync Infrastructure VMs via Argo CD after manifest push.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_apache_stack_task_template_register_itsm }}"
+    title: "{{ itsm_apache_stack_task_template_register_itsm }}"
+    description: Register VM as ITSM asset and refresh AIOps Infrastructure inventory.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_apache_stack_task_template_install_httpd }}"
+    title: "{{ itsm_apache_stack_task_template_install_httpd }}"
+    description: Install httpd and git on the provisioned VM.
+  - name: "{{ itsm_apache_stack_task_template_deploy_app }}"
+    title: "{{ itsm_apache_stack_task_template_deploy_app }}"
+    description: Clone Gitea application repository into Apache docroot.
+  - name: "{{ itsm_apache_stack_task_template_expose_apache }}"
+    title: "{{ itsm_apache_stack_task_template_expose_apache }}"
+    description: Inject Apache Service and Route into VM GitOps manifest and sync Argo CD.
+  - name: "{{ itsm_apache_stack_task_template_start_httpd }}"
+    title: "{{ itsm_apache_stack_task_template_start_httpd }}"
+    description: Enable and start httpd on the provisioned VM.
+
+itsm_change_templates:
+  - name: "{{ itsm_apache_stack_change_template_name }}"
+    description: Standard change for Apache Application stack (VM provision + httpd deploy).
+    change_type: standard
+    task_template_names:
+      - "{{ itsm_apache_stack_task_template_push_vm }}"
+      - "{{ itsm_apache_stack_task_template_sync_vms }}"
+      - "{{ itsm_apache_stack_task_template_register_itsm }}"
+      - "{{ itsm_apache_stack_task_template_install_httpd }}"
+      - "{{ itsm_apache_stack_task_template_deploy_app }}"
+      - "{{ itsm_apache_stack_task_template_expose_apache }}"
+      - "{{ itsm_apache_stack_task_template_start_httpd }}"
+
+itsm_request_templates:
+  - name: "{{ itsm_apache_stack_request_template_name }}"
+    description: Request Apache Application stack (KubeVirt VM + httpd application deployment).
+    change_template_name: "{{ itsm_apache_stack_change_template_name }}"
+    require_standard_change: true
+    fields:
+      - { field_key: vm_name, label: VM name, field_type: text, required: true }
+      - { field_key: cpus, label: CPUs, field_type: number, required: true }
+      - { field_key: mem, label: Memory GiB, field_type: number, required: true }
+      - { field_key: app_repo, label: Gitea app repository, field_type: text, required: true }
+      - { field_key: app_branch, label: Git branch, field_type: text, required: false }

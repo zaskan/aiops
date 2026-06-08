@@ -1,0 +1,3 @@
+---
+- name: Resolve Apache Route URL from OpenShift after GitOps sync
+  ansible.builtin.include_tasks: ../common/tasks/resolve_apache_route_url.yml

@@ -1,0 +1,11 @@
+---
+- name: Configure AAP Deploy Apache Application Stack master workflow
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/aap_apache_stack_pipeline.yml
+    - ../../group_vars/all/aap_vm_pipeline.yml
+    - ../../group_vars/all/aap_httpd_pipeline.yml
+    - ../../group_vars/all/itsm_apache_stack.yml
+  roles:
+    - role: aap_apache_stack_pipeline

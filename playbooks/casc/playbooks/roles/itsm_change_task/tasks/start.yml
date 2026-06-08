@@ -1,0 +1,18 @@
+---
+- name: Skip ITSM change task integration when change ref is not provided
+  ansible.builtin.set_fact:
+    itsm_change_task_enabled: >-
+      {{ itsm_change_ref is defined and itsm_change_ref | string | trim | length > 0 }}
+  when: itsm_change_task_enabled is not defined
+
+- name: Run ITSM change task preflight
+  ansible.builtin.include_tasks: preflight.yml
+  when: itsm_change_task_enabled | bool
+
+- name: Resolve ITSM CTASK for this workflow node
+  ansible.builtin.include_tasks: resolve_ctask.yml
+  when: itsm_change_task_enabled | bool
+
+- name: Start ITSM CTASK
+  ansible.builtin.include_tasks: start_ctask.yml
+  when: itsm_change_task_enabled | bool

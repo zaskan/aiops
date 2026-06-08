@@ -1,0 +1,33 @@
+---
+- name: Resolve current AAP job id from execution environment
+  ansible.builtin.set_fact:
+    itsm_change_task_job_id: >-
+      {{
+        lookup('ansible.builtin.env', 'JOB_ID')
+        | default(lookup('ansible.builtin.env', 'AWX_JOB_ID'), true)
+        | default(lookup('ansible.builtin.env', 'TOWER_JOB_ID'), true)
+        | default('', true)
+      }}
+
+- name: Build AAP controller job URL for completion comment
+  ansible.builtin.set_fact:
+    itsm_change_task_job_url: >-
+      {{
+        (aap_controller_host | default('', true) | regex_replace('/$', ''))
+        ~ '/#/jobs/playbook/'
+        ~ itsm_change_task_job_id
+      }}
+  when: itsm_change_task_job_id | length > 0
+
+- name: Build default CTASK completion comment
+  ansible.builtin.set_fact:
+    itsm_change_task_completion_comment: |-
+      AAP job: {{ itsm_change_task_job_url | default('job id ' ~ itsm_change_task_job_id) }}
+      Playbook node: {{ itsm_change_task_ctask_title }}
+      {% if itsm_vm_git_commit is defined and itsm_vm_git_commit | length > 0 %}
+      Infrastructure git commit: {{ itsm_vm_git_commit }}
+      {% endif %}
+      {% if itsm_app_git_commit is defined and itsm_app_git_commit | length > 0 %}
+      Application git commit: {{ itsm_app_git_commit }}
+      {% endif %}
+      Status: success

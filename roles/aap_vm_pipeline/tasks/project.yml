@@ -7,7 +7,7 @@
     scm_url: "{{ aap_vm_pipeline_gitea_scm_url }}"
     scm_branch: "{{ aap_vm_pipeline_scm_branch }}"
     scm_clean: true
-    scm_update_on_launch: true
+    scm_update_on_launch: "{{ aap_pipeline_scm_update_on_launch | bool }}"
     credential: "{{ aap_vm_pipeline_credential_gitea_scm }}"
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"

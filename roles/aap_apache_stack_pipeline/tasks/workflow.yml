@@ -1,0 +1,65 @@
+---
+- name: Ensure sub-workflows allow ITSM variables from master workflow nodes
+  ansible.builtin.include_tasks: ensure_subworkflows.yml
+
+- name: Ensure Deploy Apache Application Stack master workflow exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_apache_stack_pipeline_workflow }}"
+    organization: "{{ aap_apache_stack_pipeline_organization }}"
+    inventory: "{{ aap_apache_stack_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_apache_stack_pipeline_workflow_survey_spec }}"
+    state: present
+    controller_host: "{{ aap_apache_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
+
+- name: Ensure Deploy Apache App sub-workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: deploy_apache_app_stack
+    workflow_job_template: "{{ aap_apache_stack_pipeline_workflow }}"
+    organization: "{{ aap_apache_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_apache_stack_pipeline_httpd_subworkflow }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      target_host: "{{ '{{ vm_name }}' }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_apache_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
+
+- name: Clear Provision VM sub-workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: provision_vm_stack
+    workflow_job_template: "{{ aap_apache_stack_pipeline_workflow }}"
+    organization: "{{ aap_apache_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_apache_stack_pipeline_vm_subworkflow }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_apache_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
+
+- name: Ensure Provision VM sub-workflow node links to Deploy Apache App
+  awx.awx.workflow_job_template_node:
+    identifier: provision_vm_stack
+    workflow_job_template: "{{ aap_apache_stack_pipeline_workflow }}"
+    organization: "{{ aap_apache_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_apache_stack_pipeline_vm_subworkflow }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+    success_nodes:
+      - deploy_apache_app_stack
+    state: present
+    controller_host: "{{ aap_apache_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"

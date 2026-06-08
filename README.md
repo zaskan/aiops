@@ -12,7 +12,12 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_gitea_repos.yml`     | Create Gitea repos for AIOps demo              |
 | `playbooks/casc/configure_infrastructure_gitops.yml` | Argo CD Application for Infrastructure/vms |
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
+| `playbooks/casc/configure_itsm_asset_types.yml` | Create/update ITSM **Virtual Machine** and **Apache Application** asset types |
+| `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Apache Application stack (RAG) |
 | `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Apache App workflow (inventory not created) |
+| `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Apache Application stack |
+| `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Apache Application Stack |
+| `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Apache Application Stack service request |
 | `playbooks/casc/playbooks/install_httpd.yml` | Install httpd and git on a RHEL host |
 | `playbooks/casc/playbooks/deploy_apache_app.yml` | Clone Gitea app repo into Apache docroot |
 | `playbooks/casc/playbooks/start_httpd.yml` | Enable and start httpd |
@@ -31,6 +36,8 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 - Ansible Automation Platform 2.7 (auto-discovered)
 - OpenShift GitOps (Argo CD)
 - OpenShift Virtualization (HyperConverged Available in `openshift-cnv`)
+- **OVN-Kubernetes** as default CNI (`networkType: OVNKubernetes`)
+- **UserDefinedNetwork** API (`userdefinednetworks.k8s.ovn.org`) for VM fixed IPs (OpenShift **4.17+** recommended; validated on **4.21**)
 
 ### Applications (installed when absent)
 
@@ -52,6 +59,8 @@ AAP, OpenShift GitOps, and the OpenShift cluster itself are **not** installed by
   - Ansible Automation Platform 2.7 operator + instance
   - OpenShift GitOps operator
   - OpenShift Virtualization operator (HyperConverged)
+  - **OVN-Kubernetes** default network (not legacy OpenShift SDN)
+  - **UserDefinedNetwork** CRD (`userdefinednetworks.k8s.ovn.org`) — OpenShift **4.17+** (tested on **4.21**)
 - Permission to create/delete namespaces and deploy workloads
 - Outbound network access to GitHub (for manifests and source builds)
 - **Red Hat Automation Hub offline token** in `PUBLIC_AH_OFFLINE_TOKEN` (required to install `awx.awx` and configure Hub credentials in AAP)
@@ -82,17 +91,21 @@ The playbook will:
 
 1. Verify OpenShift, AAP 2.7, OpenShift GitOps, and OpenShift Virtualization
 2. Install itsm-app, chat-app, and gitea if they are not already running
-3. Create the ITSM **Virtual Machine** asset type (hostname, ip_address, cpus, memory custom fields)
+3. Create ITSM asset types **Virtual Machine** and **Apache Application** (with custom fields)
 4. Health-check each application
 5. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
-6. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key for AAP
-7. Mint a permanent OpenShift ServiceAccount token and update the artifact
-8. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
-9. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
-10. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
-11. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
+6. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
+7. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key for AAP
+8. Mint a permanent OpenShift ServiceAccount token and update the artifact
+9. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
+10. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+11. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
+12. Publish ITSM Knowledge Base article **Provision a virtual machine (AIOps Provision VM workflow)** for internal RAG / AI agent (idempotent upsert)
+13. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
 
-The install playbook also prepares VM infrastructure: namespace **`aiops-demo`** and secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`). RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
+The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
+
+See [Fixed VM IP addresses](#fixed-vm-ip-addresses) for cluster requirements and addressing details.
 
 ### Example: use facts in another playbook
 
@@ -229,11 +242,64 @@ For partial re-runs after editing local playbooks, use `playbooks/casc/configure
 
 AAP job templates run playbooks from the Gitea **Playbooks** SCM project. Gitea URL and credentials come from the AAP **Gitea** credential (injected as `gitea_url`, `gitea_username`, `gitea_password` extra vars). Static settings (VM namespace, Argo CD app name, etc.) live in **`defaults/main.yml`** in the Playbooks repo. OpenShift access uses the **OpenShift Cluster** credential. Local `ansible-playbook` runs can fall back to `artifacts/demo_platform_facts.yml` when the Gitea credential is not injected.
 
-After changing playbooks under `playbooks/casc/playbooks/`, re-run `configure_gitea_repos.yml` to push updates to Gitea (including `itsm_inventory.py`); AAP syncs the **AIOps Playbooks** project on launch (`scm_update_on_launch`).
+After changing playbooks under `playbooks/casc/playbooks/`, re-run `configure_gitea_repos.yml` to push updates to Gitea (including `itsm_inventory.py`), then sync the **AIOps Playbooks** project in AAP (project and inventory **update on launch** are disabled; run a manual project update or re-run `configure_aap_vm_workflow.yml` after pushing to Gitea).
 
 The **ITSM App** credential injects `ITSM_API_BASE_URL`, `ITSM_API_USER`, and `ITSM_API_PASSWORD` (env and extra vars) for `itsm_inventory.py` and `register_itsm_vm_asset.yml`.
 
+### Fixed VM IP addresses
+
+Each new VM gets a **stable management IP** from a configured pool on a **secondary UserDefinedNetwork (UDN)**. OpenShift Services/Routes for Apache continue to use the **primary** pod-network interface (dynamic IP).
+
+#### Cluster requirements
+
+| Requirement | Notes |
+| ----------- | ----- |
+| **OpenShift Virtualization** | HyperConverged Available (`openshift-cnv`); no extra operator beyond Virt |
+| **OVN-Kubernetes** | Default CNI (`networkType: OVNKubernetes`); legacy OpenShift SDN is **not** supported |
+| **Multus CNI** | Included with OpenShift; attaches the secondary UDN to virt-launcher pods |
+| **UserDefinedNetwork API** | CRD `userdefinednetworks.k8s.ovn.org`; OpenShift **4.17+** (validated on **4.21**) |
+| **Permissions** | Install playbook needs permission to create `UserDefinedNetwork` and `NetworkAttachmentDefinition` in `aiops-demo` |
+
+No additional operators are installed by this project. The Cluster Network Operator (cluster default) reconciles the UDN.
+
+#### What install configures
+
+On `playbooks/install.yml`, after the `aiops-demo` namespace and SSH secret:
+
+1. **Preflight** — verifies OVN-Kubernetes and the UserDefinedNetwork CRD (`check_vm_fixed_ip_network.yml`).
+2. **UDN** — creates **`aiops-vm-network`** in `aiops-demo`: Layer2, role **Secondary**, `ipam.mode: Disabled` (`prepare_aiops_demo_udn.yml`).
+3. **Wait** — fails if the UDN does not reach `NetworkCreated=True` or the Multus NAD is missing.
+
+#### Addressing model
+
+| Item | Value / behavior |
+| ---- | ---------------- |
+| IP pool | `192.168.100.100`–`192.168.100.250` (`group_vars/all/vm_network.yml`) |
+| Guest interface | `enp2s0` (secondary); primary `enp1s0` stays on DHCP (pod network) |
+| GitOps annotation | `aiops.io/ip-address` on the VirtualMachine manifest |
+| ITSM asset `ip_address` | **Fixed secondary UDN IP** (stable CMDB / GitOps identity) |
+| AAP Ansible SSH (`ansible_host`) | **Primary pod-network IP** on interface `default` (reachable from AAP EE pods) |
+| Pool overlap | `192.168.100.0/24` must **not** overlap the cluster pod CIDR (often `10.128.0.0/14`) |
+
+Allocation runs in **Push VM Manifest** (`allocate_vm_ip.yml`): clones Infrastructure GitOps, picks the next free address (or reuses the existing manifest IP), validates the pool, and renders cloud-init `networkData`.
+
+Override a single VM: `-e vm_ip=192.168.100.105`.
+
+#### AAP connectivity and the secondary UDN
+
+The secondary UDN (`aiops-vm-network`) is a **Layer2 segment isolated from the default pod network**. AAP execution environment pods in the `aap` namespace cannot reach `192.168.100.0/24` unless they are also attached to that network. For Ansible SSH, **Register ITSM VM Asset** stores the VMI **primary** interface IP in ITSM custom field `ansible_host`; `itsm_inventory.py` prefers that over `ip_address` for inventory connectivity.
+
+To SSH over the fixed UDN IP instead, you would need cluster-level networking changes (for example a **ClusterUserDefinedNetwork** with a `namespaceSelector` covering both `aiops-demo` and `aap`, plus Multus attachment on the execution environment). That is not configured by this demo.
+
+**Existing VMs** created before this feature must be **recreated** (Push → Sync) to attach the secondary UDN and receive a fixed IP.
+
+#### Customizing the pool
+
+Edit `group_vars/all/vm_network.yml` (also loaded by `playbooks/casc/playbooks/defaults/main.yml` for AAP playbooks). Keep the pool on a subnet that does not overlap the cluster SDN. Re-run `playbooks/install.yml` (or `prepare_aiops_demo_udn.yml` logic via install) after changing UDN settings.
+
 ### Push a VM manifest manually
+
+Each new VM receives a **fixed IP** from pool `192.168.100.100`–`192.168.100.250` on secondary UDN **`aiops-vm-network`**. The address is stored in GitOps annotation `aiops.io/ip-address`, applied on guest interface `enp2s0` via cloud-init, and recorded in ITSM as `ip_address`. **AAP SSH uses the primary pod-network IP** (`ansible_host` from VMI interface `default`) because the secondary UDN is isolated from the default cluster network where AAP execution pods run. **Register ITSM VM Asset** waits for the fixed IP on VMI interface `net1` and restarts the VM once if the secondary NIC is not yet active (network and cloud-init changes apply on boot). Override with `-e vm_ip=<address>` when needed. Existing VMs must be recreated to pick up the secondary network and fixed IP.
 
 ```bash
 ansible-playbook playbooks/casc/configure_gitea_repos.yml
@@ -261,8 +327,11 @@ ansible-playbook playbooks/casc/playbooks/register_itsm_vm_asset.yml \
 
 Assets registered with `external_inventory: true` appear in **AIOps Infrastructure** after the register job syncs the ITSM Assets inventory source.
 
+Install also upserts a Knowledge Base article (**Provision a virtual machine (AIOps Provision VM workflow)**) in itsm-app, structured for the internal RAG / AI agent. Re-run `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` after editing the template to refresh the article without duplicating it.
+
 ```bash
 ansible-playbook playbooks/casc/configure_aap_vm_workflow.yml
+ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 ```
 
 ## Apache deployment pipeline (AAP)
@@ -286,8 +355,10 @@ For partial re-runs after editing httpd playbooks, use `configure_gitea_repos.ym
 | Inventory | **AIOps Infrastructure** (ITSM Assets SCM source) |
 | Job template | Install httpd (Virtual Machines credential) |
 | Job template | Deploy Apache App Repo (Virtual Machines + Gitea credentials) |
+| Job template | Expose Apache (OpenShift Cluster + Gitea credentials) |
+| Job template | Register ITSM Apache Application Asset (OpenShift + Virtual Machines + ITSM) |
 | Job template | Start httpd (Virtual Machines credential) |
-| Workflow | Deploy Apache App (Install → Deploy → Start) |
+| Workflow | Deploy Apache App (Install → Deploy → Expose → Register → Start) |
 
 Workflow survey:
 
@@ -301,7 +372,56 @@ Workflow survey:
 ansible-playbook playbooks/casc/configure_aap_httpd_workflow.yml
 ```
 
-Launch **Deploy Apache App** in AAP, fill in the survey, and confirm `httpd` is active and content is served from `/var/www/html/`.
+Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache Route is created in GitOps, `httpd` is active, and content is served from `/var/www/html/`.
+
+## Apache Application stack (service request driven)
+
+End-to-end delivery: ITSM **service request** → **standard change** with seven CTASKs → master AAP workflow **Deploy Apache Application Stack** (Provision VM → Deploy Apache App). Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
+
+### ITSM catalog
+
+| Template | Name |
+| -------- | ---- |
+| Request | **Apache Application Stack** |
+| Change | **Apache Application Stack — Standard Change** |
+| Task templates (7) | AAP — Push VM Manifest, Sync Infrastructure VMs, Register ITSM VM Asset, Install httpd, Deploy Apache App Repo, Expose Apache, Start httpd |
+
+Install creates these via `configure_itsm_apache_stack_templates.yml` (included in `playbooks/install.yml`).
+
+### Operator flow
+
+1. ITSM **Service Catalog** → **Apache Application Stack** → fill `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
+2. AAP → **Deploy Apache Application Stack** → survey: `itsm_change_ref` (required), matching stack parameters.
+3. Verify all seven CTASKs complete with comments; change **completed**; request **fulfilled**.
+
+Demo API submit (no UI):
+
+```bash
+ansible-playbook playbooks/casc/submit_apache_stack_service_request.yml \
+  -e vm_name=demo-stack1 -e cpus=2 -e mem=4 -e app_repo=AIOps_App
+```
+
+### Master AAP workflow
+
+`configure_aap_apache_stack_workflow.yml` creates:
+
+| Resource | Name |
+| -------- | ---- |
+| Master workflow | **Deploy Apache Application Stack** |
+| Sub-workflow 1 | **Provision VM** |
+| Sub-workflow 2 | **Deploy Apache App** |
+
+Master workflow survey: `itsm_change_ref`, `itsm_service_request_ref` (optional), `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch`.
+
+Standalone **Provision VM** and **Deploy Apache App** workflows remain usable without `itsm_change_ref` (ITSM CTASK integration is skipped).
+
+Install also upserts KB article **Deploy Apache Application Stack (ITSM service request + AIOps)** for RAG. Re-run `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` after editing the template.
+
+```bash
+ansible-playbook playbooks/casc/configure_aap_apache_stack_workflow.yml
+ansible-playbook playbooks/casc/configure_itsm_apache_stack_templates.yml
+ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
+```
 
 ## Configure chat-app for AIOps
 
@@ -511,6 +631,9 @@ aiops/
 ├── group_vars/all/chat_aiops.yml
 ├── group_vars/all/itsm_aiops.yml
 ├── group_vars/all/itsm_assets.yml
+├── group_vars/all/itsm_kb_vm_provisioning.yml
+├── group_vars/all/itsm_apache_stack.yml
+├── group_vars/all/aap_apache_stack_pipeline.yml
 ├── inventory/hosts
 ├── playbooks/
 │   ├── install.yml                  # install demo apps + full AAP setup

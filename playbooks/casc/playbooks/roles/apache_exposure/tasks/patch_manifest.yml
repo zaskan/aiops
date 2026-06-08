@@ -1,0 +1,223 @@
+---
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    apache_exposure_gitea_host: >-
+      {{ apache_exposure_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Infrastructure repository
+  ansible.builtin.set_fact:
+    apache_exposure_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ apache_exposure_gitea_username | urlencode ~ ':'
+          ~ apache_exposure_gitea_password | urlencode ~ '@'
+          ~ apache_exposure_gitea_internal_host ~ '/'
+          ~ apache_exposure_gitea_owner | urlencode ~ '/'
+          ~ apache_exposure_gitea_repo | urlencode ~ '.git'
+        )
+        if (apache_exposure_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ apache_exposure_gitea_username | urlencode ~ ':'
+          ~ apache_exposure_gitea_password | urlencode ~ '@'
+          ~ apache_exposure_gitea_host ~ '/'
+          ~ apache_exposure_gitea_owner | urlencode ~ '/'
+          ~ apache_exposure_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory
+  ansible.builtin.file:
+    path: "{{ apache_exposure_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository
+  ansible.builtin.git:
+    repo: "{{ apache_exposure_gitea_clone_repo }}"
+    dest: "{{ apache_exposure_workdir }}/repo"
+    version: "{{ apache_exposure_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          apache_exposure_gitea_use_internal | default(false) | bool
+          or apache_exposure_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Set path to VM manifest in Infrastructure repository
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_path: >-
+      {{ apache_exposure_workdir }}/repo/{{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml
+
+- name: Fail when VM manifest does not exist in Infrastructure repository
+  ansible.builtin.stat:
+    path: "{{ apache_exposure_manifest_path }}"
+  register: apache_exposure_manifest_stat
+
+- name: Abort when VM manifest is missing from GitOps repository
+  ansible.builtin.fail:
+    msg: >-
+      VM manifest {{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml was not found
+      in Gitea Infrastructure. Run Provision VM (Push VM Manifest) before Expose Apache.
+  when: not apache_exposure_manifest_stat.stat.exists
+
+- name: Read current VM manifest content from repository clone
+  ansible.builtin.slurp:
+    src: "{{ apache_exposure_manifest_path }}"
+  register: apache_exposure_manifest_slurp
+
+- name: Capture VM manifest content as plain text
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
+
+- name: Parse VM manifest documents from GitOps file
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_docs: "{{ apache_exposure_manifest_content | from_yaml_all | list }}"
+
+- name: Determine whether VirtualMachine manifest exposes masquerade port 80
+  ansible.builtin.set_fact:
+    apache_exposure_vm_has_port_80: >-
+      {{
+        (
+          apache_exposure_manifest_docs
+          | selectattr('kind', 'equalto', 'VirtualMachine')
+          | list
+          | length
+        ) > 0
+        and (
+          (
+            apache_exposure_manifest_docs
+            | selectattr('kind', 'equalto', 'VirtualMachine')
+            | list
+            | first
+          ).spec.template.spec.domain.devices.interfaces | default([])
+          | first
+          | default({})
+        ).ports | default([])
+        | selectattr('port', 'equalto', apache_exposure_service_port | int)
+        | list
+        | length > 0
+      }}
+
+- name: Repair malformed masquerade port 80 indentation in VM manifest
+  ansible.builtin.replace:
+    path: "{{ apache_exposure_manifest_path }}"
+    regexp: |-
+      (              ports:
+                - port: 22
+                  protocol: TCP)
+          - port: 80
+            protocol: TCP
+    replace: '\1\n                - port: 80\n                  protocol: TCP'
+  when: "{{ '          - port: 80' in apache_exposure_manifest_content }}"
+
+- name: Ensure masquerade port 80 is present on VirtualMachine manifest
+  ansible.builtin.replace:
+    path: "{{ apache_exposure_manifest_path }}"
+    regexp: |-
+      (              ports:
+                - port: 22
+                  protocol: TCP)
+    replace: '\1\n                - port: 80\n                  protocol: TCP'
+  when: not apache_exposure_vm_has_port_80 | bool
+
+- name: Re-read VM manifest after port patching
+  ansible.builtin.slurp:
+    src: "{{ apache_exposure_manifest_path }}"
+  register: apache_exposure_manifest_slurp
+  when: "{{ not apache_exposure_vm_has_port_80 | bool or ('          - port: 80' in apache_exposure_manifest_content) }}"
+
+- name: Refresh VM manifest content fact after port patching
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
+    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
+  when: "{{ not apache_exposure_vm_has_port_80 | bool or ('          - port: 80' in apache_exposure_manifest_content) }}"
+
+- name: Repair incorrect KubeVirt Service selector in existing Apache exposure manifest
+  ansible.builtin.replace:
+    path: "{{ apache_exposure_manifest_path }}"
+    regexp: 'kubevirt\.io/domain: {{ apache_exposure_vm_name }}'
+    replace: 'vm.kubevirt.io/name: {{ apache_exposure_vm_name }}'
+  when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
+
+- name: Re-read VM manifest after Service selector repair
+  ansible.builtin.slurp:
+    src: "{{ apache_exposure_manifest_path }}"
+  register: apache_exposure_manifest_slurp
+  when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
+
+- name: Refresh VM manifest content fact after Service selector repair
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
+    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
+  when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
+
+- name: Detect whether Service manifest is already present in VM manifest file
+  ansible.builtin.set_fact:
+    apache_exposure_has_service: >-
+      {{
+        (
+          apache_exposure_manifest_docs
+          | selectattr('kind', 'equalto', 'Service')
+          | map(attribute='metadata')
+          | selectattr('name', 'equalto', apache_exposure_service_name)
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Detect whether Route manifest is already present in VM manifest file
+  ansible.builtin.set_fact:
+    apache_exposure_has_route: >-
+      {{
+        (
+          apache_exposure_manifest_docs
+          | selectattr('kind', 'equalto', 'Route')
+          | map(attribute='metadata')
+          | selectattr('name', 'equalto', apache_exposure_route_name)
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Render Service and Route manifest fragments for Apache exposure
+  ansible.builtin.template:
+    src: apache_exposure_append.yaml.j2
+    dest: "{{ apache_exposure_workdir }}/append.yaml"
+    mode: "0640"
+  when: not apache_exposure_has_service | bool
+
+- name: Append Service and Route documents to VM manifest file
+  ansible.builtin.shell: |
+    set -euo pipefail
+    printf '\n---\n' >> "{{ apache_exposure_manifest_path }}"
+    cat "{{ apache_exposure_workdir }}/append.yaml" >> "{{ apache_exposure_manifest_path }}"
+  when: not apache_exposure_has_service | bool
+  changed_when: true
+
+- name: Render Route manifest fragment when Service exists without Route
+  ansible.builtin.template:
+    src: apache_exposure_route.yaml.j2
+    dest: "{{ apache_exposure_workdir }}/append-route.yaml"
+    mode: "0640"
+  when:
+    - apache_exposure_has_service | bool
+    - not apache_exposure_has_route | bool
+
+- name: Append Route document to VM manifest file
+  ansible.builtin.shell: |
+    set -euo pipefail
+    printf '\n---\n' >> "{{ apache_exposure_manifest_path }}"
+    cat "{{ apache_exposure_workdir }}/append-route.yaml" >> "{{ apache_exposure_manifest_path }}"
+  when:
+    - apache_exposure_has_service | bool
+    - not apache_exposure_has_route | bool
+  changed_when: true

@@ -1,0 +1,179 @@
+---
+- name: Set Gitea host for Infrastructure repository clone during IP allocation
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_host: >-
+      {{ vm_manifest_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for IP allocation
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_internal_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+        if (vm_manifest_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory for IP allocation
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/ip-alloc"
+    state: absent
+
+- name: Clone Infrastructure repository to discover existing VM IP assignments
+  ansible.builtin.git:
+    repo: "{{ vm_manifest_gitea_clone_repo }}"
+    dest: "{{ vm_manifest_workdir }}/ip-alloc"
+    version: "{{ vm_manifest_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          vm_manifest_gitea_use_internal | default(false) | bool
+          or vm_manifest_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Discover VM manifest files in Infrastructure repository
+  ansible.builtin.find:
+    paths: "{{ vm_manifest_workdir }}/ip-alloc/{{ vm_manifest_gitea_path }}"
+    patterns: "*.yaml"
+    file_type: file
+  register: vm_manifest_existing_files
+
+- name: Initialize VM manifest IP assignment list
+  ansible.builtin.set_fact:
+    vm_manifest_ip_assignments: []
+
+- name: Parse existing VM manifest IP assignments from Infrastructure repository
+  ansible.builtin.set_fact:
+    vm_manifest_ip_assignments: >-
+      {{
+        vm_manifest_ip_assignments
+        + [
+          {
+            'vm_name': (item.path | basename | regex_replace('\.yaml$', '')),
+            'vm_ip': (
+              (
+                (lookup('file', item.path) | from_yaml_all | list | first).metadata.annotations
+                | default({})
+              ).get(vm_ip_annotation, '')
+              | default('')
+            )
+          }
+        ]
+      }}
+  loop: "{{ vm_manifest_existing_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Build list of IP addresses already assigned to other VMs
+  ansible.builtin.set_fact:
+    vm_manifest_used_ips: >-
+      {{
+        vm_manifest_ip_assignments | default([])
+        | rejectattr('vm_name', 'equalto', vm_name)
+        | map(attribute='vm_ip')
+        | reject('equalto', '')
+        | list
+      }}
+
+- name: Derive configured fixed IP pool boundaries
+  ansible.builtin.set_fact:
+    vm_ip_pool_prefix: "{{ vm_ip_pool_start | regex_replace('\\.[0-9]+$', '') }}"
+    vm_ip_pool_first_host: "{{ vm_ip_pool_start.split('.') | last | int }}"
+    vm_ip_pool_last_host: "{{ vm_ip_pool_end.split('.') | last | int }}"
+
+- name: Normalize manually provided fixed VM IP
+  ansible.builtin.set_fact:
+    vm_ip: "{{ vm_ip | string | trim }}"
+  when:
+    - vm_ip is defined
+    - vm_ip | string | trim | length > 0
+
+- name: Reuse fixed IP already assigned to this VM in GitOps manifest
+  ansible.builtin.set_fact:
+    vm_ip: >-
+      {{
+        (
+          vm_manifest_ip_assignments | default([])
+          | selectattr('vm_name', 'equalto', vm_name)
+          | map(attribute='vm_ip')
+          | list
+          | first
+          | default('')
+        )
+      }}
+  when:
+    - vm_ip is not defined or vm_ip | string | trim | length == 0
+    - (
+        vm_manifest_ip_assignments | default([])
+        | selectattr('vm_name', 'equalto', vm_name)
+        | map(attribute='vm_ip')
+        | list
+        | first
+        | default('')
+      ) | length > 0
+
+- name: Clear fixed IP when it falls outside the configured pool
+  ansible.builtin.set_fact:
+    vm_ip: ""
+  when:
+    - vm_ip is defined
+    - vm_ip | string | trim | length > 0
+    - vm_ip | regex_replace('\\.[0-9]+$', '') != vm_ip_pool_prefix
+      or (vm_ip.split('.') | last | int) < (vm_ip_pool_first_host | int)
+      or (vm_ip.split('.') | last | int) > (vm_ip_pool_last_host | int)
+
+- name: Allocate next free IP from configured pool
+  ansible.builtin.set_fact:
+    vm_ip: "{{ vm_ip_pool_prefix }}.{{ item }}"
+  loop: "{{ range(vm_ip_pool_first_host | int, (vm_ip_pool_last_host | int) + 1) | list }}"
+  when:
+    - vm_ip is not defined or vm_ip | string | trim | length == 0
+    - (vm_ip_pool_prefix ~ '.' ~ (item | string)) not in (vm_manifest_used_ips | default([]))
+  loop_control:
+    label: "{{ vm_ip_pool_prefix }}.{{ item }}"
+
+- name: Remove temporary Infrastructure clone directory after IP allocation
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/ip-alloc"
+    state: absent
+
+- name: Fail when no fixed VM IP could be allocated from pool
+  ansible.builtin.fail:
+    msg: >-
+      Could not allocate a fixed IP for {{ vm_name }} from pool
+      {{ vm_ip_pool_start }}–{{ vm_ip_pool_end }}. Provide -e vm_ip=<address> or free an
+      address in the pool.
+  when: vm_ip is not defined or vm_ip | string | trim | length == 0
+
+- name: Fail when fixed VM IP is already assigned to another VM
+  ansible.builtin.fail:
+    msg: >-
+      Fixed IP {{ vm_ip }} is already assigned to another VM in the Infrastructure GitOps
+      repository. Choose a different address or omit vm_ip to auto-allocate.
+  when:
+    - vm_ip in vm_manifest_used_ips | default([])
+
+- name: Display allocated fixed VM IP
+  ansible.builtin.debug:
+    msg: "Allocated fixed IP {{ vm_ip }} for VM {{ vm_name }}"

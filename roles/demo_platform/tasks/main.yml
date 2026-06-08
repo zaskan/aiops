@@ -11,10 +11,13 @@
 - name: Verify OpenShift Virtualization
   ansible.builtin.include_tasks: check_virt.yml
 
+- name: Verify OVN UserDefinedNetwork support for VM fixed IPs
+  ansible.builtin.include_tasks: check_vm_fixed_ip_network.yml
+
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
-- name: Configure ITSM Virtual Machine asset type
+- name: Configure ITSM asset types (Virtual Machine, Apache Application)
   ansible.builtin.include_tasks: configure_itsm_asset_types.yml
 
 - name: Ensure chat-app is installed and healthy
@@ -25,6 +28,9 @@
 
 - name: Prepare aiops-demo namespace and VM SSH secret
   ansible.builtin.include_tasks: prepare_aiops_demo_vms.yml
+
+- name: Prepare aiops-demo secondary UDN for VM fixed IPs
+  ansible.builtin.include_tasks: prepare_aiops_demo_udn.yml
 
 - name: Publish demo platform facts
   ansible.builtin.include_tasks: set_demo_facts.yml
@@ -46,8 +52,20 @@
   vars:
     aap_vm_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
+- name: Publish ITSM KB article for VM provisioning workflow
+  ansible.builtin.include_tasks: configure_itsm_kb_vm_provisioning.yml
+
+- name: Configure ITSM Apache Application stack templates
+  ansible.builtin.include_tasks: configure_itsm_apache_stack_templates.yml
+
 - name: Configure AAP Apache httpd deployment workflow
   ansible.builtin.include_role:
     name: aap_httpd_pipeline
   vars:
     aap_httpd_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Deploy Apache Application Stack master workflow
+  ansible.builtin.include_role:
+    name: aap_apache_stack_pipeline
+  vars:
+    aap_apache_stack_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

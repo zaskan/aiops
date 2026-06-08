@@ -1,0 +1,173 @@
+{{ itsm_kb_vm_provisioning_tags }}
+
+# {{ itsm_kb_vm_provisioning_title }}
+
+## When to use this
+
+Use this procedure when a user or operator needs to deliver the full **Apache Application stack** in the AIOps demo environment: provision a Linux VM on OpenShift Virtualization, register it in ITSM, install Apache (`httpd`), deploy a Gitea application repository, and start the web server.
+
+**Primary trigger:** ITSM service catalog request **{{ itsm_apache_stack_request_template_name }}** (not a direct AAP workflow launch).
+
+Trigger phrases an assistant should match:
+
+- "deploy apache application stack", "apache application stack service request"
+- "request apache stack", "provision VM and deploy apache app"
+- "submit service request for apache", "launch stack with change ref"
+
+Standalone workflows **{{ aap_vm_pipeline_workflow }}** and **{{ aap_httpd_pipeline_workflow }}** remain available without a change ref for ad-hoc use.
+
+## End-to-end flow (service request driven)
+
+1. **Service catalog** → request template **{{ itsm_apache_stack_request_template_name }}** → fill specifications → **Submit**.
+2. Note the created **`REQ-*`** and **`CHG-*`** (standard change **{{ itsm_apache_stack_change_template_name }}** with six CTASKs).
+3. **AAP** → master workflow **{{ aap_apache_stack_pipeline_workflow }}** → survey: `itsm_change_ref` (required), stack parameters matching the request.
+4. Each AAP job **starts and completes** its mapped CTASK with an audit comment (AAP job URL; Infrastructure git commit on push; aggregated summary on the final step).
+5. When the last CTASK completes, ITSM **auto-completes the change** and **fulfills the service request**.
+
+```mermaid
+flowchart LR
+  SR[Service request submit] --> CHG[Change CHG implementing]
+  CHG --> AAP[Deploy Apache Application Stack workflow]
+  AAP --> CTASK[6 CTASKs start/complete with job links]
+  CTASK --> Done[Change completed + REQ fulfilled]
+```
+
+## Service request specifications
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `vm_name` | yes | Unique VM name (ITSM asset name and AAP `target_host`) |
+| `cpus` | yes | CPU cores (1–64) |
+| `mem` | yes | Memory in GiB (1–512) |
+| `app_repo` | yes | Gitea repository name (e.g. `AIOps_App`) |
+| `app_branch` | no | Git branch (default `main`) |
+
+Submit creates change **{{ itsm_apache_stack_change_template_name }}** with CTASKs (must complete in order):
+
+| CTASK (task template title) | AAP job template | Sub-workflow |
+|----------------------------|------------------|--------------|
+| {{ itsm_apache_stack_task_template_push_vm }} | {{ aap_vm_pipeline_jt_push_vm }} | {{ aap_vm_pipeline_workflow }} |
+| {{ itsm_apache_stack_task_template_sync_vms }} | {{ aap_vm_pipeline_jt_sync_vms }} | {{ aap_vm_pipeline_workflow }} |
+| {{ itsm_apache_stack_task_template_register_itsm }} | {{ aap_vm_pipeline_jt_register_itsm }} | {{ aap_vm_pipeline_workflow }} |
+| {{ itsm_apache_stack_task_template_install_httpd }} | {{ aap_httpd_pipeline_jt_install }} | {{ aap_httpd_pipeline_workflow }} |
+| {{ itsm_apache_stack_task_template_deploy_app }} | {{ aap_httpd_pipeline_jt_deploy }} | {{ aap_httpd_pipeline_workflow }} |
+| {{ itsm_apache_stack_task_template_start_httpd }} | {{ aap_httpd_pipeline_jt_start }} | {{ aap_httpd_pipeline_workflow }} |
+
+## Master AAP workflow
+
+Workflow name: **{{ aap_apache_stack_pipeline_workflow }}**
+
+Sub-workflows (in order): **{{ aap_vm_pipeline_workflow }}** → **{{ aap_httpd_pipeline_workflow }}**
+
+1. Log in to Ansible Automation Platform at {{ demo_platform.aap.gateway_url }}.
+2. Open organization **{{ aap_apache_stack_pipeline_organization }}**.
+3. Go to **Templates** → **Workflow job templates** → **{{ aap_apache_stack_pipeline_workflow }}**.
+4. Click **Launch** and complete the survey:
+
+| Survey variable | Required | Description |
+|-----------------|----------|-------------|
+| `itsm_change_ref` | yes | Change from submitted request (e.g. `CHG-1`) |
+| `itsm_service_request_ref` | no | Request ref for audit (e.g. `REQ-1`) |
+| `vm_name` | yes | Must match service request `vm_name` |
+| `cpus` | yes | Must match service request |
+| `mem` | yes | Must match service request |
+| `app_repo` | yes | Gitea repository name |
+| `app_branch` | no | Git branch (default `main`) |
+
+5. Monitor until both sub-workflows succeed and all six CTASKs on the change show **completed** with comments.
+
+## Prerequisites
+
+Before submitting the service request or launching the workflow, confirm:
+
+1. **OpenShift Virtualization** is installed and HyperConverged is Available.
+2. **OpenShift GitOps (Argo CD)** is running; the Infrastructure VMs Application is configured.
+3. **Ansible Automation Platform** organization **{{ aap_vm_pipeline_organization }}** exists with project **{{ aap_vm_pipeline_project }}**, workflows **{{ aap_apache_stack_pipeline_workflow }}**, **{{ aap_vm_pipeline_workflow }}**, **{{ aap_httpd_pipeline_workflow }}**, and required credentials.
+4. **Gitea** repositories **Infrastructure** and **Playbooks** are synced.
+5. Namespace **`{{ aiops_demo_namespace }}`** exists with SSH secret **`{{ aiops_demo_vms_rsa_secret_name }}`** and secondary UDN **`{{ aiops_demo_vm_udn_name }}`** for fixed VM IPs (created by `playbooks/install.yml`).
+6. **ITSM** templates exist: six task templates, change **{{ itsm_apache_stack_change_template_name }}**, request **{{ itsm_apache_stack_request_template_name }}**, asset types **{{ itsm_vm_asset_type_name }}** and **{{ itsm_apache_app_asset_type_name }}**.
+7. Cluster runs **OVN-Kubernetes** with **UserDefinedNetwork** support (OpenShift 4.17+).
+
+AAP gateway URL: {{ demo_platform.aap.gateway_url }}
+
+ITSM application URL: {{ demo_platform.itsm_app.url }}
+
+## Provision VM sub-workflow (steps 1–3)
+
+Workflow **{{ aap_vm_pipeline_workflow }}** execution order:
+
+1. **{{ aap_vm_pipeline_jt_push_vm }}** — render KubeVirt manifest and push to Gitea **Infrastructure/vms/** (records Infrastructure git commit in CTASK comment)
+2. **{{ aap_vm_pipeline_jt_sync_vms }}** — refresh Argo CD Application **infrastructure-vms**
+3. **{{ aap_vm_pipeline_jt_register_itsm }}** — discover VM IP, create ITSM asset, sync **{{ aap_vm_pipeline_infrastructure_inventory }}**
+
+### Step 1: {{ aap_vm_pipeline_jt_push_vm }}
+
+- Playbook: `{{ aap_vm_pipeline_playbook_push }}`
+- Runs on **{{ aap_vm_pipeline_inventory }}** (localhost).
+- Allocates a **fixed IP** from `{{ vm_ip_pool_start }}`–`{{ vm_ip_pool_end }}` on secondary UDN **`{{ vm_udn_name }}`** (guest interface **`{{ vm_secondary_guest_interface }}`**).
+- Commits manifest to Gitea repo **Infrastructure**, path `vms/<vm_name>.yaml` (annotation **`{{ vm_ip_annotation }}`**).
+
+### Step 2: {{ aap_vm_pipeline_jt_sync_vms }}
+
+- Playbook: `{{ aap_vm_pipeline_playbook_sync }}`
+- Uses **{{ aap_vm_pipeline_credential_openshift }}** and **{{ aap_vm_pipeline_credential_gitea }}**.
+
+### Step 3: {{ aap_vm_pipeline_jt_register_itsm }}
+
+- Playbook: `{{ aap_vm_pipeline_playbook_register_itsm }}`
+- Creates ITSM asset type **{{ itsm_vm_asset_type_name }}** and syncs inventory source **{{ aap_vm_pipeline_inventory_source }}**.
+
+## Deploy Apache App sub-workflow (steps 4–6)
+
+Workflow **{{ aap_httpd_pipeline_workflow }}** on inventory **{{ aap_httpd_pipeline_inventory }}**:
+
+1. **{{ aap_httpd_pipeline_jt_install }}** — install `httpd` and `git`
+2. **{{ aap_httpd_pipeline_jt_deploy }}** — clone `app_repo` into `/var/www/html/` (records app git commit)
+3. **{{ aap_httpd_pipeline_jt_start }}** — enable and start `httpd`; final CTASK aggregates all AAP job links and prior comments
+
+## After deployment
+
+- VM runs in namespace **`{{ aiops_demo_namespace }}`**; ITSM asset **`vm_name`** has **fixed IP** (`ip_address` from `{{ vm_ip_annotation }}`) and sizing fields.
+- AAP inventory **{{ aap_httpd_pipeline_inventory }}** lists the host: **`ip_address`** = fixed UDN IP (CMDB); **`ansible_host`** = primary pod-network IP (SSH from AAP execution pods — the UDN is not routable from the `aap` namespace).
+- Change **completed**; service request **fulfilled** when the last CTASK completes.
+- SSH: user **`{{ aiops_demo_vms_ssh_username }}`**, credential **Virtual Machines**.
+
+## Demo helper (submit service request via API)
+
+```bash
+ansible-playbook playbooks/casc/submit_apache_stack_service_request.yml \
+  -e vm_name=demo-stack1 -e cpus=2 -e mem=4 \
+  -e app_repo=AIOps_App -e app_branch=main
+```
+
+Note the printed `REQ-*` and `CHG-*`, then launch **{{ aap_apache_stack_pipeline_workflow }}** with `itsm_change_ref=CHG-*`.
+
+## Manual playbook alternative (without AAP)
+
+```bash
+ansible-playbook playbooks/casc/playbooks/push_vm_manifest.yml -e vm_name=MYVM -e cpus=2 -e mem=4
+ansible-playbook playbooks/casc/playbooks/sync_infrastructure_vms.yml
+ansible-playbook playbooks/casc/playbooks/register_itsm_vm_asset.yml -e vm_name=MYVM -e cpus=2 -e mem=4
+ansible-playbook playbooks/casc/playbooks/install_httpd.yml -e target_host=MYVM
+ansible-playbook playbooks/casc/playbooks/deploy_apache_app.yml -e target_host=MYVM -e app_repo=AIOps_App
+ansible-playbook playbooks/casc/playbooks/start_httpd.yml -e target_host=MYVM
+```
+
+Omit `itsm_change_ref` for manual runs (ITSM CTASK integration is skipped).
+
+## Troubleshooting
+
+| Symptom | Likely cause | Action |
+|---------|--------------|--------|
+| CTASK not found on change | Request not submitted, wrong `itsm_change_ref`, or change created before a new step (e.g. Expose Apache) | Re-run `configure_itsm_apache_stack_templates.yml`; submit a **new** service request for seven CTASKs. In-flight changes skip missing CTASKs and continue the job |
+| CTASK cannot start | Prior CTASK not completed | Complete CTASKs in sequence (Push → Sync → Register → Install → Deploy → Start) |
+| Push step fails on Gitea | Stale Gitea credential | Re-run install or `configure_gitea_repos.yml` |
+| Route returns 503 | firewalld blocking port 80 or httpd not listening | Re-run Start httpd; verify `curl http://127.0.0.1/` on guest (firewalld is configured only when installed) |
+| Route returns Application not available | Wrong Service selector or empty endpoints | Re-run Expose Apache; verify selector `vm.kubevirt.io/name` |
+| Register step waits for IP | Guest agent not ready or secondary NIC not up | Register waits for fixed IP on VMI **`{{ vm_udn_pod_interface }}`**; restarts the VM once if needed (network/cloud-init apply on boot) |
+| SSH to fixed IP fails after register | Register ran before secondary NIC was active | Re-run Register ITSM VM Asset (auto-restarts VM) or restart the VM manually after Sync |
+| Install httpd SSH timeout to `192.168.100.x` | Secondary UDN is isolated from AAP execution pods on the default network | Re-run Register ITSM VM Asset (sets `ansible_host` to primary pod IP); sync **{{ aap_vm_pipeline_inventory_source }}**; or attach AAP EE to a **ClusterUserDefinedNetwork** spanning `aiops-demo` and `aap` |
+| Push fails on IP pool | Pool exhausted or stale manifest IP | Free an address in `{{ vm_ip_pool_start }}`–`{{ vm_ip_pool_end }}` or pass `-e vm_ip=<address>` |
+| UDN not ready on install | OVN/UDN unsupported or overlap with pod CIDR | Use OCP 4.17+ with OVN-Kubernetes; ensure pool in `vm_network.yml` does not overlap cluster pod CIDR |
+| Host missing from inventory | ITSM source not synced | Re-run register job or sync **{{ aap_vm_pipeline_inventory_source }}** |
+| Change not auto-completing | Last CTASK (Start httpd) did not complete | Check final job; verify `itsm_change_ref` was passed through master workflow |

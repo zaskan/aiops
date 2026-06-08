@@ -1,0 +1,63 @@
+---
+- name: Load OpenShift API credentials for VM restart
+  ansible.builtin.include_tasks: load_openshift_credential.yml
+
+- name: Stop VM to apply manifest changes
+  ansible.builtin.uri:
+    url: >-
+      {{ openshift_credential_host | default('https://kubernetes.default.svc') }}/apis/subresources.kubevirt.io/v1/namespaces/{{ vm_restart_namespace | default(vm_namespace) }}/virtualmachines/{{ vm_restart_name }}/stop
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ openshift_credential_token | default(lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY')) }}"
+      Content-Type: application/json
+    body_format: json
+    body: {}
+    validate_certs: false
+    status_code: [200, 202, 204]
+
+- name: Wait for VMI to terminate after VM stop
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    name: "{{ vm_restart_name }}"
+    namespace: "{{ vm_restart_namespace | default(vm_namespace) }}"
+  register: vm_restart_vmi_stop_wait
+  until: vm_restart_vmi_stop_wait.resources | default([]) | length == 0
+  retries: "{{ vm_restart_stop_wait_retries | default(30) }}"
+  delay: "{{ vm_restart_stop_wait_delay | default(5) }}"
+
+- name: Start VM after manifest update
+  ansible.builtin.uri:
+    url: >-
+      {{ openshift_credential_host | default('https://kubernetes.default.svc') }}/apis/subresources.kubevirt.io/v1/namespaces/{{ vm_restart_namespace | default(vm_namespace) }}/virtualmachines/{{ vm_restart_name }}/start
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ openshift_credential_token | default(lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY')) }}"
+      Content-Type: application/json
+    body_format: json
+    body: {}
+    validate_certs: false
+    status_code: [200, 202, 204]
+
+- name: Wait for VMI to reach Running phase after restart
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    name: "{{ vm_restart_name }}"
+    namespace: "{{ vm_restart_namespace | default(vm_namespace) }}"
+  register: vm_restart_vmi_start_wait
+  until: >
+    vm_restart_vmi_start_wait.resources | default([]) | length > 0
+    and vm_restart_vmi_start_wait.resources[0].status.phase | default('') == 'Running'
+  retries: "{{ vm_restart_start_wait_retries | default(36) }}"
+  delay: "{{ vm_restart_start_wait_delay | default(10) }}"
+
+- name: Record that VM was restarted
+  ansible.builtin.set_fact:
+    vm_restart_completed: true

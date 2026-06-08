@@ -1,0 +1,12 @@
+---
+aap_apache_stack_pipeline_organization: AIOps
+aap_apache_stack_pipeline_validate_certs: false
+aap_apache_stack_pipeline_controller_api_prefix: /api/controller/
+
+aap_apache_stack_pipeline_inventory: AIOps Localhost
+aap_apache_stack_pipeline_workflow: Deploy Apache Application Stack
+
+aap_apache_stack_pipeline_vm_subworkflow: Provision VM
+aap_apache_stack_pipeline_httpd_subworkflow: Deploy Apache App
+
+aap_apache_stack_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

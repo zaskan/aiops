@@ -1,0 +1,24 @@
+---
+- name: Start ITSM CTASK when pending
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/changes/{{
+      itsm_change_ref | urlencode }}/tasks/{{ itsm_change_task_ctask_ref | urlencode }}/start
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_change_task_validate_certs }}"
+    body_format: json
+    body: {}
+    status_code: [200, 400]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_change_task_start
+  failed_when: >-
+    itsm_change_task_start.status == 400
+    and ('cannot be started' not in (itsm_change_task_start.json.detail | default('') | lower))
+    and ('in progress' not in (itsm_change_task_start.json.detail | default('') | lower))
+    and ('complete prior' not in (itsm_change_task_start.json.detail | default('') | lower))

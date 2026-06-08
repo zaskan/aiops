@@ -5,7 +5,17 @@
   vars_files:
     - defaults/main.yml
   tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
     - name: Refresh and wait for Infrastructure VMs Argo CD Application
       ansible.builtin.include_role:
         name: gitops_infrastructure
         tasks_from: sync.yml
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

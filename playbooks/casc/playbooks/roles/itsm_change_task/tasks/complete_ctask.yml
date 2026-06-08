@@ -1,0 +1,25 @@
+---
+- name: Complete ITSM CTASK with completion comment
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/changes/{{
+      itsm_change_ref | urlencode }}/tasks/{{ itsm_change_task_ctask_ref | urlencode }}/complete
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_change_task_validate_certs }}"
+    body_format: json
+    body:
+      comment: "{{ itsm_change_task_completion_comment }}"
+    status_code: [200, 400]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_change_task_complete
+  failed_when: >-
+    itsm_change_task_complete.status == 400
+    and ('in progress to complete' not in (itsm_change_task_complete.json.detail | default('') | lower))
+    and ('already complete' not in (itsm_change_task_complete.json.detail | default('') | lower))
+    and ('already completed' not in (itsm_change_task_complete.json.detail | default('') | lower))

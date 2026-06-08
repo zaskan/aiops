@@ -1,0 +1,132 @@
+---
+- name: Submit Apache Application Stack ITSM service request (demo helper)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_apache_stack.yml
+    - ../../group_vars/all/aap_apache_stack_pipeline.yml
+  vars:
+    apache_stack_sr_artifact_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    apache_stack_sr_validate_certs: false
+  tasks:
+    - name: Load demo platform facts from artifact
+      ansible.builtin.include_vars:
+        file: "{{ apache_stack_sr_artifact_file }}"
+
+    - name: Map ITSM API connection from artifact
+      ansible.builtin.set_fact:
+        itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+        itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+        itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+      no_log: true
+
+    - name: Assert required stack specification variables are set
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+          - cpus is defined
+          - mem is defined
+          - app_repo is defined
+          - app_repo | string | trim | length > 0
+        fail_msg: >-
+          Required: vm_name, cpus, mem, app_repo. Optional: app_branch (default main).
+
+    - name: GET ITSM request templates
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ apache_stack_sr_validate_certs }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: apache_stack_sr_request_templates
+
+    - name: Resolve Apache Application Stack request template id
+      ansible.builtin.set_fact:
+        apache_stack_sr_request_template_id: >-
+          {{
+            (
+              apache_stack_sr_request_templates.json
+              | default([])
+              | selectattr('name', 'equalto', itsm_apache_stack_request_template_name)
+              | list
+              | first
+              | default({})
+            ).id | default(none)
+          }}
+
+    - name: Fail when request template is missing
+      ansible.builtin.fail:
+        msg: >-
+          ITSM request template '{{ itsm_apache_stack_request_template_name }}' was not found.
+          Run playbooks/install.yml or playbooks/casc/configure_itsm_apache_stack_templates.yml.
+      when: apache_stack_sr_request_template_id is none
+
+    - name: Create draft Apache Application Stack service request
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ apache_stack_sr_validate_certs }}"
+        body_format: json
+        body:
+          name: "Apache Application Stack — {{ vm_name }}"
+          description: >-
+            Demo service request for VM {{ vm_name }} ({{ cpus }} CPU, {{ mem }} GiB)
+            and app {{ app_repo }}/{{ app_branch | default('main') }}.
+          request_template_id: "{{ apache_stack_sr_request_template_id | int }}"
+          specifications:
+            vm_name: "{{ vm_name }}"
+            cpus: "{{ cpus | int }}"
+            mem: "{{ mem | int }}"
+            app_repo: "{{ app_repo }}"
+            app_branch: "{{ app_branch | default('main') }}"
+        status_code: [201]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: apache_stack_sr_create
+
+    - name: Submit service request to create standard change and CTASKs
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+          apache_stack_sr_create.json.public_id | urlencode }}/submit
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ apache_stack_sr_validate_certs }}"
+        body_format: json
+        body: {}
+        status_code: [200]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: apache_stack_sr_submit
+
+    - name: Display service request and change refs for AAP launch
+      ansible.builtin.debug:
+        msg:
+          - "Service request: {{ apache_stack_sr_create.json.public_id }}"
+          - >-
+            Change(s) created:
+            {{
+              apache_stack_sr_submit.json.changes_created
+              | default([])
+              | map(attribute='public_id')
+              | list
+              | join(', ')
+            }}
+          - >-
+            Next: launch AAP workflow '{{ aap_apache_stack_pipeline_workflow | default('Deploy Apache Application Stack') }}'
+            with itsm_change_ref set to the change ref above and matching vm_name/cpus/mem/app_repo/app_branch.

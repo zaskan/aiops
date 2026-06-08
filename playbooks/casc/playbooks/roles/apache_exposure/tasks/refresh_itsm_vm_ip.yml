@@ -1,0 +1,92 @@
+---
+- name: Discover current VM IP address from GitOps annotation or VMI
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: discover_vm_ip.yml
+  vars:
+    vm_name: "{{ apache_exposure_vm_name }}"
+
+- name: Load ITSM API credentials for VM asset IP refresh
+  ansible.builtin.include_role:
+    name: itsm_apache_app_asset
+    tasks_from: load_itsm_credential.yml
+
+- name: GET ITSM assets to resolve Virtual Machine asset id
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: apache_exposure_itsm_assets_list
+
+- name: Resolve Virtual Machine ITSM asset for IP refresh
+  ansible.builtin.set_fact:
+    apache_exposure_vm_itsm_asset: >-
+      {{
+        (
+          apache_exposure_itsm_assets_list.json
+          | default([])
+          | selectattr('name', 'equalto', apache_exposure_vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Build refreshed Virtual Machine ITSM custom fields payload
+  ansible.builtin.set_fact:
+    apache_exposure_vm_itsm_custom_fields: >-
+      {{
+        apache_exposure_vm_itsm_asset.custom_fields | default({})
+        | combine(
+            {
+              'hostname': apache_exposure_vm_name,
+              'ip_address': itsm_vm_asset_ip,
+              'ansible_host': itsm_vm_asset_ansible_host | default(itsm_vm_asset_ip),
+            },
+            recursive=True
+          )
+      }}
+  when:
+    - apache_exposure_vm_itsm_asset.id is defined
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0
+
+- name: Update Virtual Machine ITSM asset IP after VM restart
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets/{{ apache_exposure_vm_itsm_asset.id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: "IP: {{ itsm_vm_asset_ip }}"
+      custom_fields: "{{ apache_exposure_vm_itsm_custom_fields }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - apache_exposure_vm_itsm_asset.id is defined
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0
+
+- name: Display refreshed Virtual Machine ITSM asset IP
+  ansible.builtin.debug:
+    msg: "Refreshed ITSM VM asset {{ apache_exposure_vm_name }} ip_address to {{ itsm_vm_asset_ip }}"
+  when: itsm_vm_asset_ip is defined
+
+- name: Sync AIOps Infrastructure inventory after VM IP refresh
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: sync_inventory.yml
+  when:
+    - apache_exposure_vm_itsm_asset.id is defined
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0

@@ -1,0 +1,57 @@
+---
+- name: Resolve target host (prefer vm_name over unresolved AAP workflow passthrough)
+  ansible.builtin.set_fact:
+    itsm_apache_app_target_host: >-
+      {{
+        vm_name | string | trim
+        if vm_name is defined and vm_name | string | trim | length > 0
+        else apache_app_target_host | default('') | string | trim
+        if apache_app_target_host is defined and apache_app_target_host | string | trim | length > 0
+        else target_host | string | trim
+      }}
+
+- name: Validate required Apache Application asset variables
+  ansible.builtin.assert:
+    that:
+      - itsm_apache_app_target_host | string | trim | length > 0
+      - app_repo is defined
+      - app_repo | string | trim | length > 0
+      - itsm_app_git_commit is defined
+      - itsm_app_git_commit | string | trim | length > 0
+    fail_msg: >-
+      vm_name (or target_host), app_repo, and itsm_app_git_commit are required to register the Apache
+      Application ITSM asset (run after Deploy Apache App Repo completes the git clone).
+
+- name: Normalize Apache Application repository fields
+  ansible.builtin.set_fact:
+    itsm_apache_app_repo_record: "{{ app_repo | string | trim }}"
+    itsm_apache_app_branch_record: "{{ app_branch | default('main') | string | trim }}"
+
+- name: Derive Apache Application asset naming from repository
+  ansible.builtin.set_fact:
+    itsm_apache_app_repo_short: >-
+      {{
+        itsm_apache_app_repo_record
+        | regex_replace('^https?://', '')
+        | regex_replace('\.git$', '')
+        | split('/')
+        | last
+        | trim
+      }}
+
+- name: Set Apache Application ITSM asset name and hostname
+  ansible.builtin.set_fact:
+    itsm_apache_app_asset_name: "{{ itsm_apache_app_target_host }}-{{ itsm_apache_app_repo_short }}"
+    itsm_apache_app_hostname: "{{ itsm_apache_app_target_host }}-{{ itsm_apache_app_repo_short }}"
+
+- name: Load ITSM API credentials
+  ansible.builtin.include_tasks: load_itsm_credential.yml
+
+- name: Resolve parent Virtual Machine ITSM asset
+  ansible.builtin.include_tasks: resolve_vm_parent_asset.yml
+
+- name: Resolve Apache Route URL from OpenShift
+  ansible.builtin.include_tasks: resolve_route_url.yml
+
+- name: Register Apache Application as ITSM asset
+  ansible.builtin.include_tasks: register_asset.yml

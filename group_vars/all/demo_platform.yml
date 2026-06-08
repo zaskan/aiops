@@ -47,8 +47,9 @@ aiops_demo_vms_legacy_secret_name: vms-rsa
 aiops_demo_vms_rsa_key_size: 4096
 aiops_demo_vms_rsa_temp_dir: /tmp/aiops-demo-vms-rsa
 aiops_demo_vms_ssh_username: fedora
-
-# Artifacts
+aiops_demo_vm_udn_name: aiops-vm-network
+aiops_demo_vm_udn_ready_retries: 30
+aiops_demo_vm_udn_ready_delay: 10
 demo_platform_write_artifacts: true
 demo_platform_artifacts_dir: "{{ playbook_dir }}/../artifacts"
 

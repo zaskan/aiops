@@ -1,0 +1,32 @@
+---
+- name: Skip ITSM change task integration when change ref is not provided
+  ansible.builtin.set_fact:
+    itsm_change_task_enabled: >-
+      {{ itsm_change_ref is defined and itsm_change_ref | string | trim | length > 0 }}
+  when: itsm_change_task_enabled is not defined
+
+- name: Run ITSM change task preflight for completion
+  ansible.builtin.include_tasks: preflight.yml
+  when: itsm_change_task_enabled | bool
+
+- name: Resolve ITSM CTASK for completion when not already resolved
+  ansible.builtin.include_tasks: resolve_ctask.yml
+  when:
+    - itsm_change_task_enabled | bool
+    - itsm_change_task_ctask_ref is not defined
+
+- name: Build AAP job summary for CTASK completion comment
+  ansible.builtin.include_tasks: build_job_summary.yml
+  when: itsm_change_task_enabled | bool
+
+- name: Aggregate workflow job links for final CTASK completion
+  ansible.builtin.include_tasks: aggregate_and_complete.yml
+  when:
+    - itsm_change_task_enabled | bool
+    - itsm_change_task_ctask_title == itsm_change_task_final_ctask_title
+
+- name: Complete ITSM CTASK with job summary
+  ansible.builtin.include_tasks: complete_ctask.yml
+  when:
+    - itsm_change_task_enabled | bool
+    - itsm_change_task_ctask_title != itsm_change_task_final_ctask_title

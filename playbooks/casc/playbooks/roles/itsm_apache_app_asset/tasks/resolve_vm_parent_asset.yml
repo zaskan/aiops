@@ -1,0 +1,47 @@
+---
+- name: GET ITSM assets to resolve parent Virtual Machine asset
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_apache_app_assets_list
+
+- name: Resolve parent Virtual Machine ITSM asset for Apache Application
+  ansible.builtin.set_fact:
+    itsm_apache_app_vm_asset: >-
+      {{
+        (
+          itsm_apache_app_assets_list.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_apache_app_target_host)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Resolve parent VM asset id and IP from Virtual Machine ITSM asset
+  ansible.builtin.set_fact:
+    itsm_apache_app_vm_asset_id: "{{ itsm_apache_app_vm_asset.id | default(none) }}"
+    itsm_apache_app_vm_ip: "{{ itsm_apache_app_vm_asset.custom_fields.ip_address | default('') }}"
+
+- name: Fail when parent Virtual Machine asset is missing in ITSM
+  ansible.builtin.fail:
+    msg: >-
+      Virtual Machine ITSM asset '{{ itsm_apache_app_target_host }}' was not found. The Deploy Apache App workflow
+      requires Register ITSM VM Asset to run first in the Provision VM sub-workflow.
+  when: itsm_apache_app_vm_asset_id | default('') | string | trim | length == 0
+
+- name: Fail when parent VM IP could not be resolved from ITSM
+  ansible.builtin.fail:
+    msg: >-
+      Could not resolve ip_address for parent VM '{{ itsm_apache_app_target_host }}' from ITSM.
+      Re-run Register ITSM VM Asset or verify the Virtual Machine asset custom fields.
+  when: itsm_apache_app_vm_ip | default('') | string | trim | length == 0

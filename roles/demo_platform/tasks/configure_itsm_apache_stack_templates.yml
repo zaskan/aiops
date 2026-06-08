@@ -1,0 +1,66 @@
+---
+- name: Load demo platform facts artifact for ITSM Apache stack templates
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+
+- name: Map itsm-app API connection from artifact
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+  no_log: true
+
+- name: GET existing ITSM KB articles for task template linking
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_apache_stack_kb_list
+
+- name: Build KB title to id map for task template linking
+  ansible.builtin.set_fact:
+    itsm_kb_by_title: >-
+      {{
+        dict(
+          itsm_apache_stack_kb_list.json
+          | default([])
+          | map(attribute='title')
+          | zip(
+              itsm_apache_stack_kb_list.json
+              | default([])
+              | map(attribute='id')
+            )
+          | list
+        )
+      }}
+
+- name: Configure ITSM Apache stack task, change, and request templates
+  ansible.builtin.include_role:
+    name: demos.utils.itsm_ansible_role
+  vars:
+    itsm_ansible_role_check_connection: true
+    itsm_ansible_role_admin_settings: false
+    itsm_ansible_role_users: false
+    itsm_ansible_role_asset_types: false
+    itsm_ansible_role_assets: false
+    itsm_ansible_role_inventory: false
+    itsm_ansible_role_kb: false
+    itsm_ansible_role_incidents: false
+    itsm_ansible_role_followups: false
+    itsm_ansible_role_task_templates: true
+    itsm_ansible_role_change_templates: true
+    itsm_ansible_role_request_templates: true
+    itsm_ansible_role_service_requests: false
+    itsm_ansible_role_changes: false
+    itsm_ansible_role_change_tasks: false
+
+- name: Ensure Apache stack change template includes all workflow CTASK templates
+  ansible.builtin.include_tasks: sync_itsm_apache_stack_change_template.yml
