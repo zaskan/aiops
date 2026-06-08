@@ -45,6 +45,10 @@
 - name: Configure itsm-app for AIOps demo
   ansible.builtin.include_tasks: configure_itsm_aiops.yml
 
+- name: Ensure itsm-agent bot is installed and configured
+  ansible.builtin.include_tasks: install_itsm_agent.yml
+  when: itsm_agent_enabled | default(true) | bool
+
 - name: Configure AAP AIOps organization and credentials
   ansible.builtin.include_role:
     name: aap_casc

@@ -27,6 +27,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/playbooks/register_itsm_vm_asset.yml` | Register VM as ITSM asset and sync AIOps Infrastructure inventory |
 | `playbooks/casc/configure_chat_aiops.yml`   | Provision chat-app user, channel, webhook  |
 | `playbooks/casc/configure_itsm_aiops.yml`   | Provision itsm-app user, webhook, E2E test |
+| `playbooks/casc/configure_itsm_agent.yml`   | Deploy/configure itsm-agent chat bot       |
 | `playbooks/uninstall.yml`    | Remove demo apps, AAP AIOps org, OpenShift AAP SA, and artifact |
 | `playbooks/casc/uninstall_aap_aiops.yml` | Remove AAP AIOps org and pipeline resources only |
 
@@ -47,6 +48,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | ---------------------------------------------- | ----------- | --------------------------------------- |
 | [itsm-app](https://github.com/zaskan/itsm-app) | `itsm-app`  | GitHub raw manifests + in-cluster build |
 | [chat-app](https://github.com/zaskan/chat-app) | `demo-chat` | GitHub raw manifests + in-cluster build |
+| [itsm-agent](https://github.com/zaskan/itsm-agent) | `itsm-agent` | GitHub raw manifests + in-cluster build (requires LiteLLM env vars) |
 | [gitea](https://github.com/zaskan/gitea)       | `gitea`     | Kustomize OpenShift overlay             |
 
 
@@ -92,18 +94,19 @@ The playbook will:
 
 1. Verify OpenShift, AAP 2.7, OpenShift GitOps, and OpenShift Virtualization
 2. Enable the **Ansible MCP server** on the discovered AAP instance (patch `AnsibleAutomationPlatform` CR, wait for Route `mcp`, create OAuth token)
-3. Install itsm-app, chat-app, and gitea if they are not already running
+3. Install itsm-app, chat-app, gitea, and **itsm-agent** (when LiteLLM env vars are set) if they are not already running
 4. Create ITSM asset types **Virtual Machine** and **Apache Application** (with custom fields)
 5. Health-check each application
 6. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
 7. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
 8. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key and **AAP MCP** URL/token
-9. Mint a permanent OpenShift ServiceAccount token and update the artifact
-10. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
-11. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
-12. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
-13. Publish ITSM Knowledge Base article **Provision a virtual machine (AIOps Provision VM workflow)** for internal RAG / AI agent (idempotent upsert)
-14. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
+9. Configure chat-app (**aiops** user, **operations** channel) and itsm-app (webhook bridge); deploy **itsm-agent** bot
+10. Mint a permanent OpenShift ServiceAccount token and update the artifact
+11. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
+12. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+13. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
+14. Publish ITSM Knowledge Base article **Deploy Apache Application Stack (ITSM service request + AIOps)** for internal RAG / AI agent (idempotent upsert)
+15. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -583,9 +586,30 @@ curl -u admin:PASSWORD -X POST \
 
 A message like `[incident.created] INC-00042 — Manual test incident (low)` should appear in the chat **operations** channel within a few seconds.
 
+## itsm-agent chat bot
+
+During install, the playbook deploys [itsm-agent](https://github.com/zaskan/itsm-agent) into namespace **`itsm-agent`**. The bot connects to demo-chat as user **`aiops`** in channel **`operations`**, queries itsm-app MCP for KB/RAG, and can launch AAP workflow job templates via AAP MCP.
+
+**Required environment variables** (install fails if missing):
+
+```bash
+export ITSM_AGENT_LLM_BASE_URL=https://litellm.example.com/v1
+export ITSM_AGENT_LLM_API_KEY=your-litellm-bearer-token
+export ITSM_AGENT_LLM_MODEL=llama-scout-17b   # optional; default llama-scout-17b
+ansible-playbook playbooks/install.yml
+```
+
+Re-run bot install or refresh secrets without a full install:
+
+```bash
+ansible-playbook playbooks/casc/configure_itsm_agent.yml
+```
+
+There is no public Route for the bot; health checks run on port **8080** inside the pod (`/healthz`, `/readyz`).
+
 ## Uninstall demo apps
 
-Removes **itsm-app**, **chat-app**, **gitea**, the OpenShift ServiceAccount and token created for AAP automation, and (by default) all **AAP AIOps** organization resources. Does not remove OpenShift GitOps or the cluster itself.
+Removes **itsm-app**, **itsm-agent**, **chat-app**, **gitea**, the OpenShift ServiceAccount and token created for AAP automation, and (by default) all **AAP AIOps** organization resources. Does not remove OpenShift GitOps or the cluster itself.
 
 ```bash
 oc login
@@ -642,6 +666,7 @@ ansible-playbook playbooks/casc/uninstall_aap_aiops.yml
 **Uninstall behavior:**
 
 - **itsm-app** — deletes namespace `itsm-app` and all resources within it
+- **itsm-agent** — deletes namespace `itsm-agent` and all resources within it
 - **chat-app** — deletes namespace `demo-chat` and all resources within it
 - **gitea** — deletes namespace `gitea` (or workloads only when keeping PVCs)
 - **aiops-demo** — deletes namespace `aiops-demo` (VM SSH secret and any provisioned VMs)
@@ -660,6 +685,8 @@ Defaults live in `[group_vars/all/demo_platform.yml](group_vars/all/demo_platfor
 | `CHAT_SEED_ADMIN_USERNAME` / `CHAT_SEED_ADMIN_PASSWORD`       | chat-app admin                           |
 | `CHAT_AIOPS_PASSWORD`                                         | aiops user password (configure playbook) |
 | `ITSM_AIOPS_PASSWORD`                                         | itsm aiops user password                 |
+| `ITSM_AGENT_LLM_BASE_URL` / `ITSM_AGENT_LLM_API_KEY`          | LiteLLM endpoint for itsm-agent (required on install) |
+| `ITSM_AGENT_LLM_MODEL`                                        | LiteLLM model name (default: llama-scout-17b) |
 | `GITEA_ADMIN_USER` / `GITEA_ADMIN_PASSWORD`                   | gitea admin                              |
 | `AAP_USERNAME` / `AAP_PASSWORD`                               | Override auto-discovered AAP credentials |
 | `AAP_MCP_TOKEN`                                               | Reuse existing OAuth token for AAP MCP (skip mint on install/configure) |
@@ -677,6 +704,7 @@ aiops/
 ├── group_vars/all/gitea_repos.yml
 ├── group_vars/all/chat_aiops.yml
 ├── group_vars/all/itsm_aiops.yml
+├── group_vars/all/itsm_agent.yml
 ├── group_vars/all/itsm_assets.yml
 ├── group_vars/all/itsm_kb_vm_provisioning.yml
 ├── group_vars/all/itsm_apache_stack.yml
@@ -689,7 +717,8 @@ aiops/
 │       ├── configure_aap_credentials.yml  # AAP org + credentials
 │       ├── configure_gitea_repos.yml      # Gitea AIOps repositories
 │       ├── configure_chat_aiops.yml     # chat-app aiops user + webhook
-│       └── configure_itsm_aiops.yml     # itsm-app aiops user + webhook bridge
+│       ├── configure_itsm_aiops.yml     # itsm-app aiops user + webhook bridge
+│       └── configure_itsm_agent.yml     # itsm-agent bot deploy + secrets
 ├── roles/
 │   ├── aap_casc/                    # AAP CASC provisioning
 │   ├── gitea_repos/                 # Gitea repository provisioning

@@ -1,0 +1,31 @@
+---
+- name: Check demo platform facts artifact exists for itsm-agent update
+  ansible.builtin.stat:
+    path: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  register: itsm_agent_artifact_stat
+
+- name: Load demo platform facts artifact for itsm-agent update
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  when: itsm_agent_artifact_stat.stat.exists | default(false)
+
+- name: Merge itsm-agent facts into demo platform artifact
+  ansible.builtin.set_fact:
+    demo_platform: >-
+      {{
+        demo_platform
+        | combine({'itsm_agent': itsm_agent_facts | default({})}, recursive=True)
+      }}
+  when: itsm_agent_artifact_stat.stat.exists | default(false)
+
+- name: Write updated demo platform facts artifact with itsm-agent details
+  ansible.builtin.copy:
+    dest: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  when:
+    - itsm_agent_artifact_stat.stat.exists | default(false)
+    - demo_platform_write_artifacts | default(true) | bool

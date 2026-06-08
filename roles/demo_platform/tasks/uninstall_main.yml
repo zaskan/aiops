@@ -6,6 +6,7 @@
   ansible.builtin.pause:
     prompt: |
       This will remove itsm-app (namespace {{ itsm_app_namespace }}),
+      itsm-agent (namespace {{ itsm_agent_namespace }}),
       chat-app (namespace {{ chat_app_namespace }}), gitea (namespace {{ gitea_namespace }}),
       and the VM namespace {{ aiops_demo_namespace }}.
       Gitea PVCs will be {{ 'kept' if uninstall_keep_gitea_data | bool else 'deleted' }}.
@@ -30,6 +31,9 @@
 
 - name: Uninstall itsm-app
   ansible.builtin.include_tasks: uninstall_itsm_app.yml
+
+- name: Uninstall itsm-agent
+  ansible.builtin.include_tasks: uninstall_itsm_agent.yml
 
 - name: Uninstall chat-app
   ansible.builtin.include_tasks: uninstall_chat_app.yml
@@ -68,6 +72,7 @@
     msg:
       - "Uninstall complete."
       - "Removed itsm-app from namespace {{ itsm_app_namespace }}."
+      - "Removed itsm-agent from namespace {{ itsm_agent_namespace }}."
       - "Removed chat-app from namespace {{ chat_app_namespace }}."
       - "Removed gitea from namespace {{ gitea_namespace }}."
       - "Removed VM namespace {{ aiops_demo_namespace }}."

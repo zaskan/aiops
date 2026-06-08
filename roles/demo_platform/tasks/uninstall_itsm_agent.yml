@@ -1,0 +1,5 @@
+---
+- name: Uninstall itsm-agent
+  ansible.builtin.include_tasks: uninstall_namespace.yml
+  vars:
+    uninstall_target_namespace: "{{ itsm_agent_namespace }}"

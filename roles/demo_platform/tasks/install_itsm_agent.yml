@@ -1,0 +1,238 @@
+---
+- name: Assert LiteLLM base URL is configured for itsm-agent
+  ansible.builtin.assert:
+    that:
+      - itsm_agent_llm_base_url | default('') | string | trim | length > 0
+    fail_msg: >-
+      ITSM_AGENT_LLM_BASE_URL is required to deploy itsm-agent.
+      Export a LiteLLM (OpenAI-compatible) API base URL before running install.
+
+- name: Assert LiteLLM API key is configured for itsm-agent
+  ansible.builtin.assert:
+    that:
+      - itsm_agent_llm_api_key | default('') | string | trim | length > 0
+    fail_msg: >-
+      ITSM_AGENT_LLM_API_KEY is required to deploy itsm-agent.
+      Export a LiteLLM Bearer token before running install.
+
+- name: Assert AAP MCP URL is available when MCP is enabled
+  ansible.builtin.assert:
+    that:
+      - aap_mcp_url is defined
+      - aap_mcp_url | string | trim | length > 0
+      - aap_mcp_token is defined
+      - aap_mcp_token | string | trim | length > 0
+    fail_msg: >-
+      AAP MCP URL and token are required for itsm-agent when aap_mcp_enabled is true.
+      Verify install_aap_mcp completed successfully.
+  when: aap_mcp_enabled | default(true) | bool
+
+- name: Assert demo platform ITSM MCP token is available
+  ansible.builtin.assert:
+    that:
+      - demo_platform.itsm_app.mcp_token is defined
+      - demo_platform.itsm_app.mcp_token | string | trim | length > 0
+    fail_msg: demo_platform.itsm_app.mcp_token was not found. Run set_demo_facts after install_itsm_app.
+
+- name: Check whether itsm-agent deployment exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - deployment
+      - itsm-agent
+      - -n
+      - "{{ itsm_agent_namespace }}"
+      - -o
+      - jsonpath={.status.availableReplicas}
+  register: demo_itsm_agent_available
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether itsm-agent needs installation
+  ansible.builtin.set_fact:
+    demo_itsm_agent_needs_install: >-
+      {{
+        demo_itsm_agent_available.rc != 0
+        or (demo_itsm_agent_available.stdout | default('0') | int) < 1
+      }}
+
+- name: Apply itsm-agent namespace manifest
+  ansible.builtin.command:
+    argv:
+      - oc
+      - apply
+      - "-f"
+      - "{{ itsm_agent_manifest_base }}/namespace.yaml"
+  register: demo_itsm_agent_namespace_apply
+  changed_when: "'configured' in demo_itsm_agent_namespace_apply.stdout or 'created' in demo_itsm_agent_namespace_apply.stdout"
+
+- name: Create or update itsm-agent secrets
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: itsm-agent-secrets
+        namespace: "{{ itsm_agent_namespace }}"
+        labels:
+          app: itsm-agent
+      type: Opaque
+      stringData:
+        CHAT_BASE_URL: >-
+          http://{{ itsm_agent_chat_service }}.{{ chat_app_namespace }}.svc.cluster.local:{{
+          itsm_agent_chat_port }}
+        CHAT_USERNAME: "{{ chat_aiops_username }}"
+        CHAT_PASSWORD: "{{ chat_aiops_user_password }}"
+        CHANNEL_NAME: "{{ chat_aiops_channel_name }}"
+        ITSM_BASE_URL: >-
+          http://{{ itsm_agent_itsm_service }}.{{ itsm_app_namespace }}.svc.cluster.local:{{
+          itsm_agent_itsm_port }}
+        ITSM_MCP_TOKEN: "{{ demo_platform.itsm_app.mcp_token }}"
+        LLM_BASE_URL: "{{ itsm_agent_llm_base_url }}"
+        LLM_MODEL: "{{ itsm_agent_llm_model }}"
+        LLM_API_KEY: "{{ itsm_agent_llm_api_key }}"
+        AAP_MCP_BASE_URL: "{{ aap_mcp_url | default('') }}"
+        AAP_MCP_TOKEN: "{{ aap_mcp_token | default('') }}"
+        AAP_CONTROLLER_UI_URL: "{{ aap_gateway_url | default('') }}"
+        AAP_TLS_VERIFY: "{{ itsm_agent_aap_tls_verify }}"
+  register: demo_itsm_agent_secret_apply
+  no_log: true
+
+- name: Install itsm-agent image and deployment from GitHub
+  when: demo_itsm_agent_needs_install | bool
+  block:
+    - name: Check whether itsm-agent BuildConfig exists
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_agent_namespace }}"
+          - get
+          - bc/itsm-agent
+          - -o
+          - name
+      register: demo_itsm_agent_bc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create itsm-agent BuildConfig from Git source
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_agent_namespace }}"
+          - new-build
+          - "{{ itsm_agent_source_repo_url }}"
+          - --strategy=docker
+          - --name=itsm-agent
+          - "-l"
+          - app=itsm-agent
+      when: demo_itsm_agent_bc_check.rc != 0
+      register: demo_itsm_agent_new_build
+      changed_when: demo_itsm_agent_new_build.rc == 0
+
+    - name: Import Python base image for itsm-agent build
+      ansible.builtin.command:
+        argv:
+          - oc
+          - import-image
+          - python:3.12-slim
+          - --from=docker.io/library/python:3.12-slim
+          - --confirm
+          - -n
+          - "{{ itsm_agent_namespace }}"
+      register: demo_itsm_agent_import_base
+      changed_when: demo_itsm_agent_import_base.rc == 0
+      failed_when: false
+
+    - name: Build itsm-agent image from Git
+      ansible.builtin.command:
+        argv:
+          - oc
+          - "-n"
+          - "{{ itsm_agent_namespace }}"
+          - start-build
+          - itsm-agent
+          - --follow
+      register: demo_itsm_agent_start_build
+      changed_when: demo_itsm_agent_start_build.rc == 0
+
+    - name: Enable local ImageStream lookup for itsm-agent
+      ansible.builtin.command:
+        argv:
+          - oc
+          - patch
+          - imagestream/itsm-agent
+          - -n
+          - "{{ itsm_agent_namespace }}"
+          - -p
+          - '{"spec":{"lookupPolicy":{"local":true}}}'
+      register: demo_itsm_agent_is_patch
+      changed_when: "'patched' in demo_itsm_agent_is_patch.stdout"
+      failed_when: false
+
+- name: Apply itsm-agent deployment manifest
+  ansible.builtin.command:
+    argv:
+      - oc
+      - apply
+      - "-f"
+      - "{{ itsm_agent_manifest_base }}/deployment.yaml"
+  register: demo_itsm_agent_deployment_apply
+  changed_when: "'configured' in demo_itsm_agent_deployment_apply.stdout or 'created' in demo_itsm_agent_deployment_apply.stdout"
+
+- name: Rollout restart itsm-agent when secrets changed on existing deployment
+  when:
+    - demo_itsm_agent_secret_apply.changed | default(false)
+    - not demo_itsm_agent_needs_install | bool
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - rollout
+      - restart
+      - deployment/itsm-agent
+  changed_when: true
+
+- name: Wait for itsm-agent deployment rollout
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - rollout
+      - status
+      - deployment/itsm-agent
+      - --timeout=300s
+  changed_when: false
+
+- name: Set itsm-agent demo platform facts
+  ansible.builtin.set_fact:
+    itsm_agent_facts:
+      namespace: "{{ itsm_agent_namespace }}"
+      deployment: itsm-agent
+      channel: "{{ chat_aiops_channel_name }}"
+      chat_base_url: >-
+        http://{{ itsm_agent_chat_service }}.{{ chat_app_namespace }}.svc.cluster.local:{{
+        itsm_agent_chat_port }}
+      itsm_base_url: >-
+        http://{{ itsm_agent_itsm_service }}.{{ itsm_app_namespace }}.svc.cluster.local:{{
+        itsm_agent_itsm_port }}
+      llm_model: "{{ itsm_agent_llm_model }}"
+
+- name: Display itsm-agent summary
+  ansible.builtin.debug:
+    msg:
+      - "itsm-agent namespace: {{ itsm_agent_namespace }}"
+      - "itsm-agent deployment: itsm-agent"
+      - "chat channel: {{ chat_aiops_channel_name }}"
+      - "chat user: {{ chat_aiops_username }}"
+      - "LLM model: {{ itsm_agent_llm_model }}"
+      - "AAP MCP: {{ aap_mcp_url | default('disabled') }}"
+
+- name: Update demo platform facts artifact with itsm-agent details
+  ansible.builtin.include_tasks: update_itsm_agent_artifact.yml
+  when: demo_platform_write_artifacts | default(true) | bool
