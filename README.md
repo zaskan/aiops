@@ -15,6 +15,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
 | `playbooks/casc/configure_itsm_asset_types.yml` | Create/update ITSM **Virtual Machine** and **Apache Application** asset types |
 | `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Apache Application stack (RAG) |
+| `playbooks/casc/configure_itsm_app_rag.yml` | Enable ITSM KB semantic search (embedding API on itsm-app) |
 | `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Apache App workflow (inventory not created) |
 | `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Apache Application stack |
 | `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Apache Application Stack |
@@ -464,11 +465,10 @@ Master workflow survey: `itsm_change_ref`, `itsm_service_request_ref` (optional)
 
 Standalone **Provision VM** and **Deploy Apache App** workflows remain usable without `itsm_change_ref` (ITSM CTASK integration is skipped).
 
-Install also upserts KB article **Deploy Apache Application Stack (ITSM service request + AIOps)** for RAG. Re-run `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` after editing the template.
+Install also upserts KB article **Deploy Apache Application Stack (ITSM service request + AIOps)** for RAG. Semantic search is enabled automatically during install (`configure_itsm_app_rag.yml` runs before the KB upsert). Re-run after editing the template:
 
 ```bash
-ansible-playbook playbooks/casc/configure_aap_apache_stack_workflow.yml
-ansible-playbook playbooks/casc/configure_itsm_apache_stack_templates.yml
+ansible-playbook playbooks/casc/configure_itsm_app_rag.yml
 ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 ```
 
@@ -596,7 +596,17 @@ During install, the playbook deploys [itsm-agent](https://github.com/zaskan/itsm
 export ITSM_AGENT_LLM_BASE_URL=https://litellm.example.com/v1
 export ITSM_AGENT_LLM_API_KEY=your-litellm-bearer-token
 export ITSM_AGENT_LLM_MODEL=llama-scout-17b   # optional; default llama-scout-17b
+export ITSM_EMBEDDING_MODEL=text-embedding-3-small   # required; embedding model on same gateway
 ansible-playbook playbooks/install.yml
+```
+
+Install also enables **ITSM KB semantic search (RAG)** on itsm-app before publishing the KB article: embedding URL/key default from the LiteLLM vars above (`ITSM_EMBEDDING_BASE_URL` / `ITSM_EMBEDDING_API_KEY` override if needed). A trailing `/v1` on the base URL is stripped automatically — itsm-app calls `{base}/v1/embeddings`. The bot then uses MCP `rag_search_kb` instead of relying on `search_kb` fallback.
+
+Re-run RAG setup or refresh the KB article:
+
+```bash
+ansible-playbook playbooks/casc/configure_itsm_app_rag.yml
+ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 ```
 
 Re-run bot install or refresh secrets without a full install:
@@ -686,7 +696,9 @@ Defaults live in `[group_vars/all/demo_platform.yml](group_vars/all/demo_platfor
 | `CHAT_AIOPS_PASSWORD`                                         | aiops user password (configure playbook) |
 | `ITSM_AIOPS_PASSWORD`                                         | itsm aiops user password                 |
 | `ITSM_AGENT_LLM_BASE_URL` / `ITSM_AGENT_LLM_API_KEY`          | LiteLLM endpoint for itsm-agent (required on install) |
-| `ITSM_AGENT_LLM_MODEL`                                        | LiteLLM model name (default: llama-scout-17b) |
+| `ITSM_AGENT_LLM_MODEL`                                        | LiteLLM chat model (default: llama-scout-17b) |
+| `ITSM_EMBEDDING_MODEL` / `ITSM_AGENT_EMBEDDING_MODEL`           | Embedding model id for itsm-app KB RAG (required on install) |
+| `ITSM_EMBEDDING_BASE_URL` / `ITSM_EMBEDDING_API_KEY`            | Optional overrides for itsm-app embeddings (default: same LiteLLM URL/key as agent; `/v1` suffix stripped) |
 | `GITEA_ADMIN_USER` / `GITEA_ADMIN_PASSWORD`                   | gitea admin                              |
 | `AAP_USERNAME` / `AAP_PASSWORD`                               | Override auto-discovered AAP credentials |
 | `AAP_MCP_TOKEN`                                               | Reuse existing OAuth token for AAP MCP (skip mint on install/configure) |

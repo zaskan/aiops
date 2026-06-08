@@ -2,43 +2,26 @@
 
 # {{ itsm_kb_vm_provisioning_title }}
 
-## What the assistant should do
+## Step 1 — Open ITSM service request
 
-When a user asks to deploy a **new Apache Application stack**, launch the Ansible Automation Platform workflow job template:
+Open catalog **{{ itsm_apache_stack_request_template_name }}** in itsm-app. Ask the user for `vm_name`, `cpus`, `mem`, `app_repo`; optional `app_branch`. On submit, itsm-app returns `itsm_service_request_ref` (REQ-*) and `itsm_change_ref` (CHG-*). **User does not provide these refs** — take them from ITSM after submit.
 
-**{{ aap_apache_stack_pipeline_workflow }}**
+## Step 2 — Launch AAP workflow
 
-Organization: **{{ aap_apache_stack_pipeline_organization }}**
+Launch **{{ aap_apache_stack_pipeline_workflow }}** (org **{{ aap_apache_stack_pipeline_organization }}**). Use step-1 refs plus user stack fields. Never ask the user for refs or invent them.
 
-Before launching, collect every required parameter from the user (see below). Do not guess `itsm_change_ref` or `itsm_service_request_ref` — the user must supply them from the ITSM service request they submitted.
+| Extra var | Req | Source |
+|-----------|-----|--------|
+| `itsm_change_ref` | yes | Step 1 (not user) |
+| `itsm_service_request_ref` | no | Step 1 (not user) |
+| `vm_name` | yes | User |
+| `cpus` | yes | User |
+| `mem` | yes | User |
+| `app_repo` | yes | User |
+| `app_branch` | no | User, optional |
 
-## Workflow parameters
-
-Pass these as **extra variables** when launching **{{ aap_apache_stack_pipeline_workflow }}**:
-
-| Parameter | Required | Meaning |
-|-----------|----------|---------|
-| `itsm_change_ref` | yes | ITSM standard change reference created by the service request (e.g. `CHG-6`). Used to start and complete change tasks (CTASKs) during the workflow. |
-| `itsm_service_request_ref` | no | ITSM service request reference for audit (e.g. `REQ-3`). Optional but recommended when the stack was requested via the ITSM catalog. |
-| `vm_name` | yes | Unique name for the new virtual machine. Also used as the Ansible target host for Apache deployment. Must match the value on the service request. |
-| `cpus` | yes | Number of CPU cores for the VM (integer, e.g. `2`). |
-| `mem` | yes | Memory for the VM in GiB (integer, e.g. `4`). |
-| `app_repo` | yes | Gitea repository name containing the Apache application to deploy (e.g. `AIOps_App`). |
-| `app_branch` | no | Git branch to deploy from `app_repo`. Default: `main`. |
-
-## What to ask the user
-
-The assistant must obtain from the user:
-
-1. **`itsm_change_ref`** — from the ITSM change linked to their Apache stack service request.
-2. **`itsm_service_request_ref`** (if available) — from the submitted service request.
-3. **`vm_name`**, **`cpus`**, **`mem`**, **`app_repo`**, and optionally **`app_branch`** — the stack specifications (same values as on the service request).
-
-If the user has not submitted an ITSM service request yet, direct them to catalog request **{{ itsm_apache_stack_request_template_name }}** first, then use the returned `CHG-*` and `REQ-*` references when launching the workflow.
-
-## Example launch (extra vars)
-
-```yaml
+Example:
+```
 itsm_change_ref: CHG-6
 itsm_service_request_ref: REQ-3
 vm_name: server01
@@ -48,4 +31,4 @@ app_repo: AIOps_App
 app_branch: main
 ```
 
-AAP gateway: {{ demo_platform.aap.gateway_url }}
+AAP: {{ demo_platform.aap.gateway_url }}

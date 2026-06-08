@@ -1,0 +1,168 @@
+---
+- name: Assert ITSM embedding model is configured for KB RAG
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          itsm_app_embedding_model | default('') | string | trim
+          if (itsm_app_embedding_model | default('') | string | trim | length > 0)
+          else (itsm_agent_llm_embedding_model | default('') | string | trim)
+        ) | length > 0
+    fail_msg: >-
+      Set ITSM_EMBEDDING_MODEL (or ITSM_AGENT_EMBEDDING_MODEL) to the embedding model id
+      on your LiteLLM gateway, e.g. export ITSM_EMBEDDING_MODEL=text-embedding-3-small
+
+- name: Assert LiteLLM base URL is available for ITSM KB embeddings
+  ansible.builtin.assert:
+    that:
+      - >-
+        {{
+          (
+            itsm_app_embedding_base_url | default('') | string | trim
+            if (itsm_app_embedding_base_url | default('') | string | trim | length > 0)
+            else (itsm_agent_llm_base_url | default('') | string | trim)
+          ) | length > 0
+        }}
+    fail_msg: >-
+      Set ITSM_EMBEDDING_BASE_URL or ITSM_AGENT_LLM_BASE_URL before enabling ITSM KB RAG.
+
+- name: Assert LiteLLM API key is available for ITSM KB embeddings
+  ansible.builtin.assert:
+    that:
+      - >-
+        {{
+          (
+            itsm_app_embedding_api_key | default('') | string | trim
+            if (itsm_app_embedding_api_key | default('') | string | trim | length > 0)
+            else (itsm_agent_llm_api_key | default('') | string | trim)
+          ) | length > 0
+        }}
+    fail_msg: >-
+      Set ITSM_EMBEDDING_API_KEY or ITSM_AGENT_LLM_API_KEY before enabling ITSM KB RAG.
+
+- name: Ensure itsm-app sends encoding_format for vLLM embedding backends
+  ansible.builtin.include_tasks: ensure_itsm_app_vllm_embedding_patch.yml
+
+- name: Resolve effective ITSM KB embedding settings
+  ansible.builtin.set_fact:
+    itsm_app_embedding_base_url_effective: >-
+      {{
+        (
+          (itsm_app_embedding_base_url | default('') | string | trim)
+          if (itsm_app_embedding_base_url | default('') | string | trim | length > 0)
+          else (itsm_agent_llm_base_url | default('') | string | trim)
+        ) | regex_replace('/v1/?$', '') | regex_replace('/$', '')
+      }}
+    itsm_app_embedding_api_key_effective: >-
+      {{
+        (itsm_app_embedding_api_key | default('') | string | trim)
+        if (itsm_app_embedding_api_key | default('') | string | trim | length > 0)
+        else (itsm_agent_llm_api_key | default('') | string | trim)
+      }}
+    itsm_app_embedding_model_effective: >-
+      {{
+        (itsm_app_embedding_model | default('') | string | trim)
+        if (itsm_app_embedding_model | default('') | string | trim | length > 0)
+        else (itsm_agent_llm_embedding_model | default('') | string | trim)
+      }}
+  no_log: true
+
+- name: Create or update itsm-app secrets with KB embedding configuration
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: itsm-secrets
+        namespace: "{{ itsm_app_namespace }}"
+      type: Opaque
+      stringData:
+        session-secret: "{{ itsm_app_session_secret }}"
+        mcp-token: "{{ itsm_app_mcp_token }}"
+        bootstrap-admin-user: "{{ itsm_app_bootstrap_admin_user }}"
+        bootstrap-admin-password: "{{ itsm_app_bootstrap_admin_password }}"
+        embedding-base-url: "{{ itsm_app_embedding_base_url_effective }}"
+        embedding-model: "{{ itsm_app_embedding_model_effective }}"
+        embedding-api-key: "{{ itsm_app_embedding_api_key_effective }}"
+  register: itsm_app_rag_secret_apply
+  no_log: true
+
+- name: Rollout restart itsm-app to apply KB embedding configuration
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - rollout
+      - restart
+      - deployment/itsm-app
+  when: itsm_app_rag_secret_apply.changed | default(false)
+  changed_when: true
+
+- name: Wait for itsm-app deployment rollout after embedding configuration
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - rollout
+      - status
+      - deployment/itsm-app
+      - --timeout=300s
+  changed_when: false
+
+- name: Verify ITSM MCP rag_search_kb is configured
+  ansible.builtin.uri:
+    url: "{{ demo_platform.itsm_app.url }}/mcp/"
+    method: POST
+    headers:
+      Content-Type: application/json
+      Accept: application/json, text/event-stream
+      X-ITSM-MCP-Token: "{{ demo_platform.itsm_app.mcp_token }}"
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 1
+      method: tools/call
+      params:
+        name: rag_search_kb
+        arguments:
+          query: apache application stack
+          top_k: 3
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: itsm_app_rag_verify
+  retries: 12
+  delay: 10
+  until: >-
+    itsm_app_rag_verify.status == 200
+    and 'rag_not_configured' not in (itsm_app_rag_verify.content | default(''))
+    and 'embedding_failed' not in (itsm_app_rag_verify.content | default(''))
+
+- name: Fail when ITSM KB RAG verification returns rag_not_configured
+  ansible.builtin.fail:
+    msg: >-
+      ITSM KB semantic search is still not configured (rag_not_configured). Verify
+      embedding-base-url, embedding-model, and embedding-api-key on secret itsm-secrets
+      in namespace {{ itsm_app_namespace }} and check itsm-app pod logs.
+  when: "'rag_not_configured' in (itsm_app_rag_verify.content | default(''))"
+
+- name: Fail when ITSM KB RAG verification returns embedding_failed
+  ansible.builtin.fail:
+    msg: >-
+      ITSM KB embedding API call failed (embedding_failed). Verify
+      ITSM_EMBEDDING_MODEL (currently {{ itsm_app_embedding_model_effective }}) is a valid
+      embedding model on your LiteLLM gateway. vLLM backends also require
+      encoding_format=float in the request (patched automatically during install).
+      Response: {{ itsm_app_rag_verify.content | default('') }}
+  when: "'embedding_failed' in (itsm_app_rag_verify.content | default(''))"
+
+- name: Display ITSM KB RAG configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "ITSM KB RAG enabled on {{ itsm_app_namespace }}/itsm-app"
+      - "Embedding model: {{ itsm_app_embedding_model_effective }}"
+      - "Embedding base URL: {{ itsm_app_embedding_base_url_effective }}"
+      - "MCP rag_search_kb: configured"

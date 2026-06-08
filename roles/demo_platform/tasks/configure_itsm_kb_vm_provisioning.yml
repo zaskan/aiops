@@ -104,3 +104,11 @@
         ITSM KB article {{ 'updated' if itsm_kb_vm_provisioning_was_update | bool else 'created' }}:
         {{ itsm_kb_vm_provisioning_title }} (id {{ itsm_kb_vm_provisioning_article_id }})
       - "ITSM URL: {{ demo_platform.itsm_app.url }}/kb"
+
+- name: Re-index ITSM KB article for semantic search
+  ansible.builtin.include_tasks: reindex_itsm_kb_vm_provisioning.yml
+  when: itsm_app_rag_enabled | default(true) | bool
+
+- name: Verify published KB article is indexed for semantic search
+  ansible.builtin.include_tasks: verify_itsm_kb_rag.yml
+  when: itsm_app_rag_enabled | default(true) | bool

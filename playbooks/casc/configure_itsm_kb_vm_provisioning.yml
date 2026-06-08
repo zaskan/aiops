@@ -5,6 +5,8 @@
   vars_files:
     - ../../group_vars/all/aap_vm_pipeline.yml
     - ../../group_vars/all/aap_httpd_pipeline.yml
+    - ../../group_vars/all/aap_apache_stack_pipeline.yml
+    - ../../group_vars/all/itsm_apache_stack.yml
     - ../../group_vars/all/itsm_assets.yml
     - ../../group_vars/all/itsm_kb_vm_provisioning.yml
     - ../../group_vars/all/demo_platform.yml

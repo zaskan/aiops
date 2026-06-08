@@ -12,4 +12,5 @@ itsm_agent_itsm_port: 8000
 itsm_agent_llm_base_url: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_BASE_URL', default='') }}"
 itsm_agent_llm_api_key: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_API_KEY', default='') }}"
 itsm_agent_llm_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_MODEL', default='llama-scout-17b') }}"
+itsm_agent_llm_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_EMBEDDING_MODEL', default='') }}"
 itsm_agent_aap_tls_verify: "false"

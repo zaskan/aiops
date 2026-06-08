@@ -10,6 +10,12 @@ itsm_app_session_secret: "{{ lookup('ansible.builtin.env', 'ITSM_SESSION_SECRET'
 itsm_app_mcp_token: "{{ lookup('ansible.builtin.env', 'ITSM_MCP_TOKEN', default='084f926a012ae68ff7928033beeeef08e4e3c99304d98f8bf9b2521e13b6fc50') }}"
 itsm_app_bootstrap_admin_user: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_USER', default='admin') }}"
 itsm_app_bootstrap_admin_password: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_PASSWORD', default='admin') }}"
+itsm_app_rag_enabled: true
+itsm_app_vllm_embedding_patch: true
+itsm_app_embedding_base_url: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_BASE_URL', default='') }}"
+itsm_app_embedding_api_key: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_API_KEY', default='') }}"
+itsm_app_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_MODEL', default='') }}"
+itsm_agent_llm_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_EMBEDDING_MODEL', default='') }}"
 
 chat_app_git_url: "https://github.com/zaskan/chat-app.git"
 chat_app_git_ref: main

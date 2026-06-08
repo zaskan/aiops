@@ -66,6 +66,10 @@
   vars:
     aap_vm_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
+- name: Enable ITSM KB semantic search before publishing articles
+  ansible.builtin.include_tasks: configure_itsm_app_rag.yml
+  when: itsm_app_rag_enabled | default(true) | bool
+
 - name: Publish ITSM KB article for VM provisioning workflow
   ansible.builtin.include_tasks: configure_itsm_kb_vm_provisioning.yml
 

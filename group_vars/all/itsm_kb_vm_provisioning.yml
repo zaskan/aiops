@@ -1,6 +1,6 @@
 ---
 itsm_kb_vm_provisioning_title: Deploy Apache Application Stack (ITSM service request + AIOps)
 itsm_kb_vm_provisioning_tags: >-
-  Keywords: deploy apache application stack, apache application stack, aap workflow,
-  workflow job template, extra variables, itsm_change_ref, itsm_service_request_ref,
-  vm_name, cpus, mem, app_repo, app_branch, CHG, REQ, service request, standard change
+  Keywords: deploy apache stack, Deploy Apache Application Stack, service catalog,
+  service request, AAP workflow, extra vars, CHG, REQ, itsm_change_ref,
+  itsm_service_request_ref, vm_name, cpus, mem, app_repo, app_branch

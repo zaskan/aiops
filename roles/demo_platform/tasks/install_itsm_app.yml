@@ -93,17 +93,8 @@
       changed_when: demo_itsm_import_base.rc == 0
       failed_when: false
 
-    - name: Build itsm-app image from Git
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_app_namespace }}"
-          - start-build
-          - itsm-app
-          - --follow
-      register: demo_itsm_start_build
-      changed_when: demo_itsm_start_build.rc == 0
+    - name: Build itsm-app image from patched Git source
+      ansible.builtin.include_tasks: build_itsm_app_image.yml
 
     - name: Apply itsm-app workload manifests
       ansible.builtin.command:

@@ -1,0 +1,46 @@
+---
+- name: Create temporary directory for itsm-app source build
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: itsm-app-build-
+  register: itsm_app_build_dir
+
+- name: Clone itsm-app source for image build
+  ansible.builtin.git:
+    repo: "{{ itsm_app_git_url }}"
+    version: "{{ itsm_app_git_ref }}"
+    depth: 1
+    dest: "{{ itsm_app_build_dir.path }}/itsm-app"
+  register: itsm_app_build_clone
+
+- name: Patch itsm-app embeddings payload for vLLM LiteLLM backends
+  ansible.builtin.replace:
+    path: "{{ itsm_app_build_dir.path }}/itsm-app/app/services/kb_embeddings.py"
+    regexp: 'payload = \{"model": _model\(\), "input": text\}'
+    replace: 'payload = {"model": _model(), "input": text, "encoding_format": "float"}'
+  when: itsm_app_vllm_embedding_patch | default(true) | bool
+
+- name: Patch itsm-app KB index text length for vLLM embedding input limits
+  ansible.builtin.replace:
+    path: "{{ itsm_app_build_dir.path }}/itsm-app/app/services/kb_embeddings.py"
+    regexp: 'return f"Title: \{title\}\\n\\n\{description\}"'
+    replace: 'return f"Title: {title}\\n\\n{description}"[:1500]'
+  when: itsm_app_vllm_embedding_patch | default(true) | bool
+
+- name: Build itsm-app image from patched source directory
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - start-build
+      - itsm-app
+      - "--from-dir={{ itsm_app_build_dir.path }}/itsm-app"
+      - --wait
+  register: itsm_app_binary_build
+  changed_when: itsm_app_binary_build.rc == 0
+
+- name: Remove temporary itsm-app build directory
+  ansible.builtin.file:
+    path: "{{ itsm_app_build_dir.path }}"
+    state: absent
