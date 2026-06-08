@@ -1,0 +1,32 @@
+---
+aap_apache_troubleshoot_pipeline_organization: AIOps
+aap_apache_troubleshoot_pipeline_validate_certs: false
+aap_apache_troubleshoot_pipeline_controller_api_prefix: /api/controller/
+
+aap_apache_troubleshoot_pipeline_inventory: AIOps Infrastructure
+aap_apache_troubleshoot_pipeline_project: AIOps Playbooks
+
+aap_apache_troubleshoot_pipeline_jt_create_incident: Create Apache Alert Incident
+aap_apache_troubleshoot_pipeline_jt_troubleshoot: Troubleshoot apache application
+
+aap_apache_troubleshoot_pipeline_playbook_create_incident: create_apache_alert_incident.yml
+aap_apache_troubleshoot_pipeline_playbook_troubleshoot: troubleshoot_apache_application.yml
+
+aap_apache_troubleshoot_incident_extra_vars:
+  vm_name: ""
+  alertname: ""
+  probe_instance: ""
+  alert_summary: ""
+
+aap_apache_troubleshoot_survey_extra_vars:
+  vm_name: ""
+  itsm_incident_ref: ""
+
+aap_apache_troubleshoot_pipeline_job_extra_vars_create: "{{ aap_apache_troubleshoot_incident_extra_vars }}"
+aap_apache_troubleshoot_pipeline_job_extra_vars_troubleshoot: "{{ aap_apache_troubleshoot_survey_extra_vars }}"
+
+aap_apache_troubleshoot_pipeline_credential_vms: Virtual Machines
+aap_apache_troubleshoot_pipeline_credential_openshift: OpenShift Cluster
+aap_apache_troubleshoot_pipeline_credential_itsm: ITSM App
+aap_apache_troubleshoot_pipeline_credential_chat: Chat App
+aap_apache_troubleshoot_pipeline_credential_aap: AAP Gateway

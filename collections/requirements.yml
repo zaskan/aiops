@@ -4,6 +4,8 @@ collections:
     version: ">=5.0.0"
   - name: awx.awx
     source: https://console.redhat.com/api/automation-hub/
+  - name: ansible.eda
+    source: https://console.redhat.com/api/automation-hub/
   - name: https://github.com/zaskan/demos.utils.git
     type: git
     version: main

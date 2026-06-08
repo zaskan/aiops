@@ -24,6 +24,9 @@
 - name: Remove AIOps organization resources from AAP
   when: aap_uninstall_org_present | bool
   block:
+    - name: Remove EDA resources for Apache alert pipeline
+      ansible.builtin.include_tasks: eda_resources.yml
+
     - name: Remove workflow job templates
       ansible.builtin.include_tasks: workflows.yml
 

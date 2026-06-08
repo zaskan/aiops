@@ -1,0 +1,19 @@
+---
+- name: Sync AIOps Playbooks project before creating Apache troubleshoot job templates
+  awx.awx.project_update:
+    project: "{{ aap_apache_troubleshoot_pipeline_project }}"
+    organization: "{{ aap_apache_troubleshoot_pipeline_organization }}"
+    wait: true
+    controller_host: "{{ aap_apache_troubleshoot_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_apache_troubleshoot_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_apache_troubleshoot_pipeline_validate_certs }}"
+  register: aap_apache_troubleshoot_pipeline_project_update
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_apache_troubleshoot_pipeline_controller_api_prefix }}"
+
+- name: Fail when AIOps Playbooks SCM sync did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      AIOps Playbooks project SCM sync failed before Apache troubleshoot job template
+      creation ({{ aap_apache_troubleshoot_pipeline_project_update.msg | default('unknown error') }}).
+  when: aap_apache_troubleshoot_pipeline_project_update.failed | default(false)

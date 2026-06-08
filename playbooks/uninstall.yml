@@ -9,6 +9,9 @@
     - ../group_vars/all/aap_vm_pipeline.yml
     - ../group_vars/all/aap_httpd_pipeline.yml
     - ../group_vars/all/aap_apache_stack_pipeline.yml
+    - ../group_vars/all/aap_apache_troubleshoot_pipeline.yml
+    - ../group_vars/all/aap_eda_pipeline.yml
+    - ../group_vars/all/openshift_apache_monitoring.yml
   tasks:
     - ansible.builtin.import_role:
         name: demo_platform

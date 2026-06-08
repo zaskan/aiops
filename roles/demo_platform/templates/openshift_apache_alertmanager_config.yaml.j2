@@ -1,0 +1,33 @@
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ openshift_apache_monitoring_alertmanager_config_name }}
+  namespace: {{ openshift_apache_monitoring_namespace }}
+  labels:
+    openshift.io/user-monitoring: "true"
+spec:
+  route:
+    receiver: eda-apache-alerts
+    groupBy:
+      - alertname
+      - vm_name
+    matchers:
+      - name: alertname
+        matchType: "="
+        value: {{ openshift_apache_monitoring_alert_name }}
+  receivers:
+    - name: eda-apache-alerts
+      webhookConfigs:
+        - url: {{ openshift_apache_monitoring_eda_webhook_url | to_json }}
+          sendResolved: false
+          httpConfig:
+            basicAuth:
+              username:
+                name: {{ openshift_apache_monitoring_eda_webhook_secret_name }}
+                key: username
+              password:
+                name: {{ openshift_apache_monitoring_eda_webhook_secret_name }}
+                key: password
+            tlsConfig:
+              insecureSkipVerify: true

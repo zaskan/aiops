@@ -1,0 +1,38 @@
+---
+- name: Ensure Apache Alertmanager event stream exists in EDA
+  ansible.eda.event_stream:
+    name: "{{ aap_eda_pipeline_event_stream_name }}"
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    credential_name: "{{ aap_eda_pipeline_event_stream_credential }}"
+    forward_events: "{{ aap_eda_pipeline_event_stream_forward_events | bool }}"
+    state: present
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+
+- name: Read Apache Alertmanager event stream details
+  ansible.eda.event_stream_info:
+    name: "{{ aap_eda_pipeline_event_stream_name }}"
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  register: aap_eda_pipeline_event_stream_info
+
+- name: Capture EDA event stream webhook URL for Alertmanager
+  ansible.builtin.set_fact:
+    aap_eda_pipeline_event_stream_post_url: >-
+      {{
+        (
+          aap_eda_pipeline_event_stream_info.event_streams
+          | default([])
+          | first
+          | default({})
+        ).url | default('')
+      }}
+
+- name: Fail when EDA event stream webhook URL could not be resolved
+  ansible.builtin.fail:
+    msg: >-
+      EDA event stream '{{ aap_eda_pipeline_event_stream_name }}' was created but no webhook URL
+      was returned. Check EDA event stream configuration in the AAP UI.
+  when: aap_eda_pipeline_event_stream_post_url | string | trim | length == 0

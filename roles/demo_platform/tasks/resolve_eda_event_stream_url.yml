@@ -1,0 +1,60 @@
+---
+- name: Resolve EDA event stream webhook URL from artifact
+  ansible.builtin.set_fact:
+    openshift_apache_monitoring_eda_webhook_url: "{{ demo_platform.eda.event_stream_post_url | default('') }}"
+    openshift_apache_monitoring_eda_webhook_username: "{{ demo_platform.eda.event_stream_username | default(aap_eda_pipeline_event_stream_username) }}"
+    openshift_apache_monitoring_eda_webhook_password: "{{ demo_platform.eda.event_stream_password | default(aap_eda_pipeline_event_stream_password) }}"
+
+- name: Obtain AAP gateway OAuth token to query EDA event streams
+  when: openshift_apache_monitoring_eda_webhook_url | string | trim | length == 0
+  block:
+    - name: Set AAP connection facts for EDA event stream lookup
+      ansible.builtin.set_fact:
+        resolve_eda_stream_controller_host: "{{ demo_platform.aap.gateway_url }}"
+        resolve_eda_stream_controller_username: "{{ demo_platform.aap.username }}"
+        resolve_eda_stream_controller_password: "{{ demo_platform.aap.password }}"
+      no_log: true
+
+    - name: Create OAuth token for EDA event stream lookup
+      ansible.builtin.uri:
+        url: "{{ resolve_eda_stream_controller_host }}/api/gateway/v1/tokens/"
+        method: POST
+        user: "{{ resolve_eda_stream_controller_username }}"
+        password: "{{ resolve_eda_stream_controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs | default(false) }}"
+        body_format: json
+        body:
+          description: resolve-eda-event-stream-url
+          scope: write
+        status_code: 201
+      register: resolve_eda_stream_gateway_token
+      no_log: true
+
+    - name: Read Apache Alertmanager event stream from EDA API
+      ansible.eda.event_stream_info:
+        name: "{{ aap_eda_pipeline_event_stream_name }}"
+        controller_host: "{{ resolve_eda_stream_controller_host }}"
+        controller_token: "{{ resolve_eda_stream_gateway_token.json.token }}"
+        validate_certs: "{{ validate_certs | default(false) }}"
+      register: resolve_eda_stream_info
+
+    - name: Capture EDA event stream webhook URL from API lookup
+      ansible.builtin.set_fact:
+        openshift_apache_monitoring_eda_webhook_url: >-
+          {{
+            (
+              resolve_eda_stream_info.event_streams
+              | default([])
+              | first
+              | default({})
+            ).url | default('')
+          }}
+
+- name: Fail when EDA event stream webhook URL is missing
+  ansible.builtin.fail:
+    msg: >-
+      EDA event stream webhook URL could not be resolved from
+      demo_platform.eda.event_stream_post_url or the EDA API. Run
+      playbooks/casc/configure_aap_eda_pipeline.yml first.
+  when: openshift_apache_monitoring_eda_webhook_url | string | trim | length == 0

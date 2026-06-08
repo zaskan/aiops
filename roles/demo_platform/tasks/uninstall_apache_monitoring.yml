@@ -1,0 +1,27 @@
+---
+- name: Remove AlertmanagerConfig for Apache alerts
+  kubernetes.core.k8s:
+    state: absent
+    api_version: monitoring.coreos.com/v1alpha1
+    kind: AlertmanagerConfig
+    name: "{{ openshift_apache_monitoring_alertmanager_config_name }}"
+    namespace: "{{ openshift_apache_monitoring_namespace }}"
+  ignore_errors: true
+
+- name: Remove PrometheusRule for Apache HTTP probes
+  kubernetes.core.k8s:
+    state: absent
+    api_version: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    name: "{{ openshift_apache_monitoring_prometheus_rule_name }}"
+    namespace: "{{ openshift_apache_monitoring_namespace }}"
+  ignore_errors: true
+
+- name: Remove Alertmanager webhook basic auth Secret
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Secret
+    name: "{{ openshift_apache_monitoring_eda_webhook_secret_name }}"
+    namespace: "{{ openshift_apache_monitoring_namespace }}"
+  ignore_errors: true

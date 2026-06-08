@@ -5,7 +5,7 @@
     git config user.email "{{ apache_exposure_git_user_email }}"
     git config user.name "{{ apache_exposure_git_user_name }}"
     git add "{{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml"
-    git commit -m "Expose Apache for {{ apache_exposure_vm_name }} (Service and Route)"
+    git commit -m "Expose Apache for {{ apache_exposure_vm_name }} (Service, Route, HTTP Probe)"
     git -c http.sslVerify={{ 'true' if apache_exposure_validate_certs | bool else 'false' }} push origin "{{ apache_exposure_gitea_branch }}"
   args:
     chdir: "{{ apache_exposure_workdir }}/repo"

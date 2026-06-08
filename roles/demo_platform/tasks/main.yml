@@ -73,6 +73,9 @@
 - name: Publish ITSM KB article for VM provisioning workflow
   ansible.builtin.include_tasks: configure_itsm_kb_vm_provisioning.yml
 
+- name: Publish ITSM KB article for Apache alert remediation
+  ansible.builtin.include_tasks: configure_itsm_kb_apache_troubleshoot.yml
+
 - name: Configure ITSM Apache Application stack templates
   ansible.builtin.include_tasks: configure_itsm_apache_stack_templates.yml
 
@@ -81,6 +84,21 @@
     name: aap_httpd_pipeline
   vars:
     aap_httpd_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Apache alert remediation job templates
+  ansible.builtin.include_role:
+    name: aap_apache_troubleshoot_pipeline
+  vars:
+    aap_apache_troubleshoot_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure Event-Driven Ansible Apache alert pipeline
+  ansible.builtin.include_role:
+    name: aap_eda_pipeline
+  vars:
+    aap_eda_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure OpenShift monitoring alerts for Apache HTTP probes
+  ansible.builtin.include_tasks: configure_apache_monitoring.yml
 
 - name: Configure AAP Deploy Apache Application Stack master workflow
   ansible.builtin.include_role:

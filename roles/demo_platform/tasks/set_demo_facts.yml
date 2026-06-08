@@ -11,6 +11,30 @@
     - aap_mcp_token is defined
   no_log: true
 
+- name: Check for existing demo platform facts artifact before publish
+  ansible.builtin.stat:
+    path: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  register: demo_platform_existing_artifact_stat
+  when: demo_platform_write_artifacts | bool
+
+- name: Read existing demo platform facts artifact for EDA preservation
+  ansible.builtin.slurp:
+    src: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  register: demo_platform_existing_artifact_slurp
+  when:
+    - demo_platform_write_artifacts | bool
+    - demo_platform_existing_artifact_stat.stat.exists | default(false)
+
+- name: Capture existing EDA block from artifact when present
+  ansible.builtin.set_fact:
+    demo_platform_existing_eda_facts: >-
+      {{ (demo_platform_existing_artifact_slurp.content | b64decode | from_yaml).demo_platform.eda | default({}) }}
+  when:
+    - demo_platform_write_artifacts | bool
+    - demo_platform_existing_artifact_stat.stat.exists | default(false)
+    - demo_platform_existing_artifact_slurp.content is defined
+  no_log: true
+
 - name: Publish demo platform facts
   ansible.builtin.set_fact:
     demo_platform:
@@ -64,6 +88,15 @@
     state: directory
     mode: "0750"
   when: demo_platform_write_artifacts | bool
+
+- name: Preserve EDA facts from existing artifact across early publish
+  ansible.builtin.set_fact:
+    demo_platform: "{{ demo_platform | combine({'eda': demo_platform_existing_eda_facts}, recursive=True) }}"
+  when:
+    - demo_platform_write_artifacts | bool
+    - demo_platform_existing_eda_facts is defined
+    - demo_platform_existing_eda_facts | default({}) | length > 0
+  no_log: true
 
 - name: Write demo platform facts artifact for downstream playbooks
   ansible.builtin.copy:

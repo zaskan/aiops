@@ -1,0 +1,12 @@
+---
+- name: Ensure AIOps decision environment exists in EDA
+  ansible.eda.decision_environment:
+    name: "{{ aap_eda_pipeline_decision_environment }}"
+    description: Minimal decision environment for AIOps Apache alert rulebooks
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    image_url: "{{ aap_eda_pipeline_decision_environment_image }}"
+    pull_policy: missing
+    state: present
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"

@@ -1,0 +1,68 @@
+---
+- name: Resolve demo platform facts artifact path
+  ansible.builtin.set_fact:
+    aap_eda_pipeline_artifact_file: "{{ aap_eda_pipeline_artifacts_file }}"
+
+- name: Check demo platform facts artifact exists
+  ansible.builtin.stat:
+    path: "{{ aap_eda_pipeline_artifact_file }}"
+  register: aap_eda_pipeline_artifact_stat
+
+- name: Fail when demo platform facts artifact is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ aap_eda_pipeline_artifact_file }} not found. Run playbooks/install.yml first.
+  when: not aap_eda_pipeline_artifact_stat.stat.exists
+
+- name: Load demo platform facts from artifact
+  ansible.builtin.include_vars:
+    file: "{{ aap_eda_pipeline_artifact_file }}"
+
+- name: Set EDA and AAP connection facts from artifact
+  ansible.builtin.set_fact:
+    aap_eda_pipeline_controller_host: "{{ demo_platform.aap.gateway_url }}"
+    aap_eda_pipeline_controller_username: "{{ demo_platform.aap.username }}"
+    aap_eda_pipeline_controller_password: "{{ demo_platform.aap.password }}"
+    aap_eda_pipeline_eda_url: >-
+      {{
+        demo_platform.aap.eda_url | default('')
+        if demo_platform.aap.eda_url | default('') | string | trim | length > 0
+        else demo_platform.aap.gateway_url | default('')
+      }}
+    aap_eda_pipeline_gitea_scm_url: >-
+      {{
+        ('http://' ~ aap_eda_pipeline_gitea_scm_internal_host ~ '/'
+         ~ demo_platform.gitea.username ~ '/' ~ aap_eda_pipeline_gitea_repo ~ '.git')
+        if (aap_eda_pipeline_gitea_scm_use_internal | default(true) | bool)
+        else (
+          demo_platform.gitea.url
+          | replace('.apps.apps.', '.apps.')
+          | regex_replace('/$', '')
+          ~ '/' ~ demo_platform.gitea.username ~ '/' ~ aap_eda_pipeline_gitea_repo ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Probe EDA API via AAP gateway
+  ansible.builtin.uri:
+    url: "{{ aap_eda_pipeline_controller_host }}/api/eda/v1/decision-environments/"
+    user: "{{ aap_eda_pipeline_controller_username }}"
+    password: "{{ aap_eda_pipeline_controller_password }}"
+    method: GET
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+    force_basic_auth: true
+    status_code: 200
+  register: aap_eda_pipeline_eda_probe
+  no_log: true
+
+- name: Fail when EDA API is not reachable via AAP gateway
+  ansible.builtin.fail:
+    msg: >-
+      EDA API probe failed at {{ aap_eda_pipeline_controller_host }}/api/eda/v1/.
+      Confirm Event-Driven Ansible is installed and the gateway route is reachable.
+      HTTP status: {{ aap_eda_pipeline_eda_probe.status | default('unknown') }}
+  when: aap_eda_pipeline_eda_probe.status | default(0) != 200
+
+- name: Normalize EDA URL to gateway when integrated with AAP 2.7
+  ansible.builtin.set_fact:
+    aap_eda_pipeline_eda_url: "{{ aap_eda_pipeline_controller_host }}"

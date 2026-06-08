@@ -1,4 +1,4 @@
 ---
 collections:
-  - awx.awx
+  - kubernetes.core
   - ansible.eda

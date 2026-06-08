@@ -1,0 +1,30 @@
+{{ itsm_kb_apache_troubleshoot_tags }}
+
+# {{ itsm_kb_apache_troubleshoot_title }}
+
+## When to use
+
+Chat shows `[incident.created] INC-*` for **Apache application down** (HTTP probe failed). Explain the alert to the user and **ask for explicit confirmation** before running automation (e.g. "yes", "remediate", "@aiops fix it"). **Never** launch remediation without confirmation.
+
+## Launch AAP job template
+
+After confirmation, launch **{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}** (org **{{ aap_apache_troubleshoot_pipeline_organization }}**).
+
+| Extra var | Req | Source |
+|-----------|-----|--------|
+| `vm_name` | yes | Parse from incident description (`vm_name:` line) or ask user |
+| `itsm_incident_ref` | yes | From chat/ITSM (`INC-*`); user does not invent it |
+
+Example:
+```
+vm_name: server01
+itsm_incident_ref: INC-12
+```
+
+## What the job does
+
+1. Check VM connectivity and httpd service
+2. Start httpd if down; verify HTTP on the VM
+3. Close the ITSM incident and post summary to `#operations`
+
+AAP: {{ demo_platform.aap.gateway_url }}

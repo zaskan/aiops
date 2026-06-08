@@ -1,0 +1,8 @@
+---
+- name: Configure Event-Driven Ansible Apache alert pipeline
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/aap_eda_pipeline.yml
+  roles:
+    - role: aap_eda_pipeline

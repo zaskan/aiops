@@ -160,6 +160,20 @@
     apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
   when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
 
+- name: Detect whether Probe manifest is already present in VM manifest file
+  ansible.builtin.set_fact:
+    apache_exposure_has_probe: >-
+      {{
+        (
+          apache_exposure_manifest_docs
+          | selectattr('kind', 'equalto', 'Probe')
+          | map(attribute='metadata')
+          | selectattr('name', 'equalto', apache_exposure_vm_name ~ '-http-probe')
+          | list
+          | length
+        ) > 0
+      }}
+
 - name: Detect whether Service manifest is already present in VM manifest file
   ansible.builtin.set_fact:
     apache_exposure_has_service: >-
@@ -221,3 +235,25 @@
     - apache_exposure_has_service | bool
     - not apache_exposure_has_route | bool
   changed_when: true
+
+- name: Render HTTP Probe manifest fragment for Apache Service monitoring
+  ansible.builtin.template:
+    src: apache_http_probe.yaml.j2
+    dest: "{{ apache_exposure_workdir }}/append-probe.yaml"
+    mode: "0640"
+  when: not apache_exposure_has_probe | bool
+
+- name: Append Probe document to VM manifest file
+  ansible.builtin.shell: |
+    set -euo pipefail
+    printf '\n---\n' >> "{{ apache_exposure_manifest_path }}"
+    cat "{{ apache_exposure_workdir }}/append-probe.yaml" >> "{{ apache_exposure_manifest_path }}"
+  when: not apache_exposure_has_probe | bool
+  changed_when: true
+
+- name: Update HTTP Probe prober URL in existing VM manifest
+  ansible.builtin.replace:
+    path: "{{ apache_exposure_manifest_path }}"
+    regexp: 'url: blackbox-exporter\.openshift-user-workload-monitoring\.svc:9115'
+    replace: 'url: {{ openshift_apache_monitoring_blackbox_prober | default("blackbox-exporter.aiops-demo.svc:9115") }}'
+  when: apache_exposure_has_probe | bool

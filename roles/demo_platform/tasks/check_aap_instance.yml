@@ -111,6 +111,33 @@
       }}
   when: demo_aap_candidate_ready | bool
 
+- name: Probe EDA API via AAP gateway when no dedicated EDA route exists
+  ansible.builtin.uri:
+    url: "https://{{ demo_aap_candidate_gateway_host }}/api/eda/v1/decision-environments/"
+    user: admin
+    password: "{{ demo_aap_candidate_password }}"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    force_basic_auth: true
+    status_code: 200
+  register: demo_aap_eda_gateway_probe
+  retries: 3
+  delay: 5
+  until: demo_aap_eda_gateway_probe.status == 200
+  when:
+    - demo_aap_candidate_ready | bool
+    - demo_aap_candidate_eda_host | default('') | trim | length == 0
+
+- name: Use AAP gateway for EDA when API responds on integrated gateway path
+  ansible.builtin.set_fact:
+    demo_aap_candidate_eda_host: "{{ demo_aap_candidate_gateway_host }}"
+    demo_aap_eda_via_gateway: true
+  when:
+    - demo_aap_candidate_ready | bool
+    - demo_aap_candidate_eda_host | default('') | trim | length == 0
+    - demo_aap_eda_gateway_probe is defined
+    - demo_aap_eda_gateway_probe.status | default(0) == 200
+
 - name: Record first ready AAP instance
   ansible.builtin.set_fact:
     demo_aap_ready_instance: true

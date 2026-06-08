@@ -24,6 +24,14 @@ apache_app_validate_certs: false
 apache_exposure_route_wait_retries: 30
 apache_exposure_route_wait_delay: 10
 
+openshift_apache_monitoring_probe_job: apache-http
+openshift_apache_monitoring_probe_interval: 15s
+openshift_apache_monitoring_blackbox_prober: blackbox-exporter.aiops-demo.svc:9115
+
+itsm_apache_app_asset_type_name: Apache Application
+
+chat_aiops_channel_name: operations
+
 openshift_cluster_domain: apps.ocp.zaskan.es
 
 vm_ip_pool_start: 192.168.100.100

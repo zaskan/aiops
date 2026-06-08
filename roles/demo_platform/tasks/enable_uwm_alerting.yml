@@ -1,0 +1,143 @@
+---
+- name: Read cluster monitoring ConfigMap for user workload monitoring
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: cluster-monitoring-config
+    namespace: openshift-monitoring
+  register: openshift_apache_monitoring_cluster_config
+
+- name: Read user workload monitoring ConfigMap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: user-workload-monitoring-config
+    namespace: openshift-user-workload-monitoring
+  register: openshift_apache_monitoring_uwm_config
+
+- name: Parse cluster monitoring configuration
+  ansible.builtin.set_fact:
+    openshift_apache_monitoring_cluster_config_yaml: >-
+      {{
+        (
+          (
+            openshift_apache_monitoring_cluster_config.resources
+            | default([])
+            | first
+            | default({})
+          ).data.config.yaml | default('{}')
+        )
+        | from_yaml
+      }}
+
+- name: Parse user workload monitoring configuration
+  ansible.builtin.set_fact:
+    openshift_apache_monitoring_uwm_config_yaml: >-
+      {{
+        (
+          (
+            openshift_apache_monitoring_uwm_config.resources
+            | default([])
+            | first
+            | default({})
+          ).data.config.yaml | default('{}')
+        )
+        | from_yaml
+      }}
+
+- name: Evaluate user workload monitoring and alerting settings
+  ansible.builtin.set_fact:
+    openshift_apache_monitoring_uwm_monitoring_enabled: >-
+      {{
+        openshift_apache_monitoring_cluster_config_yaml.enableUserWorkload
+        | default(false) | bool
+      }}
+    openshift_apache_monitoring_uwm_alerting_enabled: >-
+      {{
+        (
+          openshift_apache_monitoring_uwm_config_yaml.alertmanager.enabled
+          | default(false) | bool
+        )
+        and (
+          openshift_apache_monitoring_uwm_config_yaml.alertmanager.enableAlertmanagerConfig
+          | default(false) | bool
+        )
+      }}
+
+- name: Enable user workload monitoring and alerting when requested
+  when:
+    - openshift_apache_monitoring_enable_uwm | bool
+    - not openshift_apache_monitoring_uwm_monitoring_enabled | bool
+      or not openshift_apache_monitoring_uwm_alerting_enabled | bool
+  block:
+    - name: Build merged cluster monitoring configuration
+      ansible.builtin.set_fact:
+        openshift_apache_monitoring_cluster_config_merged: >-
+          {{
+            openshift_apache_monitoring_cluster_config_yaml
+            | combine({'enableUserWorkload': true}, recursive=True)
+          }}
+
+    - name: Build merged user workload monitoring configuration
+      ansible.builtin.set_fact:
+        openshift_apache_monitoring_uwm_config_merged: >-
+          {{
+            openshift_apache_monitoring_uwm_config_yaml
+            | combine(
+                {
+                  'alertmanager': {
+                    'enabled': true,
+                    'enableAlertmanagerConfig': true
+                  }
+                },
+                recursive=True
+              )
+          }}
+
+    - name: Ensure cluster monitoring ConfigMap enables user workload monitoring
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: cluster-monitoring-config
+            namespace: openshift-monitoring
+          data:
+            config.yaml: "{{ openshift_apache_monitoring_cluster_config_merged | to_nice_yaml(indent=2) }}"
+
+    - name: Ensure user workload monitoring ConfigMap enables AlertmanagerConfig
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: user-workload-monitoring-config
+            namespace: openshift-user-workload-monitoring
+          data:
+            config.yaml: "{{ openshift_apache_monitoring_uwm_config_merged | to_nice_yaml(indent=2) }}"
+
+    - name: Wait for user workload Alertmanager to become available
+      kubernetes.core.k8s_info:
+        api_version: monitoring.coreos.com/v1
+        kind: Alertmanager
+        namespace: openshift-user-workload-monitoring
+        name: user-workload
+      register: openshift_apache_monitoring_uwm_alertmanager
+      until:
+        - openshift_apache_monitoring_uwm_alertmanager.resources | default([]) | length > 0
+        - >-
+          (
+            openshift_apache_monitoring_uwm_alertmanager.resources
+            | default([])
+            | first
+            | default({})
+          ).status.availableReplicas | default(0) | int >= 1
+      retries: "{{ openshift_apache_monitoring_uwm_wait_retries }}"
+      delay: "{{ openshift_apache_monitoring_uwm_wait_delay }}"
+
+    - name: Mark user workload alerting as enabled after cluster update
+      ansible.builtin.set_fact:
+        openshift_apache_monitoring_uwm_monitoring_enabled: true
+        openshift_apache_monitoring_uwm_alerting_enabled: true

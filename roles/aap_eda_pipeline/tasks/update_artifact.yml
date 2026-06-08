@@ -1,0 +1,36 @@
+---
+- name: Reload demo platform facts artifact before merging EDA block
+  ansible.builtin.include_vars:
+    file: "{{ aap_eda_pipeline_artifact_file }}"
+  no_log: true
+
+- name: Merge EDA facts into demo platform artifact for downstream monitoring
+  ansible.builtin.set_fact:
+    demo_platform: >-
+      {{
+        demo_platform | combine({
+          'eda': {
+            'url': aap_eda_pipeline_eda_url,
+            'event_stream_post_url': aap_eda_pipeline_event_stream_post_url,
+            'event_stream_username': aap_eda_pipeline_event_stream_username,
+            'event_stream_password': aap_eda_pipeline_event_stream_password,
+            'activation_name': aap_eda_pipeline_activation_name,
+            'project': aap_eda_pipeline_project,
+            'controller_api_host': (
+              (aap_eda_pipeline_controller_host | regex_replace('/$', ''))
+              ~ (aap_eda_pipeline_controller_credential_host_suffix | default('/api/controller/'))
+            )
+          }
+        }, recursive=True)
+      }}
+  no_log: true
+
+- name: Update demo platform facts artifact with EDA webhook details
+  ansible.builtin.copy:
+    dest: "{{ aap_eda_pipeline_artifact_file }}"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  no_log: true

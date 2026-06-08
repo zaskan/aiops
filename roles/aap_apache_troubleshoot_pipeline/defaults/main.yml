@@ -1,0 +1,2 @@
+---
+aap_apache_troubleshoot_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

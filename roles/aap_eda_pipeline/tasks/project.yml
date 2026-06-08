@@ -1,0 +1,23 @@
+---
+- name: Ensure AIOps Rulebooks EDA project exists
+  ansible.eda.project:
+    name: "{{ aap_eda_pipeline_project }}"
+    description: Event-Driven Ansible rulebooks for AIOps demo
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    url: "{{ aap_eda_pipeline_gitea_scm_url }}"
+    scm_branch: "{{ aap_eda_pipeline_scm_branch }}"
+    credential: "{{ aap_eda_pipeline_gitea_credential }}"
+    sync: true
+    state: present
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  register: aap_eda_pipeline_project_result
+
+- name: Fail when EDA Rulebooks project import did not complete
+  ansible.builtin.fail:
+    msg: >-
+      EDA project '{{ aap_eda_pipeline_project }}' import failed or is still pending.
+      Ensure Gitea Rulebooks repo contains a rulebooks/ directory (run configure_gitea_repos.yml).
+      Project id: {{ aap_eda_pipeline_project_result.id | default('unknown') }}
+  when: aap_eda_pipeline_project_result.id is not defined

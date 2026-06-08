@@ -1,0 +1,101 @@
+---
+- name: Load demo platform facts artifact for Apache monitoring
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Resolve EDA event stream webhook URL for Alertmanager
+  ansible.builtin.include_tasks: resolve_eda_event_stream_url.yml
+
+- name: Enable OpenShift user-workload monitoring and alerting when needed
+  ansible.builtin.include_tasks: enable_uwm_alerting.yml
+
+- name: Fail when user-workload alerting is not enabled
+  ansible.builtin.fail:
+    msg: >-
+      OpenShift user-workload alerting is not available. Ensure
+      cluster-monitoring-config has enableUserWorkload: true and
+      user-workload-monitoring-config has alertmanager.enabled and
+      alertmanager.enableAlertmanagerConfig set to true. Set
+      openshift_apache_monitoring_enable_uwm: true (default) to apply
+      these settings automatically.
+  when:
+    - openshift_apache_monitoring_require_uwm | bool
+    - not openshift_apache_monitoring_uwm_alerting_enabled | bool
+
+- name: Deploy blackbox exporter for Apache HTTP probes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ lookup('template', 'openshift_blackbox_exporter.yaml.j2') | from_yaml_all | list }}"
+
+- name: List HTTP Probe resources in Apache monitoring namespace
+  kubernetes.core.k8s_info:
+    api_version: monitoring.coreos.com/v1
+    kind: Probe
+    namespace: "{{ openshift_apache_monitoring_namespace }}"
+  register: openshift_apache_monitoring_probes
+
+- name: Point HTTP Probe resources at deployed blackbox exporter
+  kubernetes.core.k8s:
+    state: present
+    merge_type: merge
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: Probe
+      metadata:
+        name: "{{ item.metadata.name }}"
+        namespace: "{{ openshift_apache_monitoring_namespace }}"
+      spec:
+        interval: "{{ openshift_apache_monitoring_probe_interval }}"
+        prober:
+          url: "{{ openshift_apache_monitoring_blackbox_prober }}"
+  loop: "{{ openshift_apache_monitoring_probes.resources | default([]) }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when: openshift_apache_monitoring_probes.resources | default([]) | length > 0
+
+- name: Ensure aiops-demo namespace has user-monitoring label
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ openshift_apache_monitoring_namespace }}"
+        labels:
+          openshift.io/user-monitoring: "true"
+    merge_type: merge
+
+- name: Create Secret for Alertmanager webhook basic auth to EDA event stream
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ openshift_apache_monitoring_eda_webhook_secret_name }}"
+        namespace: "{{ openshift_apache_monitoring_namespace }}"
+      type: Opaque
+      stringData:
+        username: "{{ openshift_apache_monitoring_eda_webhook_username }}"
+        password: "{{ openshift_apache_monitoring_eda_webhook_password }}"
+  no_log: true
+
+- name: Apply PrometheusRule for Apache HTTP probe failures
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'openshift_apache_prometheus_rule.yaml.j2') | from_yaml }}"
+
+- name: Apply AlertmanagerConfig routing Apache alerts to EDA
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'openshift_apache_alertmanager_config.yaml.j2') | from_yaml }}"
+
+- name: Display Apache monitoring configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "Namespace: {{ openshift_apache_monitoring_namespace }}"
+      - "PrometheusRule: {{ openshift_apache_monitoring_prometheus_rule_name }}"
+      - "Alert: {{ openshift_apache_monitoring_alert_name }}"
+      - "AlertmanagerConfig: {{ openshift_apache_monitoring_alertmanager_config_name }}"
+      - "EDA webhook: {{ openshift_apache_monitoring_eda_webhook_url }}"
