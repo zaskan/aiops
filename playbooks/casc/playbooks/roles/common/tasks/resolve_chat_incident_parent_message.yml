@@ -1,0 +1,63 @@
+---
+- name: Login to chat-app to look up incident notification message
+  ansible.builtin.uri:
+    url: "{{ apache_troubleshoot_chat_base_url }}/api/v1/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ chat_app_username }}"
+      password: "{{ chat_app_password }}"
+    validate_certs: false
+    status_code: [200]
+  register: apache_troubleshoot_chat_login
+  no_log: true
+
+- name: List recent operations channel messages for incident thread lookup
+  ansible.builtin.uri:
+    url: >-
+      {{ apache_troubleshoot_chat_base_url }}/api/v1/channels/{{
+      chat_aiops_channel_name | default('operations') | urlencode }}/messages?limit=100
+    method: GET
+    headers:
+      Authorization: "Bearer {{ apache_troubleshoot_chat_login.json.access_token }}"
+      Accept: application/json
+    validate_certs: false
+    status_code: [200]
+    return_content: true
+  register: apache_troubleshoot_chat_messages
+
+- name: Resolve chat parent message id for incident notification
+  ansible.builtin.set_fact:
+    apache_troubleshoot_chat_incident_messages: >-
+      {{
+        apache_troubleshoot_chat_messages.json['items']
+        | default([])
+        | selectattr('body', 'search', itsm_incident_ref | string | trim)
+        | selectattr('body', 'search', 'incident.created')
+        | list
+      }}
+
+- name: Prefer incident notification that mentions the target VM
+  ansible.builtin.set_fact:
+    apache_troubleshoot_chat_parent_message_id: >-
+      {{
+        (
+          apache_troubleshoot_chat_incident_messages
+          | selectattr('body', 'search', vm_name | string | trim)
+          | list
+          | first
+          | default(
+              apache_troubleshoot_chat_incident_messages | first | default({}, true),
+              true
+            )
+        ).id | default('', true)
+      }}
+  when: vm_name is defined and vm_name | string | trim | length > 0
+
+- name: Resolve chat parent message id when VM name is not available
+  ansible.builtin.set_fact:
+    apache_troubleshoot_chat_parent_message_id: >-
+      {{
+        (apache_troubleshoot_chat_incident_messages | first | default({}, true)).id | default('', true)
+      }}
+  when: vm_name is not defined or vm_name | string | trim | length == 0

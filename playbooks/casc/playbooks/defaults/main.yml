@@ -32,6 +32,10 @@ itsm_apache_app_asset_type_name: Apache Application
 
 chat_aiops_channel_name: operations
 
+# Post remediation summary as a thread reply under the incident.created chat message.
+# When false, remediation does not post to chat (ITSM comment + close still run).
+apache_troubleshoot_post_chat_summary: true
+
 openshift_cluster_domain: apps.ocp.zaskan.es
 
 vm_ip_pool_start: 192.168.100.100
