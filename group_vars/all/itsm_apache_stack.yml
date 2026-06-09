@@ -22,6 +22,10 @@ aap_itsm_subworkflow_extra_vars:
   itsm_change_ref: ""
   itsm_service_request_ref: ""
 
+# Register ITSM VM Asset must not declare empty cpus/mem/vm_name placeholders — extra vars
+# cannot be overridden by set_fact, which breaks ITSM/cluster lookup during modification flows.
+aap_register_itsm_vm_asset_job_extra_vars: "{{ aap_itsm_job_template_extra_vars }}"
+
 aap_vm_survey_job_extra_vars:
   vm_name: ""
   cpus: ""
@@ -79,7 +83,7 @@ itsm_request_templates:
   - name: "{{ itsm_apache_stack_request_template_name }}"
     description: Request Apache Application stack (KubeVirt VM + httpd application deployment).
     change_template_name: "{{ itsm_apache_stack_change_template_name }}"
-    require_standard_change: true
+    require_standard_change: false
     fields:
       - { field_key: vm_name, label: VM name, field_type: text, required: true }
       - { field_key: cpus, label: CPUs, field_type: number, required: true }

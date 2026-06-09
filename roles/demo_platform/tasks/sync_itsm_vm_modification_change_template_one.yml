@@ -1,0 +1,76 @@
+---
+- name: Resolve VM modification change template id
+  ansible.builtin.set_fact:
+    itsm_vm_modification_change_template_id: >-
+      {{
+        (
+          itsm_vm_modification_change_templates_list.json
+          | default([])
+          | selectattr('name', 'equalto', item.name)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Build ordered task template ids for VM modification change template
+  ansible.builtin.set_fact:
+    itsm_vm_modification_change_template_task_ids: >-
+      {{
+        itsm_vm_modification_change_template_task_ids | default([]) + [
+          (
+            itsm_vm_modification_task_templates_list.json
+            | default([])
+            | selectattr('title', 'equalto', task_name)
+            | list
+            | first
+            | default({})
+          ).id
+        ]
+      }}
+  loop: "{{ item.task_template_names }}"
+  loop_control:
+    loop_var: task_name
+    label: "{{ task_name }}"
+  when:
+    - itsm_vm_modification_change_template_id is not none
+    - (
+        itsm_vm_modification_task_templates_list.json
+        | default([])
+        | selectattr('title', 'equalto', task_name)
+        | list
+        | length
+      ) > 0
+
+- name: PATCH VM modification change template with full CTASK template list
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates/{{
+      itsm_vm_modification_change_template_id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body:
+      task_template_ids: "{{ itsm_vm_modification_change_template_task_ids }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - itsm_vm_modification_change_template_id is not none
+    - itsm_vm_modification_change_template_task_ids | default([]) | length > 0
+
+- name: Display synced VM modification change template task order
+  ansible.builtin.debug:
+    msg: >-
+      Change template '{{ item.name }}' task_template_ids:
+      {{ itsm_vm_modification_change_template_task_ids | default([]) | join(', ') }}
+  when: itsm_vm_modification_change_template_task_ids is defined
+
+- name: Reset VM modification change template task ids accumulator
+  ansible.builtin.set_fact:
+    itsm_vm_modification_change_template_task_ids: []

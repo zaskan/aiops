@@ -1,0 +1,43 @@
+---
+- name: Start ITSM change task tracking
+  ansible.builtin.import_role:
+    name: itsm_change_task
+    tasks_from: start.yml
+
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Validate CPU patch required variables
+  ansible.builtin.assert:
+    that:
+      - vm_name | default('') | trim | length > 0
+      - cpus | default('') | string | trim | length > 0
+    fail_msg: vm_name and cpus are required for CPU manifest patch.
+
+- name: Lookup current memory from ITSM VM asset when mem is not provided
+  ansible.builtin.include_tasks: ../common/tasks/lookup_itsm_vm_asset_resources.yml
+  when: mem is not defined or mem | string | trim | length == 0
+
+- name: Adopt resolved memory for CPU manifest patch
+  ansible.builtin.set_fact:
+    mem: "{{ vm_asset_resolved_mem }}"
+  when: vm_asset_resolved_mem is defined
+
+- name: Patch VM manifest CPU cores in Gitea Infrastructure
+  ansible.builtin.include_tasks: patch_resources.yml
+  vars:
+    vm_manifest_patch_update_cpus: true
+    vm_manifest_patch_update_mem: false
+
+- name: Display VM CPU patch summary
+  ansible.builtin.debug:
+    msg:
+      - "VM name: {{ vm_name }}"
+      - "CPUs: {{ cpus }}"
+      - "Memory (unchanged): {{ mem }} GiB"
+      - "Manifest path: {{ vm_manifest_gitea_repo }}/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+
+- name: Complete ITSM change task tracking
+  ansible.builtin.import_role:
+    name: itsm_change_task
+    tasks_from: complete.yml

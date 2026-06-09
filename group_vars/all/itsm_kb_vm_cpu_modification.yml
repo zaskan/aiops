@@ -1,0 +1,6 @@
+---
+itsm_kb_vm_cpu_modification_title: Modify VM CPUs (ITSM service request + AIOps)
+itsm_kb_vm_cpu_modification_tags: >-
+  Keywords: modify vm cpus, Modify VM CPUs, resize cpu, service catalog,
+  service request, AAP workflow, extra vars, CHG, REQ, itsm_change_ref,
+  itsm_service_request_ref, vm_name, cpus

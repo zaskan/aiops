@@ -1,5 +1,5 @@
 ---
-- name: Re-index ITSM KB article embeddings after Apache troubleshoot publish
+- name: Refresh ITSM KB article content via API (triggers upsert when embedding succeeds)
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles/{{ itsm_kb_apache_troubleshoot_article_id }}"
     method: PATCH
@@ -18,3 +18,6 @@
       Accept: application/json
       Content-Type: application/json
   register: itsm_kb_apache_troubleshoot_reindex
+
+- name: Backfill all ITSM KB article embeddings after publish
+  ansible.builtin.include_tasks: reindex_itsm_kb_all.yml

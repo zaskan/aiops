@@ -1,0 +1,34 @@
+---
+- name: GET ITSM task templates for VM modification change template sync
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/task-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_vm_modification_task_templates_list
+
+- name: GET ITSM change templates for VM modification change template sync
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_vm_modification_change_templates_list
+
+- name: Sync ordered CTASK template ids for each VM modification change template
+  ansible.builtin.include_tasks: sync_itsm_vm_modification_change_template_one.yml
+  loop: "{{ itsm_vm_modification_change_template_sync_specs }}"
+  loop_control:
+    label: "{{ item.name }}"

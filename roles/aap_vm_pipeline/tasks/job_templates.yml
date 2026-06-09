@@ -49,7 +49,7 @@
     playbook: "{{ aap_vm_pipeline_playbook_register_itsm }}"
     job_type: run
     state: present
-    extra_vars: "{{ aap_vm_pipeline_job_extra_vars }}"
+    extra_vars: "{{ aap_register_itsm_vm_asset_job_extra_vars }}"
     ask_variables_on_launch: true
     credentials:
       - "{{ aap_vm_pipeline_credential_itsm }}"

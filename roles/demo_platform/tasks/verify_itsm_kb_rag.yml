@@ -1,59 +1,9 @@
 ---
 - name: Verify ITSM KB semantic search after article publish
-  ansible.builtin.uri:
-    url: "{{ demo_platform.itsm_app.url }}/mcp/"
-    method: POST
-    headers:
-      Content-Type: application/json
-      Accept: application/json, text/event-stream
-      X-ITSM-MCP-Token: "{{ demo_platform.itsm_app.mcp_token }}"
-    body_format: json
-    body:
-      jsonrpc: "2.0"
-      id: 1
-      method: tools/call
-      params:
-        name: rag_search_kb
-        arguments:
-          query: "{{ itsm_kb_vm_provisioning_title }}"
-          top_k: 3
-    validate_certs: false
-    status_code: 200
-    return_content: true
-  register: itsm_kb_rag_article_verify
-  retries: 12
-  delay: 5
-  until: >-
-    itsm_kb_rag_article_verify.status == 200
-    and 'rag_not_configured' not in (itsm_kb_rag_article_verify.content | default(''))
-    and 'embedding_failed' not in (itsm_kb_rag_article_verify.content | default(''))
-    and 'no_indexed_articles' not in (itsm_kb_rag_article_verify.content | default(''))
-    and itsm_kb_vm_provisioning_title in (itsm_kb_rag_article_verify.content | default(''))
+  ansible.builtin.include_tasks: verify_itsm_kb_rag_attempt.yml
 
-- name: Fail when ITSM KB embedding API call fails during semantic search
-  ansible.builtin.fail:
-    msg: >-
-      ITSM KB embedding API call failed (embedding_failed). itsm-app calls
-      {embedding-base-url}/v1/embeddings — use the LiteLLM host without a trailing /v1.
-      Response: {{ itsm_kb_rag_article_verify.content | default('') }}
-  when: "'embedding_failed' in (itsm_kb_rag_article_verify.content | default(''))"
-
-- name: Fail when ITSM KB articles were not indexed for semantic search
-  ansible.builtin.fail:
-    msg: >-
-      ITSM KB semantic search returned no_indexed_articles after publishing
-      '{{ itsm_kb_vm_provisioning_title }}'. Article text may exceed the embedding
-      model input limit — itsm-app truncates index text to 1500 characters during
-      install. Re-run configure_itsm_app_rag.yml to rebuild itsm-app, then
-      configure_itsm_kb_vm_provisioning.yml to re-index.
-  when: "'no_indexed_articles' in (itsm_kb_rag_article_verify.content | default(''))"
-
-- name: Fail when published KB article is not reachable via semantic search
-  ansible.builtin.fail:
-    msg: >-
-      ITSM KB article '{{ itsm_kb_vm_provisioning_title }}' was not returned by
-      rag_search_kb. Ensure configure_itsm_app_rag.yml completed successfully, then
-      re-run configure_itsm_kb_vm_provisioning.yml to re-index the article.
-  when: >-
-    'embedding_failed' not in (itsm_kb_rag_article_verify.content | default(''))
-    and itsm_kb_vm_provisioning_title not in (itsm_kb_rag_article_verify.content | default(''))
+- name: Retry ITSM KB semantic search verification
+  ansible.builtin.include_tasks: verify_itsm_kb_rag.yml
+  when:
+    - not (itsm_kb_rag_verify_passed | default(false))
+    - (itsm_kb_rag_verify_attempt | default(0) | int) <= 12

@@ -1,0 +1,17 @@
+---
+aap_vm_modification_pipeline_organization: AIOps
+aap_vm_modification_pipeline_validate_certs: false
+aap_vm_modification_pipeline_controller_api_prefix: /api/controller/
+
+aap_vm_modification_pipeline_inventory: AIOps Localhost
+aap_vm_modification_pipeline_project: AIOps Playbooks
+
+aap_vm_modification_pipeline_jt_restart_vm: Restart VM
+aap_vm_modification_pipeline_playbook_restart: restart_vm.yml
+
+aap_vm_modification_pipeline_credential_gitea: Gitea
+aap_vm_modification_pipeline_credential_openshift: OpenShift Cluster
+aap_vm_modification_pipeline_credential_itsm: ITSM App
+aap_vm_modification_pipeline_credential_aap: AAP Gateway
+
+aap_vm_modification_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

@@ -78,8 +78,8 @@
       hostname: "{{ vm_name }}"
       ip_address: "{{ itsm_vm_asset_ip }}"
       ansible_host: "{{ itsm_vm_asset_ansible_host }}"
-      cpus: "{{ cpus | int }}"
-      memory: "{{ mem | int }}"
+      cpus: "{{ vm_asset_resolved_cpus | int }}"
+      memory: "{{ vm_asset_resolved_mem | int }}"
 
 - name: Create VM asset in ITSM
   ansible.builtin.uri:

@@ -13,6 +13,7 @@ itsm_app_bootstrap_admin_user: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP
 itsm_app_bootstrap_admin_password: "{{ lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_PASSWORD') | default('admin', true) }}"
 itsm_app_rag_enabled: true
 itsm_app_vllm_embedding_patch: true
+itsm_app_catalog_ritm_patch: true
 itsm_app_embedding_base_url: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_BASE_URL', default='') }}"
 itsm_app_embedding_api_key: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_API_KEY', default='') }}"
 itsm_app_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_EMBEDDING_MODEL', default='') }}"

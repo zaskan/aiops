@@ -1,0 +1,69 @@
+---
+- name: Backfill ITSM KB article embeddings via itsm-app reindex
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - exec
+      - deployment/itsm-app
+      - --
+      - python
+      - -c
+      - >-
+        import json;
+        from app import db;
+        from app.services import kb_embeddings as kb_emb;
+        db.init_db();
+        print(json.dumps(kb_emb.reindex_all_articles()))
+  register: itsm_kb_reindex_all
+  changed_when: false
+  failed_when: itsm_kb_reindex_all.rc != 0
+
+- name: Parse ITSM KB reindex output
+  ansible.builtin.set_fact:
+    itsm_kb_reindex_all_summary: "{{ itsm_kb_reindex_all.stdout | from_json }}"
+  when: itsm_kb_reindex_all.stdout | default('') | trim | length > 0
+
+- name: Fail when ITSM KB reindex script returned an error
+  ansible.builtin.fail:
+    msg: >-
+      ITSM KB reindex failed: {{ itsm_kb_reindex_all_summary.error | default('unknown') }} —
+      {{ itsm_kb_reindex_all_summary.message | default(itsm_kb_reindex_all.stdout | default('')) }}.
+      Verify embedding-base-url, embedding-model, and embedding-api-key on secret itsm-secrets
+      in namespace {{ itsm_app_namespace }}.
+  when:
+    - itsm_kb_reindex_all_summary is defined
+    - itsm_kb_reindex_all_summary.error is defined
+
+- name: Fail when ITSM KB reindex indexed no articles
+  ansible.builtin.fail:
+    msg: >-
+      ITSM KB reindex indexed {{ itsm_kb_reindex_all_summary.indexed | default(0) }} of
+      {{ itsm_kb_reindex_all_summary.total_articles | default(0) }} articles
+      ({{ itsm_kb_reindex_all_summary.failed | default(0) }} failed).
+      Check itsm-app logs for "KB embedding failed for article_id=":
+      oc logs -n {{ itsm_app_namespace }} -l app=itsm-app --tail=80
+  when:
+    - itsm_kb_reindex_all_summary is defined
+    - (itsm_kb_reindex_all_summary.total_articles | default(0) | int) > 0
+    - (itsm_kb_reindex_all_summary.indexed | default(0) | int) == 0
+
+- name: Warn when some ITSM KB articles failed to index
+  ansible.builtin.debug:
+    msg: >-
+      ITSM KB reindex completed with {{ itsm_kb_reindex_all_summary.failed }} failure(s):
+      {{ itsm_kb_reindex_all_summary.indexed }}/{{ itsm_kb_reindex_all_summary.total_articles }} indexed.
+      Check itsm-app logs for "KB embedding failed for article_id=".
+  when:
+    - itsm_kb_reindex_all_summary is defined
+    - (itsm_kb_reindex_all_summary.failed | default(0) | int) > 0
+    - (itsm_kb_reindex_all_summary.indexed | default(0) | int) > 0
+
+- name: Display ITSM KB reindex summary
+  ansible.builtin.debug:
+    msg: >-
+      ITSM KB embeddings reindexed:
+      {{ itsm_kb_reindex_all_summary.indexed | default(0) }}/{{ itsm_kb_reindex_all_summary.total_articles | default(0) }}
+      articles ({{ itsm_kb_reindex_all_summary.failed | default(0) }} failed).
+  when: itsm_kb_reindex_all_summary is defined

@@ -1,0 +1,80 @@
+---
+itsm_vm_cpu_modification_kb_article_title: Modify VM CPUs (ITSM service request + AIOps)
+itsm_vm_memory_modification_kb_article_title: Modify VM Memory (ITSM service request + AIOps)
+
+itsm_vm_cpu_modification_task_template_patch: AAP — Patch VM manifest (CPU)
+itsm_vm_memory_modification_task_template_patch: AAP — Patch VM manifest (Memory)
+itsm_vm_modification_task_template_restart_vm: AAP — Restart VM
+
+itsm_vm_cpu_modification_change_template_name: Modify VM CPUs — Standard Change
+itsm_vm_memory_modification_change_template_name: Modify VM Memory — Standard Change
+itsm_vm_cpu_modification_request_template_name: Modify VM CPUs
+itsm_vm_memory_modification_request_template_name: Modify VM Memory
+
+itsm_vm_cpu_modification_change_task_template_names:
+  - "{{ itsm_vm_cpu_modification_task_template_patch }}"
+  - "{{ itsm_apache_stack_task_template_sync_vms }}"
+  - "{{ itsm_vm_modification_task_template_restart_vm }}"
+  - "{{ itsm_apache_stack_task_template_register_itsm }}"
+
+itsm_vm_memory_modification_change_task_template_names:
+  - "{{ itsm_vm_memory_modification_task_template_patch }}"
+  - "{{ itsm_apache_stack_task_template_sync_vms }}"
+  - "{{ itsm_vm_modification_task_template_restart_vm }}"
+  - "{{ itsm_apache_stack_task_template_register_itsm }}"
+
+itsm_vm_modification_change_template_sync_specs:
+  - name: "{{ itsm_vm_cpu_modification_change_template_name }}"
+    task_template_names: "{{ itsm_vm_cpu_modification_change_task_template_names }}"
+  - name: "{{ itsm_vm_memory_modification_change_template_name }}"
+    task_template_names: "{{ itsm_vm_memory_modification_change_task_template_names }}"
+
+itsm_vm_modification_task_templates:
+  - name: "{{ itsm_vm_cpu_modification_task_template_patch }}"
+    title: "{{ itsm_vm_cpu_modification_task_template_patch }}"
+    description: Patch KubeVirt VM manifest CPU cores in Gitea Infrastructure without rotating password.
+    kb_article_title: "{{ itsm_vm_cpu_modification_kb_article_title }}"
+  - name: "{{ itsm_vm_memory_modification_task_template_patch }}"
+    title: "{{ itsm_vm_memory_modification_task_template_patch }}"
+    description: Patch KubeVirt VM manifest memory in Gitea Infrastructure without rotating password.
+    kb_article_title: "{{ itsm_vm_memory_modification_kb_article_title }}"
+  - name: "{{ itsm_vm_modification_task_template_restart_vm }}"
+    title: "{{ itsm_vm_modification_task_template_restart_vm }}"
+    description: Stop and start the VM to apply manifest resource changes.
+
+itsm_vm_modification_change_templates:
+  - name: "{{ itsm_vm_cpu_modification_change_template_name }}"
+    description: Standard change to resize VM CPU cores via GitOps manifest patch.
+    change_type: standard
+    task_template_names: "{{ itsm_vm_cpu_modification_change_task_template_names }}"
+  - name: "{{ itsm_vm_memory_modification_change_template_name }}"
+    description: Standard change to resize VM memory via GitOps manifest patch.
+    change_type: standard
+    task_template_names: "{{ itsm_vm_memory_modification_change_task_template_names }}"
+
+itsm_vm_modification_request_templates:
+  - name: "{{ itsm_vm_cpu_modification_request_template_name }}"
+    description: Request CPU resize for an existing KubeVirt VM.
+    change_template_name: "{{ itsm_vm_cpu_modification_change_template_name }}"
+    require_standard_change: false
+    fields:
+      - { field_key: vm_name, label: VM name, field_type: text, required: true }
+      - { field_key: cpus, label: CPUs, field_type: number, required: true }
+  - name: "{{ itsm_vm_memory_modification_request_template_name }}"
+    description: Request memory resize for an existing KubeVirt VM.
+    change_template_name: "{{ itsm_vm_memory_modification_change_template_name }}"
+    require_standard_change: false
+    fields:
+      - { field_key: vm_name, label: VM name, field_type: text, required: true }
+      - { field_key: mem, label: Memory GiB, field_type: number, required: true }
+
+aap_vm_cpu_modification_survey_job_extra_vars:
+  vm_name: ""
+  cpus: ""
+
+aap_vm_memory_modification_survey_job_extra_vars:
+  vm_name: ""
+  mem: ""
+
+aap_vm_cpu_modification_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_vm_cpu_modification_survey_job_extra_vars) }}"
+aap_vm_memory_modification_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_vm_memory_modification_survey_job_extra_vars) }}"

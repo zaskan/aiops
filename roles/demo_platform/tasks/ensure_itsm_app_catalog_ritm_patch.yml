@@ -1,0 +1,57 @@
+---
+- name: Read itsm-app catalog RITM patch markers from running pod
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - exec
+      - deployment/itsm-app
+      - --
+      - grep
+      - -E
+      - ritms_to_submit|DELETE FROM requested_items
+      - /app/app/services/workflow.py
+      - /app/app/services/service_requests.py
+  register: itsm_app_catalog_ritm_patch_check
+  changed_when: false
+  failed_when: false
+  when: itsm_app_catalog_ritm_patch | default(true) | bool
+
+- name: Rebuild itsm-app image with catalog RITM duplicate-change patch
+  ansible.builtin.include_tasks: build_itsm_app_image.yml
+  when:
+    - itsm_app_catalog_ritm_patch | default(true) | bool
+    - (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('ritms_to_submit')) is none
+      or (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('DELETE FROM requested_items')) is none
+
+- name: Rollout restart itsm-app after catalog RITM patch rebuild
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - rollout
+      - restart
+      - deployment/itsm-app
+  when:
+    - itsm_app_catalog_ritm_patch | default(true) | bool
+    - (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('ritms_to_submit')) is none
+      or (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('DELETE FROM requested_items')) is none
+  changed_when: true
+
+- name: Wait for itsm-app rollout after catalog RITM patch rebuild
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - rollout
+      - status
+      - deployment/itsm-app
+      - --timeout=600s
+  changed_when: false
+  when:
+    - itsm_app_catalog_ritm_patch | default(true) | bool
+    - (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('ritms_to_submit')) is none
+      or (itsm_app_catalog_ritm_patch_check.stdout | default('') | regex_search('DELETE FROM requested_items')) is none

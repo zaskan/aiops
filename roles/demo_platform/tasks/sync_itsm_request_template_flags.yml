@@ -1,0 +1,61 @@
+---
+# demos.utils.itsm_ansible_role only POSTs new request templates; PATCH flags on existing rows.
+- name: GET ITSM request templates for flag sync
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_request_template_flags_list
+
+- name: PATCH ITSM request template flags when they differ from desired state
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates/{{
+      (
+        itsm_request_template_flags_list.json
+        | default([])
+        | selectattr('name', 'equalto', item.name)
+        | list
+        | first
+        | default({})
+      ).id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      require_standard_change: "{{ item.require_standard_change | bool }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  loop: "{{ itsm_request_template_flag_sync_list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - (
+        itsm_request_template_flags_list.json
+        | default([])
+        | selectattr('name', 'equalto', item.name)
+        | list
+        | length
+      ) > 0
+    - (
+        (
+          itsm_request_template_flags_list.json
+          | default([])
+          | selectattr('name', 'equalto', item.name)
+          | list
+          | first
+        ).require_standard_change | default(false) | bool
+      ) != (item.require_standard_change | default(false) | bool)

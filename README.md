@@ -96,17 +96,17 @@ The playbook will:
 1. Verify OpenShift, AAP 2.7, OpenShift GitOps, and OpenShift Virtualization
 2. Enable the **Ansible MCP server** on the discovered AAP instance (patch `AnsibleAutomationPlatform` CR, wait for Route `mcp`, create OAuth token)
 3. Install itsm-app, chat-app, gitea, and **itsm-agent** (when LiteLLM env vars are set) if they are not already running
-4. Create ITSM asset types **Virtual Machine** and **Apache Application** (with custom fields)
-5. Health-check each application
-6. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
-7. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
-8. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key and **AAP MCP** URL/token
-9. Configure chat-app (**aiops** user, **operations** channel) and itsm-app (webhook bridge); deploy **itsm-agent** bot
-10. Mint a permanent OpenShift ServiceAccount token and update the artifact
-11. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
-12. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
-13. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
-14. Publish ITSM Knowledge Base article **Deploy Apache Application Stack (ITSM service request + AIOps)** for internal RAG / AI agent (idempotent upsert)
+4. Health-check each application
+5. Create namespace `aiops-demo` and OKD-format secret `authorized-keys` for future VMs (if absent); load RSA keys into facts
+6. Create secondary **UserDefinedNetwork** `aiops-vm-network` in `aiops-demo` for VM fixed IPs (Layer2, `ipam.mode: Disabled`)
+7. Write facts to `artifacts/demo_platform_facts.yml` (gitignored), including VM SSH private key and **AAP MCP** URL/token
+8. Configure chat-app (**aiops** user, **operations** channel); deploy **itsm-agent** bot
+9. Mint a permanent OpenShift ServiceAccount token and update the artifact
+10. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
+11. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+12. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
+13. Enable ITSM KB semantic search (embedding secret; may rebuild/restart itsm-app — SQLite is on `emptyDir`)
+14. Seed ITSM database after last pod restart: asset types, itsm-app webhooks, KB articles, and service catalog templates (must run after step 13 so data is not wiped by pod restart)
 15. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
@@ -471,6 +471,55 @@ Install also upserts KB article **Deploy Apache Application Stack (ITSM service 
 ansible-playbook playbooks/casc/configure_itsm_app_rag.yml
 ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 ```
+
+## VM resource modification (service request driven)
+
+End-to-end CPU and memory resize flows mirror the Apache Application Stack pattern: ITSM **service request** → **standard change** with four CTASKs → AAP workflow (patch manifest → sync → restart → register asset). Manifest patches preserve the existing VM password and cloud-init configuration.
+
+### ITSM catalog
+
+| Use case | Request template | Change template |
+| -------- | ---------------- | --------------- |
+| CPU | **Modify VM CPUs** | **Modify VM CPUs — Standard Change** |
+| Memory | **Modify VM Memory** | **Modify VM Memory — Standard Change** |
+
+Task templates (4 per change): Patch VM manifest (CPU or Memory), Sync Infrastructure VMs, Restart VM, Register ITSM VM Asset.
+
+Install creates these via `configure_itsm_vm_modification_templates.yml` (included in `playbooks/install.yml`).
+
+### Operator flow
+
+1. ITSM **Service Catalog** → **Modify VM CPUs** or **Modify VM Memory** → fill `vm_name` and `cpus` or `mem` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
+2. AAP → **Modify VM CPUs** or **Modify VM Memory** → survey: `itsm_change_ref` (required), `itsm_service_request_ref` (optional), matching parameters.
+3. Verify all four CTASKs complete; change **completed**; request **fulfilled**; `[request.complete]` appears as a thread reply under `[request.submitted]` in **#operations**.
+
+Demo API submit (no UI):
+
+```bash
+ansible-playbook playbooks/casc/submit_vm_cpu_modification_service_request.yml \
+  -e vm_name=server01 -e cpus=4
+
+ansible-playbook playbooks/casc/submit_vm_memory_modification_service_request.yml \
+  -e vm_name=server01 -e mem=8
+```
+
+### AAP workflows
+
+`configure_aap_vm_modification_pipeline.yml` creates:
+
+| Resource | Name |
+| -------- | ---- |
+| Workflow | **Modify VM CPUs** |
+| Workflow | **Modify VM Memory** |
+| Job template | Patch VM CPU Manifest |
+| Job template | Patch VM Memory Manifest |
+| Job template | Restart VM |
+
+Workflow survey (CPU): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`, `cpus`.
+
+Workflow survey (Memory): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`, `mem`.
+
+Install also upserts KB articles **Modify VM CPUs (ITSM service request + AIOps)** and **Modify VM Memory (ITSM service request + AIOps)** for RAG. The bot uses a two-step flow documented in each KB: Step 1 submit the catalog request via ITSM API; Step 2 launch the matching AAP workflow with `itsm_change_ref` and resource parameters. Passing `extra_vars` on MCP workflow launch requires a small [itsm-agent](https://github.com/zaskan/itsm-agent) follow-up (`requestBody` is currently empty).
 
 ## Configure chat-app for AIOps
 

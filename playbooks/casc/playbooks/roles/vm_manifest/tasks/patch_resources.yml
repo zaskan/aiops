@@ -1,0 +1,180 @@
+---
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_host: >-
+      {{ vm_manifest_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Infrastructure repository
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_internal_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+        if (vm_manifest_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository
+  block:
+    - name: Clone Gitea Infrastructure repository from Gitea
+      ansible.builtin.git:
+        repo: "{{ vm_manifest_gitea_clone_repo }}"
+        dest: "{{ vm_manifest_workdir }}/repo"
+        version: "{{ vm_manifest_gitea_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              vm_manifest_gitea_use_internal | default(false) | bool
+              or vm_manifest_validate_certs | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+  rescue:
+    - name: Report Gitea Infrastructure repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ vm_manifest_gitea_owner }}/{{ vm_manifest_gitea_repo }}
+          for VM manifest patch.
+
+- name: Set VM manifest file path in Infrastructure repository
+  ansible.builtin.set_fact:
+    vm_manifest_patch_file_path: >-
+      {{ vm_manifest_workdir }}/repo/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml
+
+- name: Fail when VM manifest file is missing in Infrastructure repository
+  ansible.builtin.stat:
+    path: "{{ vm_manifest_patch_file_path }}"
+  register: vm_manifest_patch_file_stat
+
+- name: Abort when VM manifest does not exist
+  ansible.builtin.fail:
+    msg: >-
+      VM manifest {{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml was not found in Gitea
+      Infrastructure. Provision the VM before resizing resources.
+  when: not vm_manifest_patch_file_stat.stat.exists
+
+- name: Read VM manifest as plain text (supports multi-document GitOps files)
+  ansible.builtin.slurp:
+    src: "{{ vm_manifest_patch_file_path }}"
+  register: vm_manifest_patch_slurp
+
+- name: Capture VM manifest plain text for validation
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_slurp.content | b64decode }}"
+
+- name: Fail when domain.cpu.cores is missing from VM manifest
+  ansible.builtin.fail:
+    msg: >-
+      Could not find domain.cpu.cores in {{ vm_name }}.yaml. The manifest layout may have changed.
+  when:
+    - vm_manifest_patch_update_cpus | default(false) | bool
+    - not (vm_manifest_patch_content is search('(?m)^\\s+cores:\\s*\\d+\\s*$'))
+
+- name: Fail when domain.resources.requests.memory is missing from VM manifest
+  ansible.builtin.fail:
+    msg: >-
+      Could not find domain.resources.requests.memory in {{ vm_name }}.yaml.
+      The manifest layout may have changed.
+  when:
+    - vm_manifest_patch_update_mem | default(false) | bool
+    - not (vm_manifest_patch_content is search('(?m)^\\s+memory:\\s*[\\d.]+Gi\\s*$'))
+
+- name: Patch CPU cores in VM manifest content
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)cores:\\s*\\d+\\s*$', '\\g<1>cores: ' ~ (cpus | string)) }}"
+  when: vm_manifest_patch_update_cpus | default(false) | bool
+
+- name: Patch memory request in VM manifest content
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)memory:\\s*[\\d.]+Gi\\s*$', '\\g<1>memory: ' ~ (mem | string) ~ 'Gi') }}"
+  when: vm_manifest_patch_update_mem | default(false) | bool
+
+- name: Verify patched VM manifest still has valid cores and memory lines
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (vm_manifest_patch_update_cpus | default(false) | bool)
+        or (
+          vm_manifest_patch_content is search(
+            ('(?m)^\\s+cores:\\s*' ~ (cpus | string) ~ '\\s*$')
+          )
+        )
+      - >-
+        not (vm_manifest_patch_update_mem | default(false) | bool)
+        or (
+          vm_manifest_patch_content is search(
+            ('(?m)^\\s+memory:\\s*' ~ (mem | string) ~ 'Gi\\s*$')
+          )
+        )
+    fail_msg: >-
+      VM manifest patch produced unexpected YAML for {{ vm_name }}. Check Gitea
+      Infrastructure/vms/{{ vm_name }}.yaml and restore from git history if needed.
+
+- name: Write patched VM manifest back to Infrastructure repository
+  ansible.builtin.copy:
+    content: "{{ vm_manifest_patch_content }}"
+    dest: "{{ vm_manifest_patch_file_path }}"
+    mode: "0644"
+
+- name: Commit and push resized VM manifest to Gitea Infrastructure repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ vm_manifest_git_user_email }}"
+    git config user.name "{{ vm_manifest_git_user_name }}"
+    git add "{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    git commit -m "{{ vm_manifest_patch_commit_message | default('Resize VM resources for ' ~ vm_name) }}"
+    git -c http.sslVerify={{ 'true' if vm_manifest_validate_certs | bool else 'false' }} push origin "{{ vm_manifest_gitea_branch }}"
+  args:
+    chdir: "{{ vm_manifest_workdir }}/repo"
+  register: vm_manifest_patch_git_push
+  changed_when: vm_manifest_patch_git_push.rc == 0
+  failed_when: >
+    (vm_manifest_patch_git_push.rc not in [0, 1])
+    or (
+      vm_manifest_patch_git_push.rc != 0
+      and ('nothing to commit' not in (vm_manifest_patch_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (vm_manifest_patch_git_push.stderr | default('') | lower))
+      and ('up to date' not in (vm_manifest_patch_git_push.stdout | default('') | lower))
+      and ('up to date' not in (vm_manifest_patch_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Capture Infrastructure repository git commit after patch push
+  ansible.builtin.command: git rev-parse HEAD
+  args:
+    chdir: "{{ vm_manifest_workdir }}/repo"
+  register: vm_manifest_patch_git_head
+  changed_when: false
+
+- name: Record Infrastructure git commit for ITSM CTASK comment
+  ansible.builtin.set_fact:
+    itsm_vm_git_commit: "{{ vm_manifest_patch_git_head.stdout | trim }}"
+
+- name: Remove temporary Infrastructure clone directory after patch push
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/repo"
+    state: absent

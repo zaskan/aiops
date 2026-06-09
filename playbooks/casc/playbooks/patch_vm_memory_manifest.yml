@@ -1,0 +1,11 @@
+---
+- name: Patch VM memory in Gitea Infrastructure manifest
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Patch VM manifest memory resources
+      ansible.builtin.import_role:
+        name: vm_manifest
+        tasks_from: patch_memory.yml

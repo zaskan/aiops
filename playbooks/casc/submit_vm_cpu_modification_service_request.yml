@@ -1,0 +1,142 @@
+---
+- name: Submit Modify VM CPUs ITSM service request (demo helper)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_vm_modification.yml
+    - ../../group_vars/all/aap_vm_cpu_modification_pipeline.yml
+    - ../../group_vars/all/chat_aiops.yml
+  vars:
+    vm_modification_sr_artifact_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    vm_modification_sr_validate_certs: false
+    vm_modification_sr_type: cpu
+  tasks:
+    - name: Load demo platform facts from artifact
+      ansible.builtin.include_vars:
+        file: "{{ vm_modification_sr_artifact_file }}"
+
+    - name: Map ITSM API connection from artifact
+      ansible.builtin.set_fact:
+        itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+        itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+        itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+        vm_modification_chat_webhook_url: >-
+          {{ demo_platform.chat_app.url | regex_replace('/$', '') }}/api/v1/webhooks/channels/{{
+          chat_aiops_channel_name | default('operations') }}/messages
+      no_log: true
+
+    - name: Assert required CPU modification variables are set
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+          - cpus is defined
+        fail_msg: Required extra vars for CPU modification -e vm_name=... -e cpus=...
+
+    - name: GET ITSM request templates
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ vm_modification_sr_validate_certs }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: vm_modification_sr_request_templates
+
+    - name: Resolve Modify VM CPUs request template id
+      ansible.builtin.set_fact:
+        vm_modification_sr_request_template_id: >-
+          {{
+            (
+              vm_modification_sr_request_templates.json
+              | default([])
+              | selectattr('name', 'equalto', itsm_vm_cpu_modification_request_template_name)
+              | list
+              | first
+              | default({})
+            ).id | default(none)
+          }}
+
+    - name: Fail when request template is missing
+      ansible.builtin.fail:
+        msg: >-
+          ITSM request template '{{ itsm_vm_cpu_modification_request_template_name }}' was not found.
+          Run playbooks/install.yml or playbooks/casc/configure_itsm_vm_modification_templates.yml.
+      when: vm_modification_sr_request_template_id is none
+
+    - name: Create draft Modify VM CPUs service request
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ vm_modification_sr_validate_certs }}"
+        body_format: json
+        body:
+          name: "Modify VM CPUs — {{ vm_name }}"
+          description: >-
+            Demo service request to set {{ vm_name }} to {{ cpus | int }} CPU cores.
+          request_template_id: "{{ vm_modification_sr_request_template_id | int }}"
+          specifications:
+            vm_name: "{{ vm_name }}"
+            cpus: "{{ cpus | int }}"
+        status_code: [201]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: vm_modification_sr_create
+
+    - name: Submit service request to create standard change and CTASKs
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+          vm_modification_sr_create.json.public_id | urlencode }}/submit
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ vm_modification_sr_validate_certs }}"
+        body_format: json
+        body: {}
+        status_code: [200]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: vm_modification_sr_submit
+
+    - name: Post request.submitted notification to operations chat webhook
+      ansible.builtin.uri:
+        url: "{{ vm_modification_chat_webhook_url }}"
+        method: POST
+        body_format: json
+        body:
+          body: >-
+            [request.submitted] {{ vm_modification_sr_create.json.public_id }} —
+            Modify VM CPUs for {{ vm_name }}
+        validate_certs: false
+        status_code: [201]
+      when: vm_modification_chat_webhook_url | default('') | string | trim | length > 0
+
+    - name: Display service request and change refs for AAP launch
+      ansible.builtin.debug:
+        msg:
+          - "Service request: {{ vm_modification_sr_create.json.public_id }}"
+          - >-
+            Change(s) created:
+            {{
+              vm_modification_sr_submit.json.changes_created
+              | default([])
+              | map(attribute='public_id')
+              | list
+              | join(', ')
+            }}
+          - >-
+            Next: launch AAP workflow '{{ aap_vm_cpu_modification_pipeline_workflow }}'
+            with itsm_change_ref set to the change ref above, vm_name, and cpus.

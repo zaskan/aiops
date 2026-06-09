@@ -64,3 +64,8 @@
 
 - name: Ensure Apache stack change template includes all workflow CTASK templates
   ansible.builtin.include_tasks: sync_itsm_apache_stack_change_template.yml
+
+- name: Sync Apache stack request template flags on existing catalog items
+  ansible.builtin.include_tasks: sync_itsm_request_template_flags.yml
+  vars:
+    itsm_request_template_flag_sync_list: "{{ itsm_request_templates }}"

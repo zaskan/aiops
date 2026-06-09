@@ -43,6 +43,9 @@
 - name: Ensure itsm-app sends encoding_format for vLLM embedding backends
   ansible.builtin.include_tasks: ensure_itsm_app_vllm_embedding_patch.yml
 
+- name: Ensure itsm-app avoids duplicate catalog request changes
+  ansible.builtin.include_tasks: ensure_itsm_app_catalog_ritm_patch.yml
+
 - name: Resolve effective ITSM KB embedding settings
   ansible.builtin.set_fact:
     itsm_app_embedding_base_url_effective: >-
@@ -88,6 +91,22 @@
   register: itsm_app_rag_secret_apply
   no_log: true
 
+- name: Check whether itsm-app pod has embedding environment configured
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - exec
+      - deployment/itsm-app
+      - --
+      - sh
+      - -c
+      - test -n "$ITSM_EMBEDDING_BASE_URL" && test -n "$ITSM_EMBEDDING_MODEL"
+  register: itsm_app_embedding_env_check
+  changed_when: false
+  failed_when: false
+
 - name: Rollout restart itsm-app to apply KB embedding configuration
   ansible.builtin.command:
     argv:
@@ -97,7 +116,9 @@
       - rollout
       - restart
       - deployment/itsm-app
-  when: itsm_app_rag_secret_apply.changed | default(false)
+  when: >
+    itsm_app_rag_secret_apply.changed | default(false)
+    or itsm_app_embedding_env_check.rc | default(1) != 0
   changed_when: true
 
 - name: Wait for itsm-app deployment rollout after embedding configuration
@@ -110,6 +131,9 @@
       - status
       - deployment/itsm-app
       - --timeout=300s
+  when: >
+    itsm_app_rag_secret_apply.changed | default(false)
+    or itsm_app_embedding_env_check.rc | default(1) != 0
   changed_when: false
 
 - name: Verify ITSM MCP rag_search_kb is configured

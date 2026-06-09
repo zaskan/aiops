@@ -25,3 +25,21 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
+
+- name: Remove Modify VM CPUs workflow job template from AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+
+- name: Remove Modify VM Memory workflow job template from AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_vm_memory_modification_pipeline_workflow }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"

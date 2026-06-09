@@ -18,3 +18,83 @@
       ansible.builtin.import_role:
         name: itsm_change_task
         tasks_from: complete.yml
+
+    - name: Load chat-app credentials for VM modification completion post
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_chat_credential.yml
+      when:
+        - vm_modification_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+
+    - name: Resolve chat webhook URL for VM modification completion
+      ansible.builtin.set_fact:
+        vm_modification_chat_base_url: >-
+          {{
+            chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+            | regex_replace('/$', '')
+          }}
+        vm_modification_chat_webhook_url: >-
+          {{
+            chat_webhook_url | trim
+            if (
+              chat_webhook_url | default('', true) | trim
+              | regex_search('^https?://')
+            )
+            else (
+              (
+                chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+                | regex_replace('/$', '')
+              )
+              ~ '/api/v1/webhooks/channels/'
+              ~ (chat_aiops_channel_name | default('operations'))
+              ~ '/messages'
+              if (
+                chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+                | string | trim | length > 0
+              )
+              else ''
+            )
+          }}
+      when:
+        - vm_modification_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+
+    - name: Resolve service request notification message for threaded chat reply
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_chat_service_request_parent_message.yml
+      when:
+        - vm_modification_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - vm_modification_chat_webhook_url | default('') | string | trim | length > 0
+        - vm_modification_chat_webhook_url | regex_search('^https?://')
+        - vm_modification_chat_base_url | default('') | string | trim | length > 0
+        - chat_app_username | default('') | string | trim | length > 0
+        - chat_app_password | default('') | string | trim | length > 0
+
+    - name: Post VM modification completion as thread reply under service request message
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: post_chat_request_completion.yml
+      when:
+        - vm_modification_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - vm_modification_chat_parent_message_id | default('') | string | trim | length > 0
+        - vm_modification_chat_webhook_url | default('') | string | trim | length > 0
+
+    - name: Skip chat notification when service request parent message was not found
+      ansible.builtin.debug:
+        msg: >-
+          No [request.submitted] chat message found for {{ itsm_service_request_ref | string | trim }};
+          skipping request completion post to avoid a top-level channel message.
+      when:
+        - vm_modification_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - vm_modification_chat_webhook_url | default('') | string | trim | length > 0
+        - vm_modification_chat_parent_message_id | default('') | string | trim | length == 0

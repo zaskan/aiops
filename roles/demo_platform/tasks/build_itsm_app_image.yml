@@ -24,8 +24,21 @@
   ansible.builtin.replace:
     path: "{{ itsm_app_build_dir.path }}/itsm-app/app/services/kb_embeddings.py"
     regexp: 'return f"Title: \{title\}\\n\\n\{description\}"'
-    replace: 'return f"Title: {title}\\n\\n{description}"[:1500]'
+    replace: 'return f"Title: {title}\\n\\n{description}"[:1200]'
   when: itsm_app_vllm_embedding_patch | default(true) | bool
+
+- name: Patch itsm-app submit flow to avoid duplicate changes for catalog requests
+  ansible.builtin.command:
+    chdir: "{{ itsm_app_build_dir.path }}/itsm-app"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ role_path }}/files/itsm_app_catalog_ritm.patch"
+  register: itsm_app_catalog_ritm_patch_apply
+  changed_when: itsm_app_catalog_ritm_patch_apply.rc == 0
+  failed_when: itsm_app_catalog_ritm_patch_apply.rc != 0
+  when: itsm_app_catalog_ritm_patch | default(true) | bool
 
 - name: Build itsm-app image from patched source directory
   ansible.builtin.command:

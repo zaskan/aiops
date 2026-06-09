@@ -1,0 +1,61 @@
+---
+- name: Ensure Patch VM CPU Manifest job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    project: "{{ aap_vm_modification_pipeline_project }}"
+    inventory: "{{ aap_vm_modification_pipeline_inventory }}"
+    playbook: "{{ aap_vm_cpu_modification_pipeline_playbook_patch }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_vm_cpu_modification_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_vm_modification_pipeline_credential_gitea }}"
+      - "{{ aap_vm_modification_pipeline_credential_itsm }}"
+      - "{{ aap_vm_modification_pipeline_credential_aap }}"
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Ensure Patch VM Memory Manifest job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_vm_memory_modification_pipeline_jt_patch }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    project: "{{ aap_vm_modification_pipeline_project }}"
+    inventory: "{{ aap_vm_modification_pipeline_inventory }}"
+    playbook: "{{ aap_vm_memory_modification_pipeline_playbook_patch }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_vm_memory_modification_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_vm_modification_pipeline_credential_gitea }}"
+      - "{{ aap_vm_modification_pipeline_credential_itsm }}"
+      - "{{ aap_vm_modification_pipeline_credential_aap }}"
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Ensure Restart VM job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    project: "{{ aap_vm_modification_pipeline_project }}"
+    inventory: "{{ aap_vm_modification_pipeline_inventory }}"
+    playbook: "{{ aap_vm_modification_pipeline_playbook_restart }}"
+    job_type: run
+    state: present
+    extra_vars: "{{ aap_itsm_job_template_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_vm_modification_pipeline_credential_openshift }}"
+      - "{{ aap_vm_modification_pipeline_credential_itsm }}"
+      - "{{ aap_vm_modification_pipeline_credential_aap }}"
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"

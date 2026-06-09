@@ -36,6 +36,9 @@ chat_aiops_channel_name: operations
 # When false, remediation does not post to chat (ITSM comment + close still run).
 apache_troubleshoot_post_chat_summary: true
 
+# Post VM modification completion as a thread reply under request.submitted chat message.
+vm_modification_post_chat_summary: false
+
 openshift_cluster_domain: apps.ocp.zaskan.es
 
 vm_ip_pool_start: 192.168.100.100

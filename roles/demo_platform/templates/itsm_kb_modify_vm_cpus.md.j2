@@ -1,0 +1,32 @@
+{{ itsm_kb_vm_cpu_modification_tags }}
+
+# {{ itsm_kb_vm_cpu_modification_title }}
+
+## Step 1 — Open ITSM service request
+
+Open catalog **{{ itsm_vm_cpu_modification_request_template_name }}** in itsm-app. Ask the user for `vm_name` and new `cpus`. On submit, itsm-app returns `itsm_service_request_ref` (REQ-*) and `itsm_change_ref` (CHG-*). **User does not provide these refs** — take them from ITSM after submit.
+
+## Step 2 — Launch AAP workflow
+
+Launch **{{ aap_vm_cpu_modification_pipeline_workflow }}** (org **{{ aap_vm_cpu_modification_pipeline_organization }}**). Use step-1 refs plus user fields. Never ask the user for refs or invent them.
+
+| Extra var | Req | Source |
+|-----------|-----|--------|
+| `itsm_change_ref` | yes | Step 1 (not user) |
+| `itsm_service_request_ref` | no | Step 1 (not user) |
+| `vm_name` | yes | User |
+| `cpus` | yes | User |
+
+Example:
+```
+itsm_change_ref: CHG-12
+itsm_service_request_ref: REQ-8
+vm_name: server01
+cpus: 4
+```
+
+AAP: {{ demo_platform.aap.gateway_url }}
+
+## Step 3 — Completion in chat
+
+When the workflow finishes, a `[request.complete]` message appears as a **thread reply** under the `[request.submitted]` notification in **#operations**.

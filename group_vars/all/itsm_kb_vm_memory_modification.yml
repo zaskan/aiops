@@ -1,0 +1,6 @@
+---
+itsm_kb_vm_memory_modification_title: Modify VM Memory (ITSM service request + AIOps)
+itsm_kb_vm_memory_modification_tags: >-
+  Keywords: modify vm memory, Modify VM Memory, resize memory, service catalog,
+  service request, AAP workflow, extra vars, CHG, REQ, itsm_change_ref,
+  itsm_service_request_ref, vm_name, mem

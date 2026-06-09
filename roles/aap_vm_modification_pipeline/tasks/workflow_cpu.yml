@@ -1,0 +1,143 @@
+---
+- name: Ensure Modify VM CPUs workflow job template exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    inventory: "{{ aap_vm_modification_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_vm_cpu_modification_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Ensure Register ITSM VM Asset workflow node exists for CPU modification
+  awx.awx.workflow_job_template_node:
+    identifier: register_itsm_vm_asset
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_register_itsm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_register_itsm }}"
+      itsm_change_task_final_ctask_title: "{{ itsm_apache_stack_task_template_register_itsm }}"
+      itsm_change_task_completion_summary_heading: VM CPU modification complete.
+      vm_modification_post_chat_summary: true
+      vm_modification_completion_kind: cpu
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Clear Restart VM workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: restart_vm
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_vm_modification_task_template_restart_vm }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus | default(\"\") }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Ensure Restart VM workflow node links to Register ITSM VM Asset
+  awx.awx.workflow_job_template_node:
+    identifier: restart_vm
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_vm_modification_task_template_restart_vm }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus | default(\"\") }}' }}"
+    success_nodes:
+      - register_itsm_vm_asset
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Clear Sync Infrastructure VMs workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: sync_infrastructure_vms
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Ensure Sync Infrastructure VMs workflow node links to Restart VM
+  awx.awx.workflow_job_template_node:
+    identifier: sync_infrastructure_vms
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
+    success_nodes:
+      - restart_vm
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Clear Patch VM CPU Manifest workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: patch_vm_cpu_manifest
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_vm_cpu_modification_task_template_patch }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+
+- name: Ensure Patch VM CPU Manifest workflow node links to Sync Infrastructure VMs
+  awx.awx.workflow_job_template_node:
+    identifier: patch_vm_cpu_manifest
+    workflow_job_template: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
+    organization: "{{ aap_vm_modification_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_vm_cpu_modification_task_template_patch }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+    success_nodes:
+      - sync_infrastructure_vms
+    state: present
+    controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"

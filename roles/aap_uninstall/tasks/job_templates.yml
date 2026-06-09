@@ -39,6 +39,19 @@
     - "{{ aap_vm_pipeline_jt_sync_vms }}"
     - "{{ aap_vm_pipeline_jt_register_itsm }}"
 
+- name: Remove VM modification pipeline job templates from AAP
+  awx.awx.job_template:
+    name: "{{ item }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  loop:
+    - "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
+    - "{{ aap_vm_memory_modification_pipeline_jt_patch }}"
+    - "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
+
 - name: Remove legacy Deploy Apache App job template from AAP if present
   awx.awx.job_template:
     name: "{{ aap_uninstall_legacy_jt_deploy_apache_app }}"

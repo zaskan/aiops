@@ -9,3 +9,6 @@ itsm_change_task_ctask_title_install_httpd: AAP — Install httpd
 itsm_change_task_ctask_title_deploy_app: AAP — Deploy Apache App Repo
 itsm_change_task_ctask_title_expose_apache: AAP — Expose Apache
 itsm_change_task_ctask_title_start_httpd: AAP — Start httpd
+itsm_change_task_ctask_title_patch_vm_cpu: AAP — Patch VM manifest (CPU)
+itsm_change_task_ctask_title_patch_vm_memory: AAP — Patch VM manifest (Memory)
+itsm_change_task_ctask_title_restart_vm: AAP — Restart VM

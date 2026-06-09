@@ -10,7 +10,7 @@
       - --
       - grep
       - -E
-      - encoding_format|\[:1500\]
+      - encoding_format|\[:1200\]
       - /app/app/services/kb_embeddings.py
   register: itsm_app_embedding_patch_check
   changed_when: false
@@ -22,7 +22,7 @@
   when:
     - itsm_app_vllm_embedding_patch | default(true) | bool
     - (itsm_app_embedding_patch_check.stdout | default('') | regex_search('encoding_format')) is none
-      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1500\\]')) is none
+      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1200\\]')) is none
 
 - name: Rollout restart itsm-app after vLLM embedding patch rebuild
   ansible.builtin.command:
@@ -36,7 +36,7 @@
   when:
     - itsm_app_vllm_embedding_patch | default(true) | bool
     - (itsm_app_embedding_patch_check.stdout | default('') | regex_search('encoding_format')) is none
-      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1500\\]')) is none
+      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1200\\]')) is none
   changed_when: true
 
 - name: Wait for itsm-app rollout after vLLM embedding patch rebuild
@@ -53,4 +53,4 @@
   when:
     - itsm_app_vllm_embedding_patch | default(true) | bool
     - (itsm_app_embedding_patch_check.stdout | default('') | regex_search('encoding_format')) is none
-      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1500\\]')) is none
+      or (itsm_app_embedding_patch_check.stdout | default('') | regex_search('\\[:1200\\]')) is none

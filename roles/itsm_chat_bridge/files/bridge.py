@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Relay itsm-app incident.created webhooks to chat-app inbound webhook format."""
+"""Relay itsm-app incident.created and request.submitted webhooks to chat-app."""
 
 from __future__ import annotations
 
@@ -27,15 +27,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
 
-        if payload.get("event") != "incident.created":
+        event = payload.get("event")
+        if event == "incident.created":
+            incident = payload.get("incident") or {}
+            public_id = incident.get("public_id") or "?"
+            title = incident.get("title") or "Untitled"
+            severity = incident.get("severity") or "medium"
+            message = f"[incident.created] {public_id} — {title} ({severity})"
+        elif event == "request.submitted":
+            request = payload.get("request") or {}
+            public_id = request.get("public_id") or "?"
+            title = request.get("name") or request.get("title") or "Service request"
+            message = f"[request.submitted] {public_id} — {title}"
+        else:
             self._json_response(200, {"ok": True, "skipped": True})
             return
-
-        incident = payload.get("incident") or {}
-        public_id = incident.get("public_id") or "?"
-        title = incident.get("title") or "Untitled"
-        severity = incident.get("severity") or "medium"
-        message = f"[incident.created] {public_id} — {title} ({severity})"
 
         request = urllib.request.Request(
             CHAT_WEBHOOK_URL,

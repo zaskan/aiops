@@ -1,0 +1,23 @@
+---
+- name: Refresh ITSM KB article content via API (triggers upsert when embedding succeeds)
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles/{{ itsm_kb_vm_memory_modification_article_id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    follow_redirects: all
+    body_format: json
+    body:
+      title: "{{ itsm_kb_vm_memory_modification_title }}"
+      description: "{{ itsm_kb_vm_memory_modification_description }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_kb_vm_memory_modification_reindex
+
+- name: Backfill all ITSM KB article embeddings after publish
+  ansible.builtin.include_tasks: reindex_itsm_kb_all.yml

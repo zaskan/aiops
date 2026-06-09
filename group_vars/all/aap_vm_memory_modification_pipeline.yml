@@ -1,0 +1,36 @@
+---
+aap_vm_memory_modification_pipeline_organization: AIOps
+aap_vm_memory_modification_pipeline_validate_certs: false
+aap_vm_memory_modification_pipeline_controller_api_prefix: /api/controller/
+
+aap_vm_memory_modification_pipeline_inventory: AIOps Localhost
+aap_vm_memory_modification_pipeline_project: AIOps Playbooks
+aap_vm_memory_modification_pipeline_workflow: Modify VM Memory
+
+aap_vm_memory_modification_pipeline_jt_patch: Patch VM Memory Manifest
+aap_vm_memory_modification_pipeline_playbook_patch: patch_vm_memory_manifest.yml
+
+aap_vm_memory_modification_pipeline_workflow_survey_spec:
+  name: Modify VM Memory
+  description: Parameters for resizing VM memory
+  spec:
+    - question_name: itsm_change_ref
+      question_description: ITSM change reference (CHG-*)
+      required: true
+      type: text
+      variable: itsm_change_ref
+    - question_name: itsm_service_request_ref
+      question_description: ITSM service request reference (REQ-*)
+      required: false
+      type: text
+      variable: itsm_service_request_ref
+    - question_name: vm_name
+      question_description: Virtual machine name
+      required: true
+      type: text
+      variable: vm_name
+    - question_name: mem
+      question_description: New memory in GiB
+      required: true
+      type: integer
+      variable: mem

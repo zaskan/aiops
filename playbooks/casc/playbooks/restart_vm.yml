@@ -1,0 +1,35 @@
+---
+- name: Restart VM to apply manifest resource changes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Validate VM restart required variables
+      ansible.builtin.assert:
+        that:
+          - vm_name | default('') | trim | length > 0
+        fail_msg: vm_name is required to restart the VM.
+
+    - name: Restart VM via KubeVirt restart subresource
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: restart_vm.yml
+      vars:
+        vm_restart_name: "{{ vm_name }}"
+        vm_restart_expected_cpus: "{{ cpus | default(omit) }}"
+        vm_restart_expected_mem: "{{ mem | default(omit) }}"
+
+    - name: Display VM restart summary
+      ansible.builtin.debug:
+        msg: "Restarted VM {{ vm_name }} in namespace {{ vm_namespace }}"
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

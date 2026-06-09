@@ -1,0 +1,111 @@
+---
+- name: Seed resolved CPUs from extra vars when provided
+  ansible.builtin.set_fact:
+    vm_asset_resolved_cpus: "{{ cpus | int }}"
+  when: cpus is defined and cpus | string | trim | length > 0
+
+- name: Seed resolved memory from extra vars when provided
+  ansible.builtin.set_fact:
+    vm_asset_resolved_mem: "{{ mem | int }}"
+  when: mem is defined and mem | string | trim | length > 0
+
+- name: Load ITSM API credentials for VM asset resource lookup
+  ansible.builtin.include_tasks: load_itsm_credential.yml
+
+- name: GET existing ITSM assets for VM resource lookup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_vm_asset_resources_list
+
+- name: Resolve ITSM VM asset by name
+  ansible.builtin.set_fact:
+    itsm_vm_asset_resources_record: >-
+      {{
+        (
+          itsm_vm_asset_resources_list.json
+          | default([])
+          | selectattr('name', 'equalto', vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Fail when VM asset is missing in ITSM
+  ansible.builtin.fail:
+    msg: >-
+      ITSM asset '{{ vm_name }}' was not found. Register the VM first or verify vm_name.
+  when: itsm_vm_asset_resources_record | default({}) | length == 0
+
+- name: Apply cpus from ITSM asset when not yet resolved
+  ansible.builtin.set_fact:
+    vm_asset_resolved_cpus: "{{ itsm_vm_asset_resources_record.custom_fields.cpus | int }}"
+  when:
+    - vm_asset_resolved_cpus is not defined
+    - itsm_vm_asset_resources_record.custom_fields.cpus is defined
+
+- name: Apply memory from ITSM asset when not yet resolved
+  ansible.builtin.set_fact:
+    vm_asset_resolved_mem: "{{ itsm_vm_asset_resources_record.custom_fields.memory | int }}"
+  when:
+    - vm_asset_resolved_mem is not defined
+    - itsm_vm_asset_resources_record.custom_fields.memory is defined
+
+- name: Load OpenShift API credentials for VM resource fallback
+  ansible.builtin.include_tasks: load_openshift_credential.yml
+  when: vm_asset_resolved_cpus is not defined or vm_asset_resolved_mem is not defined
+
+- name: Look up VirtualMachine for cpus and memory fallback
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachine
+    name: "{{ vm_name }}"
+    namespace: "{{ vm_namespace }}"
+  register: vm_asset_resource_vm_lookup
+  when: vm_asset_resolved_cpus is not defined or vm_asset_resolved_mem is not defined
+
+- name: Apply cpus from VirtualMachine CR when not yet resolved
+  ansible.builtin.set_fact:
+    vm_asset_resolved_cpus: >-
+      {{
+        vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.cpu.cores | int
+      }}
+  when:
+    - vm_asset_resolved_cpus is not defined
+    - vm_asset_resource_vm_lookup.resources | default([]) | length > 0
+
+- name: Apply memory from VirtualMachine CR when not yet resolved
+  ansible.builtin.set_fact:
+    vm_asset_resolved_mem: >-
+      {{
+        vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.resources.requests.memory
+        | default(vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.memory.guest | default(''))
+        | regex_replace('Gi$', '')
+        | int
+      }}
+  when:
+    - vm_asset_resolved_mem is not defined
+    - vm_asset_resource_vm_lookup.resources | default([]) | length > 0
+
+- name: Fail when cpus or mem could not be resolved
+  ansible.builtin.assert:
+    that:
+      - vm_asset_resolved_cpus is defined
+      - vm_asset_resolved_cpus | string | trim | length > 0
+      - vm_asset_resolved_mem is defined
+      - vm_asset_resolved_mem | string | trim | length > 0
+    fail_msg: >-
+      cpus and mem must be provided or discoverable from ITSM asset '{{ vm_name }}'
+      or the cluster VirtualMachine.

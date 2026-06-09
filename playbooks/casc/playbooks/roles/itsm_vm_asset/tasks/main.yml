@@ -4,9 +4,30 @@
     that:
       - vm_name is defined
       - vm_name | length > 0
-      - cpus is defined
-      - mem is defined
-    fail_msg: vm_name, cpus, and mem are required (Provision VM workflow survey).
+    fail_msg: vm_name is required to register the VM asset.
+
+- name: Seed resolved cpus from workflow extra vars when provided
+  ansible.builtin.set_fact:
+    vm_asset_resolved_cpus: "{{ cpus | int }}"
+  when: cpus is defined and cpus | string | trim | length > 0
+
+- name: Seed resolved memory from workflow extra vars when provided
+  ansible.builtin.set_fact:
+    vm_asset_resolved_mem: "{{ mem | int }}"
+  when: mem is defined and mem | string | trim | length > 0
+
+- name: Lookup missing cpus or mem from ITSM VM asset or cluster
+  ansible.builtin.include_tasks: ../common/tasks/lookup_itsm_vm_asset_resources.yml
+  when: >
+    vm_asset_resolved_cpus is not defined
+    or vm_asset_resolved_mem is not defined
+
+- name: Validate cpus and mem are available for asset registration
+  ansible.builtin.assert:
+    that:
+      - vm_asset_resolved_cpus is defined
+      - vm_asset_resolved_mem is defined
+    fail_msg: cpus and mem are required (workflow survey, ITSM asset, or cluster lookup).
 
 - name: Load ITSM API credentials
   ansible.builtin.include_tasks: load_itsm_credential.yml

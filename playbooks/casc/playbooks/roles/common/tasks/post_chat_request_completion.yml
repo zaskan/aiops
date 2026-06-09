@@ -1,0 +1,34 @@
+---
+- name: Build VM modification chat completion summary
+  ansible.builtin.set_fact:
+    vm_modification_chat_summary: >-
+      {{
+        (
+          vm_name | string | trim
+          ~ ' CPUs updated to '
+          ~ (cpus | string)
+          ~ '. '
+          ~ (itsm_change_task_completion_comment | default('') | replace('\n', ' '))
+        )
+        if (vm_modification_completion_kind | default('') == 'cpu')
+        else (
+          vm_name | string | trim
+          ~ ' memory updated to '
+          ~ (mem | string)
+          ~ ' GiB. '
+          ~ (itsm_change_task_completion_comment | default('') | replace('\n', ' '))
+        )
+      }}
+
+- name: Post service request completion as thread reply under request message
+  ansible.builtin.uri:
+    url: "{{ vm_modification_chat_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      body: >-
+        [request.complete] {{ itsm_service_request_ref | string | trim }} —
+        {{ vm_modification_chat_summary }}
+      parent_id: "{{ vm_modification_chat_parent_message_id }}"
+    validate_certs: false
+    status_code: [201]

@@ -21,9 +21,6 @@
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
-- name: Configure ITSM asset types (Virtual Machine, Apache Application)
-  ansible.builtin.include_tasks: configure_itsm_asset_types.yml
-
 - name: Ensure chat-app is installed and healthy
   ansible.builtin.include_tasks: install_chat_app.yml
 
@@ -41,9 +38,6 @@
 
 - name: Configure chat-app for AIOps demo
   ansible.builtin.include_tasks: configure_chat_aiops.yml
-
-- name: Configure itsm-app for AIOps demo
-  ansible.builtin.include_tasks: configure_itsm_aiops.yml
 
 - name: Ensure itsm-agent bot is installed and configured
   ansible.builtin.include_tasks: install_itsm_agent.yml
@@ -70,14 +64,31 @@
   ansible.builtin.include_tasks: configure_itsm_app_rag.yml
   when: itsm_app_rag_enabled | default(true) | bool
 
+# itsm-app stores SQLite on emptyDir; configure_itsm_app_rag may rebuild/restart the pod.
+# Seed ITSM DB content only after the last restart during install.
+- name: Configure itsm-app for AIOps demo
+  ansible.builtin.include_tasks: configure_itsm_aiops.yml
+
+- name: Configure ITSM asset types (Virtual Machine, Apache Application)
+  ansible.builtin.include_tasks: configure_itsm_asset_types.yml
+
 - name: Publish ITSM KB article for VM provisioning workflow
   ansible.builtin.include_tasks: configure_itsm_kb_vm_provisioning.yml
+
+- name: Publish ITSM KB article for VM CPU modification workflow
+  ansible.builtin.include_tasks: configure_itsm_kb_vm_cpu_modification.yml
+
+- name: Publish ITSM KB article for VM memory modification workflow
+  ansible.builtin.include_tasks: configure_itsm_kb_vm_memory_modification.yml
 
 - name: Publish ITSM KB article for Apache alert remediation
   ansible.builtin.include_tasks: configure_itsm_kb_apache_troubleshoot.yml
 
 - name: Configure ITSM Apache Application stack templates
   ansible.builtin.include_tasks: configure_itsm_apache_stack_templates.yml
+
+- name: Configure ITSM VM modification catalog templates
+  ansible.builtin.include_tasks: configure_itsm_vm_modification_templates.yml
 
 - name: Configure AAP Apache httpd deployment workflow
   ansible.builtin.include_role:
@@ -105,3 +116,9 @@
     name: aap_apache_stack_pipeline
   vars:
     aap_apache_stack_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP VM modification workflows
+  ansible.builtin.include_role:
+    name: aap_vm_modification_pipeline
+  vars:
+    aap_vm_modification_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

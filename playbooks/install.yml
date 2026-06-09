@@ -13,7 +13,12 @@
     - ../group_vars/all/aap_httpd_pipeline.yml
     - ../group_vars/all/itsm_assets.yml
     - ../group_vars/all/itsm_kb_vm_provisioning.yml
+    - ../group_vars/all/itsm_kb_vm_cpu_modification.yml
+    - ../group_vars/all/itsm_kb_vm_memory_modification.yml
     - ../group_vars/all/itsm_apache_stack.yml
+    - ../group_vars/all/itsm_vm_modification.yml
+    - ../group_vars/all/aap_vm_cpu_modification_pipeline.yml
+    - ../group_vars/all/aap_vm_memory_modification_pipeline.yml
     - ../group_vars/all/aap_apache_stack_pipeline.yml
     - ../group_vars/all/aap_apache_troubleshoot_pipeline.yml
     - ../group_vars/all/aap_eda_pipeline.yml
