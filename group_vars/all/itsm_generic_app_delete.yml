@@ -1,0 +1,56 @@
+---
+itsm_generic_app_delete_request_template_name: Delete Generic Application Stack
+itsm_generic_app_delete_change_template_name: Delete Generic Application Stack — Standard Change
+
+itsm_generic_app_delete_task_template_delete_probe: AAP — Delete Generic Application HTTP Probe
+itsm_generic_app_delete_task_template_delete_manifest: AAP — Delete VM Manifest
+itsm_generic_app_delete_task_template_delete_itsm_app: AAP — Delete ITSM Generic Application Asset
+itsm_generic_app_delete_task_template_delete_itsm_vm: AAP — Delete ITSM VM Asset
+
+itsm_generic_app_delete_change_task_template_names:
+  - "{{ itsm_generic_app_delete_task_template_delete_probe }}"
+  - "{{ itsm_generic_app_delete_task_template_delete_manifest }}"
+  - "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+  - "{{ itsm_generic_app_delete_task_template_delete_itsm_app }}"
+  - "{{ itsm_generic_app_delete_task_template_delete_itsm_vm }}"
+
+itsm_generic_app_delete_change_template_sync_specs:
+  - name: "{{ itsm_generic_app_delete_change_template_name }}"
+    task_template_names: "{{ itsm_generic_app_delete_change_task_template_names }}"
+
+itsm_task_templates_delete_stack:
+  - name: "{{ itsm_generic_app_delete_task_template_delete_probe }}"
+    title: "{{ itsm_generic_app_delete_task_template_delete_probe }}"
+    description: Remove Generic Application HTTP Probe CR from OpenShift before stack teardown.
+    kb_article_title: "{{ itsm_kb_generic_app_deletion_title }}"
+  - name: "{{ itsm_generic_app_delete_task_template_delete_manifest }}"
+    title: "{{ itsm_generic_app_delete_task_template_delete_manifest }}"
+    description: Delete VM GitOps manifest from Gitea Infrastructure repository.
+    kb_article_title: "{{ itsm_kb_generic_app_deletion_title }}"
+  - name: "{{ itsm_generic_app_delete_task_template_delete_itsm_app }}"
+    title: "{{ itsm_generic_app_delete_task_template_delete_itsm_app }}"
+    description: Delete Generic Application ITSM asset (child of Virtual Machine asset).
+    kb_article_title: "{{ itsm_kb_generic_app_deletion_title }}"
+  - name: "{{ itsm_generic_app_delete_task_template_delete_itsm_vm }}"
+    title: "{{ itsm_generic_app_delete_task_template_delete_itsm_vm }}"
+    description: Delete Virtual Machine ITSM asset and refresh AIOps Infrastructure inventory.
+    kb_article_title: "{{ itsm_kb_generic_app_deletion_title }}"
+
+itsm_change_templates_delete_stack:
+  - name: "{{ itsm_generic_app_delete_change_template_name }}"
+    description: Standard change to deprovision a Generic Application stack (probe, GitOps, ITSM assets).
+    change_type: standard
+    task_template_names: "{{ itsm_generic_app_delete_change_task_template_names }}"
+
+itsm_request_templates_delete_stack:
+  - name: "{{ itsm_generic_app_delete_request_template_name }}"
+    description: Request full teardown of a Generic Application stack for a VM.
+    change_template_name: "{{ itsm_generic_app_delete_change_template_name }}"
+    require_standard_change: false
+    fields:
+      - { field_key: vm_name, label: VM name, field_type: text, required: true }
+
+aap_generic_app_delete_survey_job_extra_vars:
+  vm_name: ""
+
+aap_generic_app_delete_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_generic_app_delete_survey_job_extra_vars) }}"

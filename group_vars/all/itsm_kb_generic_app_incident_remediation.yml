@@ -1,0 +1,4 @@
+---
+itsm_kb_generic_app_incident_remediation_title: Remediate Generic Application down alert (incident-driven stack redeploy)
+itsm_kb_generic_app_incident_remediation_tags: |
+  Keywords: generic application down, incident, INC, remediation, ITSM asset, Remediate Generic Application incident, do not launch workflow directly, MCP job template, do not ask user cpus mem app_repo

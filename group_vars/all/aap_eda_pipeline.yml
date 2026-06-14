@@ -8,20 +8,34 @@ aap_eda_pipeline_scm_branch: main
 aap_eda_pipeline_gitea_scm_use_internal: true
 aap_eda_pipeline_gitea_scm_internal_host: gitea-http.gitea.svc.cluster.local:3000
 
-aap_eda_pipeline_event_stream_name: Apache Alertmanager
-aap_eda_pipeline_event_stream_credential: Apache Alertmanager Basic Auth
+aap_eda_pipeline_event_stream_name: Generic Application Alertmanager
+aap_eda_pipeline_event_stream_credential: Generic Application Alertmanager Basic Auth
 aap_eda_pipeline_event_stream_username: aiops-alertmanager
 aap_eda_pipeline_event_stream_password: "{{ lookup('ansible.builtin.env', 'AAP_EDA_EVENT_STREAM_PASSWORD') | default('aiops-eda-alert-stream-secret', true) }}"
 
 aap_eda_pipeline_controller_credential: AAP Controller Token
-# AAP 2.7 gateway-backed controller API (required for ansible-rulebook run_job_template)
 aap_eda_pipeline_controller_credential_host_suffix: /api/controller/
 aap_eda_pipeline_gitea_credential: Gitea Rulebooks SCM
 
-aap_eda_pipeline_rulebook: apache_alert_incident.yml
-aap_eda_pipeline_activation_name: Apache Alert Incident Activation
+aap_eda_pipeline_rulebook: generic_app_alert_incident.yml
+aap_eda_pipeline_activation_name: Generic Application Alert Incident Activation
 aap_eda_pipeline_decision_environment: AIOps Decision Environment
 aap_eda_pipeline_decision_environment_image: registry.redhat.io/ansible-automation-platform-27/de-minimal-rhel9:latest
 aap_eda_pipeline_rulebook_source_name: listen for alerts
 
 aap_eda_pipeline_event_stream_forward_events: true
+
+aap_eda_pipeline_controller_api_prefix: /api/controller/
+aap_eda_pipeline_incident_jt_organization: AIOps
+aap_eda_pipeline_incident_jt_project: AIOps Playbooks
+aap_eda_pipeline_incident_jt_inventory: AIOps Infrastructure
+aap_eda_pipeline_jt_create_incident: Create Generic Application Alert Incident
+aap_eda_pipeline_playbook_create_incident: create_generic_app_alert_incident.yml
+aap_eda_pipeline_incident_extra_vars:
+  vm_name: ""
+  alertname: ""
+  probe_instance: ""
+  alert_summary: ""
+aap_eda_pipeline_incident_credential_itsm: ITSM App
+aap_eda_pipeline_incident_credential_aap: AAP Gateway
+aap_eda_pipeline_incident_credential_openshift: OpenShift Cluster

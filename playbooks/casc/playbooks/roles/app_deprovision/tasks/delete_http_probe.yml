@@ -1,0 +1,24 @@
+---
+- name: Load OpenShift credentials for HTTP Probe deletion
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+- name: Silence Generic Application Alertmanager alerts before probe removal
+  ansible.builtin.include_tasks: ../common/tasks/silence_generic_app_alertmanager.yml
+
+- name: Delete Generic Application HTTP Probe from cluster
+  kubernetes.core.k8s:
+    state: absent
+    api_version: monitoring.coreos.com/v1
+    kind: Probe
+    name: "{{ app_deprovision_probe_name }}"
+    namespace: "{{ vm_namespace }}"
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+  register: app_deprovision_probe_delete
+
+- name: Display HTTP Probe deletion summary
+  ansible.builtin.debug:
+    msg: >-
+      HTTP Probe {{ app_deprovision_probe_name }} in {{ vm_namespace }}:
+      {{ 'removed or already absent' if app_deprovision_probe_delete is changed or not app_deprovision_probe_delete.failed else 'delete attempted' }}

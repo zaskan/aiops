@@ -1,0 +1,15 @@
+---
+- name: Normalize application repository input to Gitea repository name
+  ansible.builtin.set_fact:
+    app_repo_name: >-
+      {{
+        (
+          app_repo | default('') | string | trim
+          | regex_replace('^https?://', '')
+          | regex_replace('\.git$', '')
+          | trim
+          | split('/')
+          | last
+          | trim
+        )
+      }}

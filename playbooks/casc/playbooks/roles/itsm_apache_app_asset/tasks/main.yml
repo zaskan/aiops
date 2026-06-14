@@ -22,22 +22,17 @@
       vm_name (or target_host), app_repo, and itsm_app_git_commit are required to register the Apache
       Application ITSM asset (run after Deploy Apache App Repo completes the git clone).
 
+- name: Resolve public Gitea repository URL for ITSM asset storage
+  ansible.builtin.include_tasks: ../common/tasks/resolve_app_repo_public_url.yml
+
 - name: Normalize Apache Application repository fields
   ansible.builtin.set_fact:
-    itsm_apache_app_repo_record: "{{ app_repo | string | trim }}"
+    itsm_apache_app_repo_record: "{{ app_repo_public_url }}"
     itsm_apache_app_branch_record: "{{ app_branch | default('main') | string | trim }}"
 
 - name: Derive Apache Application asset naming from repository
   ansible.builtin.set_fact:
-    itsm_apache_app_repo_short: >-
-      {{
-        itsm_apache_app_repo_record
-        | regex_replace('^https?://', '')
-        | regex_replace('\.git$', '')
-        | split('/')
-        | last
-        | trim
-      }}
+    itsm_apache_app_repo_short: "{{ app_repo_name }}"
 
 - name: Set Apache Application ITSM asset name and hostname
   ansible.builtin.set_fact:

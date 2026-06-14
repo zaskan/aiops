@@ -1,62 +1,52 @@
 ---
-- name: Remove Apache httpd pipeline job templates from AAP
+- name: Remove Generic Application deployment pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
-    organization: "{{ aap_uninstall_organization }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop:
-    - "{{ aap_httpd_pipeline_jt_install }}"
-    - "{{ aap_httpd_pipeline_jt_deploy }}"
-    - "{{ aap_httpd_pipeline_jt_expose }}"
-    - "{{ aap_httpd_pipeline_jt_register_itsm }}"
-    - "{{ aap_httpd_pipeline_jt_start }}"
+    - "{{ aap_generic_app_pipeline_jt_install }}"
+    - "{{ aap_generic_app_pipeline_jt_deploy }}"
+    - "{{ aap_generic_app_pipeline_jt_expose }}"
+    - "{{ aap_generic_app_pipeline_jt_register_itsm }}"
+    - "{{ aap_generic_app_pipeline_jt_start }}"
 
-- name: Remove Apache troubleshoot pipeline job templates from AAP
+- name: Remove Generic Application alert incident job template from AAP
+  awx.awx.job_template:
+    name: "{{ aap_eda_pipeline_jt_create_incident }}"
+    organization: "{{ aap_eda_pipeline_incident_jt_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove Generic Application stack pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
-    organization: "{{ aap_uninstall_organization }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop:
-    - "{{ aap_apache_troubleshoot_pipeline_jt_create_incident }}"
-    - "{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}"
+    - "{{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+    - "{{ aap_generic_app_stack_pipeline_jt_resolve_vars }}"
+    - "{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}"
 
-- name: Remove VM pipeline job templates from AAP
+- name: Remove Generic Application stack delete pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
-    organization: "{{ aap_uninstall_organization }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop:
-    - "{{ aap_vm_pipeline_jt_push_vm }}"
-    - "{{ aap_vm_pipeline_jt_sync_vms }}"
-    - "{{ aap_vm_pipeline_jt_register_itsm }}"
-
-- name: Remove VM modification pipeline job templates from AAP
-  awx.awx.job_template:
-    name: "{{ item }}"
-    organization: "{{ aap_uninstall_organization }}"
-    state: absent
-    controller_host: "{{ aap_uninstall_controller_host }}"
-    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
-    validate_certs: "{{ aap_uninstall_validate_certs }}"
-  loop:
-    - "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
-    - "{{ aap_vm_memory_modification_pipeline_jt_patch }}"
-    - "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
-
-- name: Remove legacy Deploy Apache App job template from AAP if present
-  awx.awx.job_template:
-    name: "{{ aap_uninstall_legacy_jt_deploy_apache_app }}"
-    organization: "{{ aap_uninstall_organization }}"
-    state: absent
-    controller_host: "{{ aap_uninstall_controller_host }}"
-    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
-    validate_certs: "{{ aap_uninstall_validate_certs }}"
+    - "{{ aap_generic_app_delete_pipeline_jt_delete_probe }}"
+    - "{{ aap_generic_app_delete_pipeline_jt_delete_manifest }}"
+    - "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_app }}"
+    - "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_vm }}"

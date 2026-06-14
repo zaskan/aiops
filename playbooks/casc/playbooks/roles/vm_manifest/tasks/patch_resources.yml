@@ -86,40 +86,81 @@
   ansible.builtin.set_fact:
     vm_manifest_patch_content: "{{ vm_manifest_patch_slurp.content | b64decode }}"
 
-- name: Fail when domain.cpu.cores is missing from VM manifest
+- name: Fail when domain.cpu.sockets or domain.cpu.cores is missing from VM manifest
   ansible.builtin.fail:
     msg: >-
-      Could not find domain.cpu.cores in {{ vm_name }}.yaml. The manifest layout may have changed.
+      Could not find domain.cpu.sockets or domain.cpu.cores in {{ vm_name }}.yaml.
+      The manifest layout may have changed.
   when:
     - vm_manifest_patch_update_cpus | default(false) | bool
+    - not (vm_manifest_patch_content is search('(?m)^\\s+sockets:\\s*\\d+\\s*$'))
     - not (vm_manifest_patch_content is search('(?m)^\\s+cores:\\s*\\d+\\s*$'))
 
-- name: Fail when domain.resources.requests.memory is missing from VM manifest
+- name: Fail when domain memory guest or requests.memory is missing from VM manifest
   ansible.builtin.fail:
     msg: >-
-      Could not find domain.resources.requests.memory in {{ vm_name }}.yaml.
+      Could not find domain.memory.guest or domain.resources.requests.memory in {{ vm_name }}.yaml.
       The manifest layout may have changed.
   when:
     - vm_manifest_patch_update_mem | default(false) | bool
+    - not (vm_manifest_patch_content is search('(?m)^\\s+guest:\\s*[\\d.]+Gi\\s*$'))
     - not (vm_manifest_patch_content is search('(?m)^\\s+memory:\\s*[\\d.]+Gi\\s*$'))
 
-- name: Patch CPU cores in VM manifest content
+- name: Detect CPU hotplug sockets field in VM manifest
   ansible.builtin.set_fact:
-    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)cores:\\s*\\d+\\s*$', '\\g<1>cores: ' ~ (cpus | string)) }}"
+    vm_manifest_patch_has_cpu_sockets: "{{ vm_manifest_patch_content is search('(?m)^\\s+sockets:\\s*\\d+\\s*$') }}"
   when: vm_manifest_patch_update_cpus | default(false) | bool
 
-- name: Patch memory request in VM manifest content
+- name: Patch CPU sockets in VM manifest content for live hotplug
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)sockets:\\s*\\d+\\s*$', '\\g<1>sockets: ' ~ (cpus | string)) }}"
+  when:
+    - vm_manifest_patch_update_cpus | default(false) | bool
+    - vm_manifest_patch_has_cpu_sockets | default(false) | bool
+
+- name: Patch legacy CPU cores in VM manifest content when sockets are absent
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)cores:\\s*\\d+\\s*$', '\\g<1>cores: ' ~ (cpus | string)) }}"
+  when:
+    - vm_manifest_patch_update_cpus | default(false) | bool
+    - not (vm_manifest_patch_has_cpu_sockets | default(false) | bool)
+
+- name: Patch domain.memory.guest in VM manifest content for live memory hotplug
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)guest:\\s*[\\d.]+Gi\\s*$', '\\g<1>guest: ' ~ (mem | string) ~ 'Gi') }}"
+  when:
+    - vm_manifest_patch_update_mem | default(false) | bool
+    - vm_manifest_patch_content is search('(?m)^\\s+guest:\\s*[\\d.]+Gi\\s*$')
+
+- name: Patch domain.resources.requests.memory in VM manifest content
   ansible.builtin.set_fact:
     vm_manifest_patch_content: "{{ vm_manifest_patch_content | regex_replace('(?m)^(\\s+)memory:\\s*[\\d.]+Gi\\s*$', '\\g<1>memory: ' ~ (mem | string) ~ 'Gi') }}"
   when: vm_manifest_patch_update_mem | default(false) | bool
 
-- name: Verify patched VM manifest still has valid cores and memory lines
+- name: Bump domain.memory.maxGuest when new memory exceeds current ceiling
+  ansible.builtin.set_fact:
+    vm_manifest_patch_content: >-
+      {{
+        vm_manifest_patch_content
+        | regex_replace(
+            '(?m)^(\\s+)maxGuest:\\s*[\\d.]+Gi\\s*$',
+            '\\g<1>maxGuest: ' ~ ([(mem | int) * 2, 8] | max | string) ~ 'Gi'
+          )
+      }}
+  when:
+    - vm_manifest_patch_update_mem | default(false) | bool
+    - vm_manifest_patch_content is search('(?m)^\\s+maxGuest:\\s*[\\d.]+Gi\\s*$')
+
+- name: Verify patched VM manifest still has valid CPU and memory lines
   ansible.builtin.assert:
     that:
       - >-
         not (vm_manifest_patch_update_cpus | default(false) | bool)
         or (
           vm_manifest_patch_content is search(
+            ('(?m)^\\s+sockets:\\s*' ~ (cpus | string) ~ '\\s*$')
+          )
+          or vm_manifest_patch_content is search(
             ('(?m)^\\s+cores:\\s*' ~ (cpus | string) ~ '\\s*$')
           )
         )

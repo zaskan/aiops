@@ -1,0 +1,28 @@
+---
+- name: Remove legacy HTTP Probe document from VM manifest in Git when present
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import pathlib
+    import yaml
+
+    path = pathlib.Path("{{ apache_exposure_manifest_path }}")
+    docs = list(yaml.safe_load_all(path.read_text()))
+    filtered = [
+        doc for doc in docs
+        if not (
+            isinstance(doc, dict)
+            and doc.get("kind") == "Probe"
+            and doc.get("metadata", {}).get("name") == "{{ apache_exposure_vm_name }}-http-probe"
+        )
+    ]
+    if len(filtered) == len(docs):
+        raise SystemExit(0)
+    with path.open("w") as handle:
+        yaml.safe_dump_all(filtered, handle, sort_keys=False)
+    PY
+  args:
+    chdir: "{{ apache_exposure_workdir }}/repo"
+  register: apache_exposure_probe_git_removed
+  changed_when: apache_exposure_probe_git_removed.rc == 0
+  failed_when: false

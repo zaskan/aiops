@@ -23,7 +23,7 @@
     mem: "{{ vm_asset_resolved_mem }}"
   when: vm_asset_resolved_mem is defined
 
-- name: Patch VM manifest CPU cores in Gitea Infrastructure
+- name: Patch VM manifest CPU sockets in Gitea Infrastructure
   ansible.builtin.include_tasks: patch_resources.yml
   vars:
     vm_manifest_patch_update_cpus: true

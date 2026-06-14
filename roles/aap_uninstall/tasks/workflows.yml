@@ -1,44 +1,26 @@
 ---
-- name: Remove Deploy Apache Application Stack master workflow from AAP
+- name: Remove Deploy Generic Application Stack master workflow from AAP
   awx.awx.workflow_job_template:
-    name: "{{ aap_apache_stack_pipeline_workflow }}"
-    organization: "{{ aap_uninstall_organization }}"
+    name: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
 
-- name: Remove Deploy Apache App workflow job template from AAP
+- name: Remove Deploy Generic Application workflow job template from AAP
   awx.awx.workflow_job_template:
-    name: "{{ aap_httpd_pipeline_workflow }}"
-    organization: "{{ aap_uninstall_organization }}"
+    name: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
 
-- name: Remove Provision VM workflow job template from AAP
+- name: Remove Delete Generic Application Stack workflow from AAP
   awx.awx.workflow_job_template:
-    name: "{{ aap_vm_pipeline_workflow }}"
-    organization: "{{ aap_uninstall_organization }}"
-    state: absent
-    controller_host: "{{ aap_uninstall_controller_host }}"
-    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
-    validate_certs: "{{ aap_uninstall_validate_certs }}"
-
-- name: Remove Modify VM CPUs workflow job template from AAP
-  awx.awx.workflow_job_template:
-    name: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
-    organization: "{{ aap_uninstall_organization }}"
-    state: absent
-    controller_host: "{{ aap_uninstall_controller_host }}"
-    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
-    validate_certs: "{{ aap_uninstall_validate_certs }}"
-
-- name: Remove Modify VM Memory workflow job template from AAP
-  awx.awx.workflow_job_template:
-    name: "{{ aap_vm_memory_modification_pipeline_workflow }}"
-    organization: "{{ aap_uninstall_organization }}"
+    name: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"

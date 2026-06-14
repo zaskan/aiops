@@ -1,0 +1,51 @@
+---
+- name: Resolve user-workload Alertmanager pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ openshift_generic_app_monitoring_uwm_alertmanager_namespace }}"
+    label_selectors:
+      - app.kubernetes.io/name=alertmanager
+      - app.kubernetes.io/instance=user-workload
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+  register: generic_app_alert_am_pods
+
+- name: Fail when user-workload Alertmanager pod was not found
+  ansible.builtin.fail:
+    msg: >-
+      No Alertmanager pod found in {{ openshift_generic_app_monitoring_uwm_alertmanager_namespace }}.
+  when: generic_app_alert_am_pods.resources | default([]) | length == 0
+
+- name: Set user-workload Alertmanager pod fact
+  ansible.builtin.set_fact:
+    generic_app_alert_am_pod_name: "{{ generic_app_alert_am_pods.resources[0].metadata.name }}"
+
+- name: Create Alertmanager silence for Generic Application delete via amtool
+  kubernetes.core.k8s_exec:
+    namespace: "{{ openshift_generic_app_monitoring_uwm_alertmanager_namespace }}"
+    pod: "{{ generic_app_alert_am_pod_name }}"
+    container: "{{ openshift_generic_app_monitoring_uwm_alertmanager_container }}"
+    command:
+      - amtool
+      - --alertmanager.url=http://127.0.0.1:9093
+      - silence
+      - add
+      - "alertname={{ openshift_generic_app_monitoring_alert_name | default('GenericApplicationDown') }}"
+      - "vm_name={{ vm_name | string | trim }}"
+      - "--duration={{ openshift_generic_app_monitoring_delete_silence_minutes | default(5) | int }}m"
+      - "--author=aiops-generic-app-delete"
+      - "--comment=Suppress alerts during Generic Application stack delete for {{ vm_name | string | trim }}"
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+  register: generic_app_alert_silence_create
+  changed_when: generic_app_alert_silence_create.rc == 0
+
+- name: Display Alertmanager silence summary
+  ansible.builtin.debug:
+    msg: >-
+      Alertmanager silence {{ generic_app_alert_silence_create.stdout | default('') | trim }}
+      active for {{ openshift_generic_app_monitoring_delete_silence_minutes | default(5) }}m
+      on vm_name {{ vm_name | string | trim }}.

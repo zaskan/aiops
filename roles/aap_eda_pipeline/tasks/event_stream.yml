@@ -1,5 +1,5 @@
 ---
-- name: Ensure Apache Alertmanager event stream exists in EDA
+- name: Ensure Generic Application Alertmanager event stream exists in EDA
   ansible.eda.event_stream:
     name: "{{ aap_eda_pipeline_event_stream_name }}"
     organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -10,7 +10,7 @@
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
 
-- name: Read Apache Alertmanager event stream details
+- name: Read Generic Application Alertmanager event stream details
   ansible.eda.event_stream_info:
     name: "{{ aap_eda_pipeline_event_stream_name }}"
     controller_host: "{{ aap_eda_pipeline_controller_host }}"

@@ -1,0 +1,127 @@
+---
+- name: Remediate Generic Application incident (resolve ITSM assets and launch stack workflow)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Validate incident remediation extra vars
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+          - itsm_incident_ref is defined
+          - itsm_incident_ref | string | trim | length > 0
+        fail_msg: >-
+          vm_name and itsm_incident_ref are required for incident remediation.
+          Launch job template '{{ aap_generic_app_stack_pipeline_jt_remediate_incident | default("Remediate Generic Application incident") }}'
+          with those two extra vars only.
+
+    - name: Resolve stack extra vars from ITSM Generic Application and VM assets
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_stack_extra_vars_from_assets.yml
+
+    - name: Build Deploy Generic Application Stack workflow launch extra vars
+      ansible.builtin.set_fact:
+        generic_app_stack_workflow_launch_vars:
+          vm_name: "{{ generic_app_stack_extra_vars.vm_name | string | trim }}"
+          app_repo: "{{ generic_app_stack_extra_vars.app_repo | string | trim }}"
+          app_branch: "{{ generic_app_stack_extra_vars.app_branch | string | trim }}"
+          app_packages: "{{ generic_app_stack_extra_vars.app_packages | string | trim }}"
+          app_clone_path: "{{ generic_app_stack_extra_vars.app_clone_path | string | trim }}"
+          app_service: "{{ generic_app_stack_extra_vars.app_service | string | trim }}"
+          itsm_incident_ref: "{{ itsm_incident_ref | string | trim }}"
+        generic_app_stack_workflow_launch_cpus: "{{ generic_app_stack_extra_vars.cpus | int }}"
+        generic_app_stack_workflow_launch_mem: "{{ generic_app_stack_extra_vars.mem | int }}"
+
+    - name: Load AAP controller credentials for workflow launch
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_aap_controller_credential.yml
+
+    - name: Obtain AAP gateway OAuth token for workflow launch
+      ansible.builtin.uri:
+        url: "{{ aap_controller_host }}/api/gateway/v1/tokens/"
+        method: POST
+        user: "{{ aap_controller_username }}"
+        password: "{{ aap_controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ aap_validate_certs | default(false) }}"
+        body_format: json
+        body:
+          description: remediate-generic-app-incident
+          scope: write
+        status_code: 201
+      register: generic_app_incident_remediation_gateway_token
+      no_log: true
+
+    - name: Look up Deploy Generic Application Stack workflow job template id
+      ansible.builtin.uri:
+        url: >-
+          {{ aap_controller_host | regex_replace('/$', '') }}/api/controller/v2/workflow_job_templates/?name={{
+          aap_generic_app_stack_pipeline_workflow | default('Deploy Generic Application Stack') | urlencode
+          }}&organization__name={{ aap_generic_app_stack_pipeline_organization | default('AIOps') | urlencode }}
+        method: GET
+        headers:
+          Authorization: "Bearer {{ generic_app_incident_remediation_gateway_token.json.token }}"
+        validate_certs: "{{ aap_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [200]
+      register: generic_app_incident_remediation_workflow_lookup
+
+    - name: Resolve workflow job template id for stack launch
+      ansible.builtin.set_fact:
+        generic_app_incident_remediation_workflow_jt_id: >-
+          {{
+            (
+              generic_app_incident_remediation_workflow_lookup.json.results
+              | default([])
+              | first
+              | default({})
+            ).id | default(none)
+          }}
+
+    - name: Fail when Deploy Generic Application Stack workflow was not found
+      ansible.builtin.fail:
+        msg: >-
+          Workflow job template '{{ aap_generic_app_stack_pipeline_workflow | default("Deploy Generic Application Stack") }}'
+          was not found in org {{ aap_generic_app_stack_pipeline_organization | default("AIOps") }}.
+      when: generic_app_incident_remediation_workflow_jt_id is none
+
+    - name: Launch Deploy Generic Application Stack workflow for incident remediation
+      ansible.builtin.uri:
+        url: >-
+          {{ aap_controller_host | regex_replace('/$', '') }}/api/controller/v2/workflow_job_templates/{{
+          generic_app_incident_remediation_workflow_jt_id }}/launch/
+        method: POST
+        headers:
+          Authorization: "Bearer {{ generic_app_incident_remediation_gateway_token.json.token }}"
+          Content-Type: application/json
+        body_format: json
+        body:
+          extra_vars: >-
+            {{
+              generic_app_stack_workflow_launch_vars
+              | combine({
+                  'cpus': generic_app_stack_workflow_launch_cpus | int,
+                  'mem': generic_app_stack_workflow_launch_mem | int
+                })
+            }}
+        validate_certs: "{{ aap_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [201]
+      register: generic_app_incident_remediation_workflow_launch
+
+    - name: Display incident remediation workflow launch summary
+      ansible.builtin.debug:
+        msg:
+          - >-
+            Launched {{ aap_generic_app_stack_pipeline_workflow | default('Deploy Generic Application Stack') }}
+            for incident {{ itsm_incident_ref | string | trim }} on {{ vm_name | string | trim }}.
+          - >-
+            Workflow job id: {{
+              generic_app_incident_remediation_workflow_launch.json.id
+              | default('unknown')
+            }}
+          - "Stack extra vars resolved from ITSM assets (not user input)."

@@ -1,0 +1,29 @@
+---
+- name: Configure ITSM Generic Application delete templates
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_generic_app_delete.yml
+    - ../../group_vars/all/itsm_generic_app_stack.yml
+    - ../../group_vars/all/itsm_kb_generic_app_deletion.yml
+    - ../../group_vars/all/demo_platform.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    demo_platform_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+  tasks:
+    - name: Check demo platform facts artifact exists
+      ansible.builtin.stat:
+        path: "{{ demo_platform_artifacts_file }}"
+      register: demo_platform_artifacts_stat
+
+    - name: Fail when demo platform facts artifact is missing
+      ansible.builtin.fail:
+        msg: >-
+          artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml first
+          to generate platform facts.
+      when: not demo_platform_artifacts_stat.stat.exists
+
+    - name: Configure ITSM Generic Application delete templates
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: configure_itsm_generic_app_delete_templates.yml

@@ -1,0 +1,43 @@
+---
+- name: Load ITSM API credentials for Generic Application asset deletion
+  ansible.builtin.include_tasks: load_itsm_credential.yml
+
+- name: Lookup Generic Application ITSM asset for VM
+  ansible.builtin.include_tasks: ../../common/tasks/lookup_generic_app_asset.yml
+  vars:
+    generic_app_asset_lookup_fail_if_missing: false
+
+- name: Skip Generic Application asset deletion when asset was not found
+  ansible.builtin.debug:
+    msg: >-
+      No ITSM Generic Application asset found for vm_name '{{ vm_name | string | trim }}';
+      skipping asset delete.
+  when: generic_app_itsm_asset.id is not defined
+
+- name: Clear ITSM incident references to Generic Application asset
+  ansible.builtin.include_tasks: ../../common/tasks/clear_itsm_asset_incident_references.yml
+  vars:
+    itsm_asset_id: "{{ generic_app_itsm_asset.id }}"
+  when: generic_app_itsm_asset.id is defined
+
+- name: Delete Generic Application ITSM asset
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{ generic_app_itsm_asset.id }}"
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    status_code: [204, 404]
+  register: itsm_generic_app_asset_delete
+  when: generic_app_itsm_asset.id is defined
+
+- name: Display Generic Application ITSM asset deletion summary
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'Deleted ITSM Generic Application asset '
+        ~ (generic_app_itsm_asset.name | default(generic_app_itsm_asset.id))
+        if generic_app_itsm_asset.id is defined
+        else 'Generic Application ITSM asset already absent for ' ~ (vm_name | string | trim)
+      }}

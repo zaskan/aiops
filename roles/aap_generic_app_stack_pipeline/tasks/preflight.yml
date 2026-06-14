@@ -1,0 +1,37 @@
+---
+- name: Resolve demo platform facts artifact path
+  ansible.builtin.set_fact:
+    aap_generic_app_stack_pipeline_artifact_file: "{{ aap_generic_app_stack_pipeline_artifacts_file }}"
+
+- name: Check demo platform facts artifact exists
+  ansible.builtin.stat:
+    path: "{{ aap_generic_app_stack_pipeline_artifact_file }}"
+  register: aap_generic_app_stack_pipeline_artifact_stat
+
+- name: Fail when demo platform facts artifact is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ aap_generic_app_stack_pipeline_artifact_file }} not found. Run playbooks/install.yml first.
+  when: not aap_generic_app_stack_pipeline_artifact_stat.stat.exists
+
+- name: Load demo platform facts from artifact
+  ansible.builtin.include_vars:
+    file: "{{ aap_generic_app_stack_pipeline_artifact_file }}"
+
+- name: Set AAP controller connection facts from artifact
+  ansible.builtin.set_fact:
+    aap_generic_app_stack_pipeline_controller_host: "{{ demo_platform.aap.gateway_url }}"
+    aap_generic_app_stack_pipeline_controller_username: "{{ demo_platform.aap.username }}"
+    aap_generic_app_stack_pipeline_controller_password: "{{ demo_platform.aap.password }}"
+  no_log: true
+
+- name: Verify AAP Controller API responds
+  ansible.builtin.uri:
+    url: "{{ aap_generic_app_stack_pipeline_controller_host }}/api/controller/v2/ping/"
+    method: GET
+    user: "{{ aap_generic_app_stack_pipeline_controller_username }}"
+    password: "{{ aap_generic_app_stack_pipeline_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+    status_code: 200
+  no_log: true

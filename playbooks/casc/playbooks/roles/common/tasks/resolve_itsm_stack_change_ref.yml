@@ -1,0 +1,111 @@
+---
+- name: Skip ITSM change ref lookup when change ref is already set
+  ansible.builtin.set_fact:
+    itsm_change_ref_resolved: >-
+      {{ itsm_change_ref is defined and itsm_change_ref | string | trim | length > 0 }}
+  when: itsm_change_ref_resolved is not defined
+
+- name: Resolve ITSM change ref from service request when available
+  when:
+    - not itsm_change_ref_resolved | bool
+    - itsm_service_request_ref is defined
+    - itsm_service_request_ref | string | trim | length > 0
+  block:
+    - name: GET ITSM service request detail for linked change
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+          itsm_service_request_ref | urlencode }}
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: itsm_stack_change_ref_request_detail
+
+    - name: Adopt ITSM change ref from service request
+      ansible.builtin.set_fact:
+        itsm_change_ref: >-
+          {{
+            (
+              itsm_stack_change_ref_request_detail.json.ritms
+              | default([])
+              | map(attribute='change_public_id')
+              | reject('equalto', none)
+              | list
+              | first
+              | default('', true)
+            )
+            | string
+            | trim
+          }}
+        itsm_change_ref_resolved: >-
+          {{
+            (
+              (
+                itsm_stack_change_ref_request_detail.json.ritms
+                | default([])
+                | map(attribute='change_public_id')
+                | reject('equalto', none)
+                | list
+                | first
+                | default('', true)
+              )
+              | string
+              | trim
+              | length
+            ) > 0
+          }}
+
+- name: Resolve implementing ITSM change ref by vm_name when refs are still absent
+  when:
+    - not itsm_change_ref_resolved | bool
+    - vm_name is defined
+    - vm_name | string | trim | length > 0
+  block:
+    - name: GET implementing ITSM changes for stack change ref fallback
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/changes"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: itsm_stack_change_ref_changes_list
+
+    - name: Adopt implementing ITSM change ref matching vm_name
+      ansible.builtin.set_fact:
+        itsm_change_ref: >-
+          {{
+            (
+              itsm_stack_change_ref_changes_list.json
+              | default([])
+              | selectattr('status', 'equalto', 'implementing')
+              | selectattr('risk_assessment', 'search', 'vm_name=' ~ (vm_name | string | trim | regex_escape))
+              | list
+              | first
+              | default({}, true)
+            ).public_id | default('', true) | string | trim
+          }}
+        itsm_change_ref_resolved: >-
+          {{
+            (
+              (
+                itsm_stack_change_ref_changes_list.json
+                | default([])
+                | selectattr('status', 'equalto', 'implementing')
+                | selectattr('risk_assessment', 'search', 'vm_name=' ~ (vm_name | string | trim | regex_escape))
+                | list
+                | first
+                | default({}, true)
+              ).public_id | default('', true) | string | trim | length
+            ) > 0
+          }}

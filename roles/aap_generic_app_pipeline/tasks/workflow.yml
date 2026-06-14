@@ -1,0 +1,176 @@
+---
+- name: Ensure Deploy Generic Application workflow job template exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    inventory: "{{ aap_generic_app_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_generic_app_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars | combine(aap_generic_app_survey_job_extra_vars) }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Ensure Start application service workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: start_application_service
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_start }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_start_service }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Ensure Register ITSM Generic Application Asset workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: register_itsm_generic_app_asset
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_register_itsm }}"
+    extra_data:
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes:
+      - start_application_service
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Ensure Expose application workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: expose_application
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_expose }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_expose_app }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes:
+      - register_itsm_generic_app_asset
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Clear Deploy application repository workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: deploy_generic_app
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_deploy }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_deploy_app }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Clear Install application packages workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: install_app_packages
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_install }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_install_packages }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Ensure Deploy application repository workflow node links to Expose application
+  awx.awx.workflow_job_template_node:
+    identifier: deploy_generic_app
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_deploy }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_deploy_app }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes:
+      - expose_application
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"
+
+- name: Ensure Install application packages workflow node links to Deploy application repository
+  awx.awx.workflow_job_template_node:
+    identifier: install_app_packages
+    workflow_job_template: "{{ aap_generic_app_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_pipeline_jt_install }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_install_packages }}"
+      target_host: "{{ '{{ vm_name | default(target_host) }}' }}"
+      vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes:
+      - deploy_generic_app
+    state: present
+    controller_host: "{{ aap_generic_app_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_pipeline_validate_certs }}"

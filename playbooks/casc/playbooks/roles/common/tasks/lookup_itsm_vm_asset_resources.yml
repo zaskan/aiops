@@ -80,7 +80,9 @@
   ansible.builtin.set_fact:
     vm_asset_resolved_cpus: >-
       {{
-        vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.cpu.cores | int
+        vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.cpu.sockets
+        | default(vm_asset_resource_vm_lookup.resources[0].spec.template.spec.domain.cpu.cores)
+        | int
       }}
   when:
     - vm_asset_resolved_cpus is not defined

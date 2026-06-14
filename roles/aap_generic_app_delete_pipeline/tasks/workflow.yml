@@ -1,0 +1,121 @@
+---
+- name: Ensure Delete Generic Application Stack workflow job template exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    inventory: "{{ aap_generic_app_delete_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_generic_app_delete_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars | combine(aap_generic_app_delete_survey_job_extra_vars) }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Ensure Delete ITSM VM Asset workflow node exists for stack delete
+  awx.awx.workflow_job_template_node:
+    identifier: delete_itsm_vm_asset
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_vm }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_delete_task_template_delete_itsm_vm }}"
+      itsm_change_task_final_ctask_title: "{{ itsm_generic_app_delete_task_template_delete_itsm_vm }}"
+      itsm_change_task_completion_summary_heading: Generic Application stack delete complete.
+      generic_app_delete_post_chat_summary: true
+      vm_name: "{{ '{{ vm_name }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Ensure Delete ITSM Generic Application Asset workflow node links to Delete ITSM VM Asset
+  awx.awx.workflow_job_template_node:
+    identifier: delete_itsm_generic_app_asset
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_app }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_delete_task_template_delete_itsm_app }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+    success_nodes:
+      - delete_itsm_vm_asset
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Clear Sync Infrastructure VMs workflow node edges before re-linking for stack delete
+  awx.awx.workflow_job_template_node:
+    identifier: sync_infrastructure_vms
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Ensure Sync Infrastructure VMs workflow node links to Delete ITSM Generic Application Asset
+  awx.awx.workflow_job_template_node:
+    identifier: sync_infrastructure_vms
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_vm_pipeline_jt_sync_vms }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+    success_nodes:
+      - delete_itsm_generic_app_asset
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Ensure Delete VM Manifest workflow node links to Sync Infrastructure VMs
+  awx.awx.workflow_job_template_node:
+    identifier: delete_vm_manifest
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_delete_pipeline_jt_delete_manifest }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_delete_task_template_delete_manifest }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+    success_nodes:
+      - sync_infrastructure_vms
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+
+- name: Ensure Delete Generic Application HTTP Probe workflow node links to Delete VM Manifest
+  awx.awx.workflow_job_template_node:
+    identifier: delete_generic_app_http_probe
+    workflow_job_template: "{{ aap_generic_app_delete_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_delete_pipeline_jt_delete_probe }}"
+    extra_data:
+      itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
+      itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_delete_task_template_delete_probe }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+    success_nodes:
+      - delete_vm_manifest
+    state: present
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"

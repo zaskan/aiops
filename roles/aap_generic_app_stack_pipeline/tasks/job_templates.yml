@@ -1,0 +1,75 @@
+---
+- name: Sync AIOps Playbooks project before creating stack resolver job template
+  awx.awx.project_update:
+    project: "{{ aap_generic_app_pipeline_project }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    wait: true
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+  register: aap_generic_app_stack_resolver_project_update
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_stack_pipeline_controller_api_prefix }}"
+
+- name: Ensure Submit Generic Application Stack ITSM Request job template exists
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    project: "{{ aap_generic_app_pipeline_project }}"
+    inventory: "{{ aap_generic_app_stack_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_stack_pipeline_playbook_submit_itsm_request }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_stack_pipeline_submit_itsm_request_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_pipeline_credential_gitea }}"
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_stack_pipeline_controller_api_prefix }}"
+
+- name: Ensure Resolve Generic Application stack vars from ITSM assets job template exists
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_stack_pipeline_jt_resolve_vars }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    project: "{{ aap_generic_app_pipeline_project }}"
+    inventory: "{{ aap_generic_app_stack_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_stack_pipeline_playbook_resolve_vars }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_stack_pipeline_resolver_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_stack_pipeline_controller_api_prefix }}"
+
+- name: Ensure Remediate Generic Application incident job template exists
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    project: "{{ aap_generic_app_pipeline_project }}"
+    inventory: "{{ aap_generic_app_stack_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_stack_pipeline_playbook_remediate_incident }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_stack_pipeline_remediate_incident_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_stack_pipeline_controller_api_prefix }}"

@@ -1,0 +1,26 @@
+---
+- name: Delete VM manifest from Gitea Infrastructure repository
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Run deprovision preflight for Gitea credentials
+      ansible.builtin.include_role:
+        name: app_deprovision
+        tasks_from: preflight.yml
+
+    - name: Delete VM manifest from Gitea Infrastructure
+      ansible.builtin.include_role:
+        name: app_deprovision
+        tasks_from: delete_manifest.yml
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

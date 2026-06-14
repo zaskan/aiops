@@ -68,8 +68,9 @@
         AIOps organization:
         {{ 'removed' if aap_uninstall_org_present | bool else 'not found (already absent)' }}
       - >-
-        Removed workflows: {{ aap_apache_stack_pipeline_workflow }}, {{ aap_httpd_pipeline_workflow }},
-        {{ aap_vm_pipeline_workflow }}, {{ aap_vm_cpu_modification_pipeline_workflow }},
+        Removed workflows: {{ aap_generic_app_stack_pipeline_workflow }}, {{ aap_generic_app_pipeline_workflow }},
+        {{ aap_generic_app_delete_pipeline_workflow }}, {{ aap_vm_pipeline_workflow }},
+        {{ aap_vm_cpu_modification_pipeline_workflow }},
         {{ aap_vm_memory_modification_pipeline_workflow }}
       - "Removed project: {{ aap_vm_pipeline_project }}"
       - "Removed inventories: {{ aap_vm_pipeline_inventory }}, {{ aap_vm_pipeline_infrastructure_inventory }}"

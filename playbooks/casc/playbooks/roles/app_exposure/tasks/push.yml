@@ -1,0 +1,39 @@
+---
+- name: Commit and push Apache exposure manifest to Gitea Infrastructure repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ apache_exposure_git_user_email }}"
+    git config user.name "{{ apache_exposure_git_user_name }}"
+    git add "{{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml"
+    git commit -m "Expose Apache for {{ apache_exposure_vm_name }} (Service, Route, HTTP Probe)"
+    git -c http.sslVerify={{ 'true' if apache_exposure_validate_certs | bool else 'false' }} push origin "{{ apache_exposure_gitea_branch }}"
+  args:
+    chdir: "{{ apache_exposure_workdir }}/repo"
+  register: apache_exposure_git_push
+  changed_when: apache_exposure_git_push.rc == 0
+  failed_when: >
+    (apache_exposure_git_push.rc not in [0, 1])
+    or (
+      apache_exposure_git_push.rc != 0
+      and ('nothing to commit' not in (apache_exposure_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (apache_exposure_git_push.stderr | default('') | lower))
+      and ('up to date' not in (apache_exposure_git_push.stdout | default('') | lower))
+      and ('up to date' not in (apache_exposure_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Capture Infrastructure repository git commit after Apache exposure push
+  ansible.builtin.command: git rev-parse HEAD
+  args:
+    chdir: "{{ apache_exposure_workdir }}/repo"
+  register: apache_exposure_git_head
+  changed_when: false
+
+- name: Record Infrastructure git commit for ITSM CTASK comment
+  ansible.builtin.set_fact:
+    itsm_apache_exposure_git_commit: "{{ apache_exposure_git_head.stdout | trim }}"
+
+- name: Remove temporary Infrastructure clone directory after push
+  ansible.builtin.file:
+    path: "{{ apache_exposure_workdir }}/repo"
+    state: absent

@@ -2,7 +2,7 @@
 - name: Recreate activation when Rulebooks project changed
   when: aap_eda_pipeline_project_result is changed
   block:
-    - name: Remove Apache alert rulebook activation before remapping event streams
+    - name: Remove Generic Application alert rulebook activation before remapping event streams
       ansible.eda.rulebook_activation:
         name: "{{ aap_eda_pipeline_activation_name }}"
         organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -11,10 +11,31 @@
         controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
         validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
 
-    - name: Ensure Apache alert rulebook activation exists in EDA
+    - name: Wait until Generic Application alert rulebook activation is deleted
+      ansible.builtin.uri:
+        url: "{{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/"
+        user: "{{ aap_eda_pipeline_controller_username }}"
+        password: "{{ aap_eda_pipeline_controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ aap_eda_pipeline_validate_certs | bool }}"
+        return_content: true
+        status_code: [200]
+      register: aap_eda_pipeline_activation_delete_wait
+      until: >-
+        {{
+          aap_eda_pipeline_activation_delete_wait.json.results
+          | default([])
+          | selectattr('name', 'equalto', aap_eda_pipeline_activation_name)
+          | list
+          | length == 0
+        }}
+      retries: 30
+      delay: 2
+
+    - name: Ensure Generic Application alert rulebook activation exists in EDA
       ansible.eda.rulebook_activation:
         name: "{{ aap_eda_pipeline_activation_name }}"
-        description: Open ITSM incidents when Apache HTTP probes fail
+        description: Open ITSM incidents when Generic Application HTTP probes fail
         organization_name: "{{ aap_eda_pipeline_organization }}"
         project_name: "{{ aap_eda_pipeline_project }}"
         rulebook_name: "{{ aap_eda_pipeline_rulebook }}"
@@ -30,10 +51,10 @@
         validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
       register: aap_eda_pipeline_activation_recreate_result
 
-- name: Ensure Apache alert rulebook activation exists in EDA
+- name: Ensure Generic Application alert rulebook activation exists in EDA
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
-    description: Open ITSM incidents when Apache HTTP probes fail
+    description: Open ITSM incidents when Generic Application HTTP probes fail
     organization_name: "{{ aap_eda_pipeline_organization }}"
     project_name: "{{ aap_eda_pipeline_project }}"
     rulebook_name: "{{ aap_eda_pipeline_rulebook }}"
@@ -50,7 +71,7 @@
   register: aap_eda_pipeline_activation_result
   when: not (aap_eda_pipeline_project_result is changed)
 
-- name: Restart Apache alert rulebook activation after updates
+- name: Restart Generic Application alert rulebook activation after updates
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
     organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -61,3 +82,27 @@
   when:
     - aap_eda_pipeline_activation_result is changed
     - not (aap_eda_pipeline_project_result is changed)
+
+- name: Wait for Generic Application alert rulebook activation to reach running state
+  ansible.builtin.uri:
+    url: "{{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/"
+    user: "{{ aap_eda_pipeline_controller_username }}"
+    password: "{{ aap_eda_pipeline_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_eda_pipeline_validate_certs | bool }}"
+    return_content: true
+    status_code: [200]
+  register: aap_eda_pipeline_activation_status
+  until: >-
+    {{
+      (
+        aap_eda_pipeline_activation_status.json.results
+        | default([])
+        | selectattr('name', 'equalto', aap_eda_pipeline_activation_name)
+        | list
+        | first
+        | default({})
+      ).status | default('') == 'running'
+    }}
+  retries: 30
+  delay: 5

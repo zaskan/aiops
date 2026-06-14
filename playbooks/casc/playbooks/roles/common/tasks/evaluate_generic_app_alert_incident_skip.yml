@@ -1,0 +1,43 @@
+---
+- name: Load OpenShift credentials for Generic Application alert incident skip checks
+  ansible.builtin.include_tasks: load_openshift_credential.yml
+
+- name: Check whether Generic Application HTTP Probe still exists
+  kubernetes.core.k8s_info:
+    api_version: monitoring.coreos.com/v1
+    kind: Probe
+    name: "{{ vm_name | string | trim }}-http-probe"
+    namespace: "{{ vm_namespace | default('aiops-demo') }}"
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+  register: generic_app_alert_probe_check
+
+- name: Mark incident creation skipped when HTTP Probe was removed
+  ansible.builtin.set_fact:
+    generic_app_alert_skip_incident: true
+    generic_app_alert_skip_reason: >-
+      HTTP Probe {{ vm_name | string | trim }}-http-probe is absent
+      (Generic Application stack delete in progress or complete).
+  when: generic_app_alert_probe_check.resources | default([]) | length == 0
+
+- name: Lookup Generic Application ITSM asset without failing when absent
+  ansible.builtin.include_tasks: lookup_generic_app_asset.yml
+  vars:
+    generic_app_asset_lookup_fail_if_missing: false
+  when: not (generic_app_alert_skip_incident | default(false) | bool)
+
+- name: Mark incident creation skipped when ITSM Generic Application asset is absent
+  ansible.builtin.set_fact:
+    generic_app_alert_skip_incident: true
+    generic_app_alert_skip_reason: >-
+      No ITSM Generic Application asset found for vm_name '{{ vm_name | string | trim }}'
+      (stack likely deleted or not yet registered).
+  when:
+    - not (generic_app_alert_skip_incident | default(false) | bool)
+    - generic_app_itsm_asset.id is not defined
+
+- name: Report skipped Generic Application alert incident creation
+  ansible.builtin.debug:
+    msg: "Skipping incident for {{ vm_name | string | trim }}: {{ generic_app_alert_skip_reason }}"
+  when: generic_app_alert_skip_incident | default(false) | bool

@@ -1,0 +1,3 @@
+---
+- name: Resolve application Route URL from OpenShift for ITSM registration
+  ansible.builtin.include_tasks: ../common/tasks/resolve_app_route_url.yml

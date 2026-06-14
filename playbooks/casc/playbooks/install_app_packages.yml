@@ -1,0 +1,39 @@
+---
+- name: Start ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM CTASK for Install application packages
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Resolve target host for generic application job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_target_host.yml
+
+- name: Install application packages on target server
+  hosts: generic_app_targets
+  gather_facts: true
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Install application RPM packages on target host
+      ansible.builtin.include_role:
+        name: generic_app
+        tasks_from: install
+
+- name: Complete ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Complete ITSM CTASK for Install application packages
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

@@ -26,3 +26,4 @@
           automated:
             prune: true
             selfHeal: true
+            allowEmpty: "{{ gitops_infrastructure_automated_allow_empty | bool }}"

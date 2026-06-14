@@ -13,15 +13,13 @@ itsm_vm_memory_modification_request_template_name: Modify VM Memory
 
 itsm_vm_cpu_modification_change_task_template_names:
   - "{{ itsm_vm_cpu_modification_task_template_patch }}"
-  - "{{ itsm_apache_stack_task_template_sync_vms }}"
-  - "{{ itsm_vm_modification_task_template_restart_vm }}"
-  - "{{ itsm_apache_stack_task_template_register_itsm }}"
+  - "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+  - "{{ itsm_generic_app_stack_task_template_register_itsm }}"
 
 itsm_vm_memory_modification_change_task_template_names:
   - "{{ itsm_vm_memory_modification_task_template_patch }}"
-  - "{{ itsm_apache_stack_task_template_sync_vms }}"
-  - "{{ itsm_vm_modification_task_template_restart_vm }}"
-  - "{{ itsm_apache_stack_task_template_register_itsm }}"
+  - "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+  - "{{ itsm_generic_app_stack_task_template_register_itsm }}"
 
 itsm_vm_modification_change_template_sync_specs:
   - name: "{{ itsm_vm_cpu_modification_change_template_name }}"
@@ -32,7 +30,7 @@ itsm_vm_modification_change_template_sync_specs:
 itsm_vm_modification_task_templates:
   - name: "{{ itsm_vm_cpu_modification_task_template_patch }}"
     title: "{{ itsm_vm_cpu_modification_task_template_patch }}"
-    description: Patch KubeVirt VM manifest CPU cores in Gitea Infrastructure without rotating password.
+    description: Patch KubeVirt VM manifest CPU sockets in Gitea Infrastructure without rotating password.
     kb_article_title: "{{ itsm_vm_cpu_modification_kb_article_title }}"
   - name: "{{ itsm_vm_memory_modification_task_template_patch }}"
     title: "{{ itsm_vm_memory_modification_task_template_patch }}"

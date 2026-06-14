@@ -1,0 +1,122 @@
+---
+- name: Submit Delete Generic Application Stack ITSM service request (demo helper)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_generic_app_delete.yml
+    - ../../group_vars/all/aap_generic_app_delete_pipeline.yml
+  vars:
+    generic_app_delete_sr_artifact_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    generic_app_delete_sr_validate_certs: false
+  tasks:
+    - name: Load demo platform facts from artifact
+      ansible.builtin.include_vars:
+        file: "{{ generic_app_delete_sr_artifact_file }}"
+
+    - name: Map ITSM API connection from artifact
+      ansible.builtin.set_fact:
+        itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+        itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+        itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+      no_log: true
+
+    - name: Assert vm_name is set for delete service request
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+        fail_msg: vm_name is required to submit a Delete Generic Application Stack service request.
+
+    - name: GET ITSM request templates
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ generic_app_delete_sr_validate_certs }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: generic_app_delete_sr_request_templates
+
+    - name: Resolve Delete Generic Application Stack request template id
+      ansible.builtin.set_fact:
+        generic_app_delete_sr_request_template_id: >-
+          {{
+            (
+              generic_app_delete_sr_request_templates.json
+              | default([])
+              | selectattr('name', 'equalto', itsm_generic_app_delete_request_template_name)
+              | list
+              | first
+              | default({})
+            ).id | default(none)
+          }}
+
+    - name: Fail when delete request template is missing
+      ansible.builtin.fail:
+        msg: >-
+          ITSM request template '{{ itsm_generic_app_delete_request_template_name }}' was not found.
+          Run playbooks/install.yml or playbooks/casc/configure_itsm_generic_app_delete_templates.yml.
+      when: generic_app_delete_sr_request_template_id is none
+
+    - name: Create draft Delete Generic Application Stack service request
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ generic_app_delete_sr_validate_certs }}"
+        body_format: json
+        body:
+          name: "Delete Generic Application Stack — {{ vm_name }}"
+          description: >-
+            Demo service request to deprovision Generic Application stack for VM {{ vm_name }}.
+          request_template_id: "{{ generic_app_delete_sr_request_template_id | int }}"
+          specifications:
+            vm_name: "{{ vm_name }}"
+        status_code: [201]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: generic_app_delete_sr_create
+
+    - name: Submit delete service request to create standard change and CTASKs
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+          generic_app_delete_sr_create.json.public_id | urlencode }}/submit
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ generic_app_delete_sr_validate_certs }}"
+        body_format: json
+        body: {}
+        status_code: [200]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: generic_app_delete_sr_submit
+
+    - name: Display service request and change refs for AAP delete launch
+      ansible.builtin.debug:
+        msg:
+          - "Service request: {{ generic_app_delete_sr_create.json.public_id }}"
+          - >-
+            Change(s) created:
+            {{
+              generic_app_delete_sr_submit.json.changes_created
+              | default([])
+              | map(attribute='public_id')
+              | list
+              | join(', ')
+            }}
+          - >-
+            Next: launch AAP workflow '{{ aap_generic_app_delete_pipeline_workflow }}'
+            with itsm_change_ref, itsm_service_request_ref, and vm_name={{ vm_name }}.

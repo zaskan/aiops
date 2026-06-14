@@ -1,0 +1,19 @@
+---
+apache_exposure_gitea_repo: Infrastructure
+apache_exposure_gitea_path: vms
+apache_exposure_gitea_branch: main
+apache_exposure_workdir: /tmp/apache-exposure
+apache_exposure_git_user_name: aiops-automation
+apache_exposure_git_user_email: aiops@example.com
+apache_exposure_validate_certs: false
+apache_exposure_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+apache_exposure_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+apache_exposure_service_port: 80
+apache_exposure_route_wait_retries: 30
+apache_exposure_route_wait_delay: 10
+
+apache_exposure_service_name: "{{ apache_exposure_vm_name }}-http"
+apache_exposure_route_name: "{{ apache_exposure_vm_name }}-http"
+apache_exposure_route_host: "{{ apache_exposure_vm_name }}-http.{{ openshift_cluster_domain }}"

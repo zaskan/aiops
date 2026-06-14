@@ -1,0 +1,49 @@
+---
+- name: Start ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM CTASK for Start application service
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Resolve target host for generic application job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_target_host.yml
+
+- name: Start application service on target server
+  hosts: generic_app_targets
+  gather_facts: true
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Enable and start application systemd service
+      ansible.builtin.include_role:
+        name: generic_app
+        tasks_from: start
+
+- name: Complete ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Complete ITSM CTASK for Start application service
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml
+
+    - name: Complete ITSM incident remediation after stack redeploy
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: complete_itsm_incident_remediation.yml
+      vars:
+        generic_app_incident_remediation_summary: >-
+          Generic Application stack redeployed for {{ vm_name | default(target_host) | string | trim }}
+          (service {{ app_service | default(generic_app_default_service) | trim }}).
+      when: itsm_incident_ref is defined and itsm_incident_ref | string | trim | length > 0

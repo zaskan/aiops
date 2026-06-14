@@ -1,0 +1,77 @@
+---
+- name: GET ITSM incidents that may reference the asset
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_asset_incident_refs_list
+
+- name: Build list of incidents referencing this ITSM asset
+  ansible.builtin.set_fact:
+    itsm_asset_linked_incidents: >-
+      {{
+        (
+          itsm_asset_incident_refs_list.json
+          | default([])
+          | selectattr('inventory_asset_id', 'defined')
+          | selectattr('inventory_asset_id', 'equalto', itsm_asset_id | int)
+          | list
+        )
+      }}
+
+- name: Unlink open incidents from ITSM asset before deletion
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      item.public_id | urlencode }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      inventory_asset_id: null
+    status_code: [200]
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  loop: "{{ itsm_asset_linked_incidents | selectattr('status', 'equalto', 'open') | list }}"
+  loop_control:
+    label: "{{ item.public_id | default(item.id) }}"
+  when: itsm_asset_linked_incidents | length > 0
+
+- name: Remove closed incidents that still reference ITSM asset
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      item.public_id | urlencode }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    status_code: [204, 404]
+  loop: >-
+    {{
+      itsm_asset_linked_incidents
+      | rejectattr('status', 'equalto', 'open')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.public_id | default(item.id) }}"
+  when: itsm_asset_linked_incidents | length > 0
+
+- name: Display ITSM asset incident reference cleanup summary
+  ansible.builtin.debug:
+    msg: >-
+      Cleared {{ itsm_asset_linked_incidents | length }} incident reference(s)
+      for ITSM asset id {{ itsm_asset_id }} before asset deletion.
+  when: itsm_asset_linked_incidents | length > 0

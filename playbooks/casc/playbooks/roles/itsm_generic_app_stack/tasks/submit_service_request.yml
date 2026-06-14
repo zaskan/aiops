@@ -1,0 +1,184 @@
+---
+- name: Load ITSM connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_itsm_credential.yml
+
+- name: Determine whether ITSM service request submission is required
+  ansible.builtin.set_fact:
+    generic_app_stack_submit_itsm_request: >-
+      {{
+        (
+          itsm_incident_ref is not defined
+          or itsm_incident_ref | string | trim | length == 0
+        )
+        and (
+          itsm_change_ref is not defined
+          or itsm_change_ref | string | trim | length == 0
+        )
+      }}
+
+- name: Pass through existing ITSM refs to downstream workflow nodes
+  when: not generic_app_stack_submit_itsm_request | bool
+  block:
+    - name: Publish existing ITSM refs for workflow continuation
+      ansible.builtin.set_stats:
+        data:
+          itsm_change_ref: "{{ itsm_change_ref | default('') | string | trim }}"
+          itsm_service_request_ref: "{{ itsm_service_request_ref | default('') | string | trim }}"
+        per_host: false
+
+    - name: Display ITSM submit skip summary
+      ansible.builtin.debug:
+        msg: >-
+          Skipping ITSM service request submit
+          {% if itsm_incident_ref is defined and itsm_incident_ref | string | trim | length > 0 -%}
+          (incident remediation: {{ itsm_incident_ref | string | trim }}).
+          {% elif itsm_change_ref is defined and itsm_change_ref | string | trim | length > 0 -%}
+          (using existing change {{ itsm_change_ref | string | trim }}).
+          {% else -%}
+          (no submission required).
+          {% endif -%}
+
+- name: Submit Generic Application Stack ITSM service request for new deploy
+  when: generic_app_stack_submit_itsm_request | bool
+  block:
+    - name: Assert required stack specification variables are set
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+          - cpus is defined
+          - mem is defined
+          - app_repo is defined
+          - app_repo | string | trim | length > 0
+          - app_packages is defined
+          - app_packages | string | trim | length > 0
+          - app_clone_path is defined
+          - app_clone_path | string | trim | length > 0
+          - app_service is defined
+          - app_service | string | trim | length > 0
+        fail_msg: >-
+          Required: vm_name, cpus, mem, app_repo, app_packages, app_clone_path, app_service.
+          Optional: app_branch (default main).
+
+    - name: Resolve public Gitea repository URL for ITSM service request specifications
+      ansible.builtin.include_tasks: ../common/tasks/resolve_app_repo_public_url.yml
+
+    - name: GET ITSM request templates
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_generic_app_stack_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: generic_app_stack_sr_request_templates
+
+    - name: Resolve Generic Application Stack request template id
+      ansible.builtin.set_fact:
+        generic_app_stack_sr_request_template_id: >-
+          {{
+            (
+              generic_app_stack_sr_request_templates.json
+              | default([])
+              | selectattr('name', 'equalto', itsm_generic_app_stack_request_template_name)
+              | list
+              | first
+              | default({})
+            ).id | default(none)
+          }}
+
+    - name: Fail when request template is missing
+      ansible.builtin.fail:
+        msg: >-
+          ITSM request template '{{ itsm_generic_app_stack_request_template_name }}' was not found.
+          Run playbooks/install.yml or playbooks/casc/configure_itsm_generic_app_stack_templates.yml.
+      when: generic_app_stack_sr_request_template_id is none
+
+    - name: Create draft Generic Application Stack service request
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_generic_app_stack_validate_certs | default(false) }}"
+        body_format: json
+        body:
+          name: "Generic Application Stack — {{ vm_name }}"
+          description: >-
+            Service request for VM {{ vm_name }} ({{ cpus }} CPU, {{ mem }} GiB)
+            and app {{ app_repo_public_url }}/{{ app_branch | default('main') }}
+            (packages {{ app_packages | default('httpd,git') }}, clone {{ app_clone_path | default('/var/www/html') }}).
+          request_template_id: "{{ generic_app_stack_sr_request_template_id | int }}"
+          specifications:
+            vm_name: "{{ vm_name }}"
+            cpus: "{{ cpus | int }}"
+            mem: "{{ mem | int }}"
+            app_repo: "{{ app_repo_public_url }}"
+            app_branch: "{{ app_branch | default('main') }}"
+            app_packages: "{{ app_packages | default('httpd,git') }}"
+            app_clone_path: "{{ app_clone_path | default('/var/www/html') }}"
+            app_service: "{{ app_service | default('httpd') }}"
+        status_code: [201]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: generic_app_stack_sr_create
+
+    - name: Submit service request to create standard change and CTASKs
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+          generic_app_stack_sr_create.json.public_id | urlencode }}/submit
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_generic_app_stack_validate_certs | default(false) }}"
+        body_format: json
+        body: {}
+        status_code: [200]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      register: generic_app_stack_sr_submit
+
+    - name: Resolve ITSM change ref from submit response
+      ansible.builtin.set_fact:
+        generic_app_stack_submitted_service_request_ref: "{{ generic_app_stack_sr_create.json.public_id | string | trim }}"
+        generic_app_stack_submitted_change_ref: >-
+          {{
+            (
+              generic_app_stack_sr_submit.json.changes_created
+              | default([])
+              | first
+              | default({})
+            ).public_id | default('', true) | string | trim
+          }}
+
+    - name: Fail when submit did not create a standard change
+      ansible.builtin.fail:
+        msg: >-
+          ITSM service request {{ generic_app_stack_submitted_service_request_ref }} was submitted
+          but no change was created. Check itsm-app request template
+          '{{ itsm_generic_app_stack_request_template_name }}'.
+      when: generic_app_stack_submitted_change_ref | length == 0
+
+    - name: Publish submitted ITSM refs for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          itsm_service_request_ref: "{{ generic_app_stack_submitted_service_request_ref }}"
+          itsm_change_ref: "{{ generic_app_stack_submitted_change_ref }}"
+        per_host: false
+
+    - name: Display submitted ITSM service request and change refs
+      ansible.builtin.debug:
+        msg:
+          - "Service request: {{ generic_app_stack_submitted_service_request_ref }}"
+          - "Change: {{ generic_app_stack_submitted_change_ref }}"

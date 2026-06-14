@@ -1,0 +1,26 @@
+---
+- name: Delete Generic Application HTTP Probe from cluster
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Run deprovision preflight and delete HTTP Probe
+      ansible.builtin.include_role:
+        name: app_deprovision
+        tasks_from: preflight.yml
+
+    - name: Delete Generic Application HTTP Probe
+      ansible.builtin.include_role:
+        name: app_deprovision
+        tasks_from: delete_http_probe.yml
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

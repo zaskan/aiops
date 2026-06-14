@@ -1,0 +1,14 @@
+---
+- name: Prefer vm_name over unresolved target_host from AAP workflow passthrough
+  ansible.builtin.set_fact:
+    generic_app_target_host: >-
+      {{
+        vm_name | string | trim
+        if vm_name is defined and vm_name | string | trim | length > 0
+        else target_host | string | trim
+      }}
+
+- name: Add resolved VM to in-memory inventory for generic application jobs
+  ansible.builtin.add_host:
+    name: "{{ generic_app_target_host }}"
+    groups: generic_app_targets

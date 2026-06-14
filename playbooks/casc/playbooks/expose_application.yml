@@ -1,0 +1,20 @@
+---
+- name: Expose application via GitOps Service and Route
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM CTASK for Expose application
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Inject HTTP Service and Route into VM manifest and sync GitOps
+      ansible.builtin.import_role:
+        name: app_exposure
+
+    - name: Complete ITSM CTASK for Expose application
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

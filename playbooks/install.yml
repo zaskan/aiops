@@ -10,20 +10,22 @@
     - ../group_vars/all/aap_casc.yml
     - ../group_vars/all/gitea_repos.yml
     - ../group_vars/all/aap_vm_pipeline.yml
-    - ../group_vars/all/aap_httpd_pipeline.yml
+    - ../group_vars/all/aap_generic_app_pipeline.yml
     - ../group_vars/all/itsm_assets.yml
     - ../group_vars/all/itsm_kb_vm_provisioning.yml
     - ../group_vars/all/itsm_kb_vm_cpu_modification.yml
     - ../group_vars/all/itsm_kb_vm_memory_modification.yml
-    - ../group_vars/all/itsm_apache_stack.yml
+    - ../group_vars/all/itsm_generic_app_stack.yml
+    - ../group_vars/all/itsm_generic_app_delete.yml
     - ../group_vars/all/itsm_vm_modification.yml
     - ../group_vars/all/aap_vm_cpu_modification_pipeline.yml
     - ../group_vars/all/aap_vm_memory_modification_pipeline.yml
-    - ../group_vars/all/aap_apache_stack_pipeline.yml
-    - ../group_vars/all/aap_apache_troubleshoot_pipeline.yml
+    - ../group_vars/all/aap_generic_app_stack_pipeline.yml
+    - ../group_vars/all/aap_generic_app_delete_pipeline.yml
     - ../group_vars/all/aap_eda_pipeline.yml
-    - ../group_vars/all/openshift_apache_monitoring.yml
-    - ../group_vars/all/itsm_kb_apache_troubleshoot.yml
+    - ../group_vars/all/openshift_generic_app_monitoring.yml
+    - ../group_vars/all/itsm_kb_generic_app_incident_remediation.yml
+    - ../group_vars/all/itsm_kb_generic_app_deletion.yml
     - ../group_vars/all/vm_network.yml
   roles:
     - role: demo_platform

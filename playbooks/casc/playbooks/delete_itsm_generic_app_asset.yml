@@ -1,0 +1,21 @@
+---
+- name: Delete Generic Application ITSM asset for stack teardown
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Delete Generic Application ITSM asset
+      ansible.builtin.include_role:
+        name: itsm_generic_app_asset
+        tasks_from: delete_asset.yml
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

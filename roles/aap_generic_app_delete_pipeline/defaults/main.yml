@@ -1,0 +1,50 @@
+---
+aap_generic_app_delete_pipeline_organization: AIOps
+aap_generic_app_delete_pipeline_validate_certs: false
+aap_generic_app_delete_pipeline_controller_api_prefix: /api/controller/
+
+aap_generic_app_delete_pipeline_inventory: AIOps Localhost
+aap_generic_app_delete_pipeline_project: AIOps Playbooks
+aap_generic_app_delete_pipeline_workflow: Delete Generic Application Stack
+
+aap_generic_app_delete_pipeline_jt_delete_probe: Delete Generic Application HTTP Probe
+aap_generic_app_delete_pipeline_jt_delete_manifest: Delete VM Manifest
+aap_generic_app_delete_pipeline_jt_delete_itsm_app: Delete ITSM Generic Application Asset
+aap_generic_app_delete_pipeline_jt_delete_itsm_vm: Delete ITSM VM Asset
+
+aap_generic_app_delete_pipeline_playbook_delete_probe: delete_generic_app_http_probe.yml
+aap_generic_app_delete_pipeline_playbook_delete_manifest: delete_vm_manifest.yml
+aap_generic_app_delete_pipeline_playbook_delete_itsm_app: delete_itsm_generic_app_asset.yml
+aap_generic_app_delete_pipeline_playbook_delete_itsm_vm: delete_itsm_vm_asset.yml
+
+aap_generic_app_delete_pipeline_workflow_survey_spec:
+  name: Delete Generic Application Stack
+  description: ITSM change refs and VM name for full Generic Application stack teardown
+  spec:
+    - question_name: itsm_change_ref
+      question_description: ITSM change reference (CHG-*)
+      required: true
+      type: text
+      variable: itsm_change_ref
+    - question_name: itsm_service_request_ref
+      question_description: ITSM service request reference (REQ-*)
+      required: false
+      type: text
+      variable: itsm_service_request_ref
+    - question_name: vm_name
+      question_description: Virtual machine / stack name to delete
+      required: true
+      type: text
+      variable: vm_name
+
+aap_generic_app_delete_survey_job_extra_vars:
+  vm_name: ""
+
+aap_generic_app_delete_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_generic_app_delete_survey_job_extra_vars) }}"
+
+aap_generic_app_delete_pipeline_credential_gitea: Gitea
+aap_generic_app_delete_pipeline_credential_openshift: OpenShift Cluster
+aap_generic_app_delete_pipeline_credential_itsm: ITSM App
+aap_generic_app_delete_pipeline_credential_aap: AAP Gateway
+
+aap_generic_app_delete_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

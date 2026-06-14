@@ -1,0 +1,3 @@
+---
+itsm_generic_app_stack_validate_certs: false
+itsm_generic_app_stack_request_template_name: Generic Application Stack

@@ -1,0 +1,24 @@
+---
+- name: Run AAP Generic Application delete pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Configure AAP job templates and workflow for Generic Application stack delete
+  block:
+    - name: Ensure Generic Application delete job templates exist
+      ansible.builtin.include_tasks: job_templates.yml
+
+    - name: Ensure Delete Generic Application Stack workflow exists
+      ansible.builtin.include_tasks: workflow.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_delete_pipeline_controller_api_prefix }}"
+
+- name: Display AAP Generic Application delete pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_generic_app_delete_pipeline_organization }}"
+      - "Project: {{ aap_generic_app_delete_pipeline_project }}"
+      - "Job templates: {{ aap_generic_app_delete_pipeline_jt_delete_probe }}, {{ aap_generic_app_delete_pipeline_jt_delete_manifest }}, {{ aap_generic_app_delete_pipeline_jt_delete_itsm_app }}, {{ aap_generic_app_delete_pipeline_jt_delete_itsm_vm }}"
+      - "Workflow: {{ aap_generic_app_delete_pipeline_workflow }} (uses {{ aap_vm_pipeline_jt_sync_vms }} for Argo CD prune)"

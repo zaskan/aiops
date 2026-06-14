@@ -1,0 +1,20 @@
+---
+- name: Ensure Infrastructure VMs Application allows automated prune when Git path is empty
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_infrastructure_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_infrastructure_validate_certs }}"
+    merge_type: merge
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: "{{ gitops_infrastructure_app_name }}"
+        namespace: "{{ gitops_infrastructure_app_namespace }}"
+      spec:
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+            allowEmpty: "{{ gitops_infrastructure_automated_allow_empty | bool }}"

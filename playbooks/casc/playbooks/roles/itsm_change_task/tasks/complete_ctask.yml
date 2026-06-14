@@ -8,7 +8,7 @@
     force_basic_auth: true
     url_username: "{{ itsm_api_user }}"
     url_password: "{{ itsm_api_password }}"
-    validate_certs: "{{ itsm_change_task_validate_certs }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
     body_format: json
     body:
       comment: "{{ itsm_change_task_completion_comment }}"

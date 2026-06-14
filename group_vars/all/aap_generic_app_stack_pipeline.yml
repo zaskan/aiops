@@ -1,0 +1,85 @@
+---
+aap_generic_app_stack_pipeline_organization: AIOps
+aap_generic_app_stack_pipeline_validate_certs: false
+aap_generic_app_stack_pipeline_controller_api_prefix: /api/controller/
+
+aap_generic_app_stack_pipeline_inventory: AIOps Localhost
+aap_generic_app_stack_pipeline_workflow: Deploy Generic Application Stack
+
+aap_generic_app_stack_pipeline_jt_submit_itsm_request: Submit Generic Application Stack ITSM Request
+aap_generic_app_stack_pipeline_playbook_submit_itsm_request: submit_generic_app_stack_itsm_request.yml
+aap_generic_app_stack_pipeline_jt_resolve_vars: Resolve Generic Application stack vars from ITSM assets
+aap_generic_app_stack_pipeline_jt_remediate_incident: Remediate Generic Application incident
+
+aap_generic_app_stack_pipeline_workflow_survey_spec:
+  name: Deploy Generic Application Stack
+  description: >-
+    Generic Application stack (Provision VM then Deploy Generic Application). For new deployments,
+    omit itsm_change_ref and itsm_service_request_ref — the workflow creates and submits the ITSM
+    service request automatically. For incident remediation, set itsm_incident_ref only and omit
+    change/service-request refs.
+  spec:
+    - question_name: itsm_change_ref
+      question_description: >-
+        ITSM change ref (e.g. CHG-1). Optional for new deploys — workflow auto-submits when empty.
+        Omit for incident remediation.
+      required: false
+      type: text
+      variable: itsm_change_ref
+    - question_name: itsm_service_request_ref
+      question_description: >-
+        ITSM service request ref (e.g. REQ-1). Optional for new deploys — workflow auto-submits when empty.
+        Omit for incident remediation.
+      required: false
+      type: text
+      variable: itsm_service_request_ref
+    - question_name: itsm_incident_ref
+      question_description: ITSM incident ref for alert remediation (e.g. INC-12). Omit for service-request deployments.
+      required: false
+      type: text
+      variable: itsm_incident_ref
+    - question_name: vm_name
+      question_description: Virtual machine name (also target_host for application deployment)
+      required: true
+      type: text
+      variable: vm_name
+    - question_name: cpus
+      question_description: Number of CPU cores
+      required: true
+      type: integer
+      variable: cpus
+    - question_name: mem
+      question_description: Memory in GiB
+      required: true
+      type: integer
+      variable: mem
+    - question_name: app_repo
+      question_description: Gitea application repository name (e.g. AIOps_App)
+      required: true
+      type: text
+      variable: app_repo
+      default: AIOps_App
+    - question_name: app_branch
+      question_description: Git branch to deploy
+      required: false
+      type: text
+      variable: app_branch
+      default: main
+    - question_name: app_packages
+      question_description: RPM packages to install (comma-separated, e.g. httpd,git)
+      required: true
+      type: text
+      variable: app_packages
+      default: httpd,git
+    - question_name: app_clone_path
+      question_description: Path on VM where the git repository is cloned
+      required: true
+      type: text
+      variable: app_clone_path
+      default: /var/www/html
+    - question_name: app_service
+      question_description: systemd service unit name for the application
+      required: true
+      type: text
+      variable: app_service
+      default: httpd

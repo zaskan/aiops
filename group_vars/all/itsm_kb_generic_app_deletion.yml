@@ -1,0 +1,4 @@
+---
+itsm_kb_generic_app_deletion_title: Delete Generic Application Stack (ITSM service request + AIOps)
+itsm_kb_generic_app_deletion_tags: |
+  Keywords: delete generic application stack, remove stack, decommission, Delete Generic Application Stack, vm_name, teardown, probe, gitea manifest, ITSM asset delete, do not ask CHG REQ, destructive

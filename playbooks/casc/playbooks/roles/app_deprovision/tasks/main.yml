@@ -1,0 +1,9 @@
+---
+- name: Run application deprovision preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Delete Generic Application HTTP Probe from cluster
+  ansible.builtin.include_tasks: delete_http_probe.yml
+
+- name: Delete VM manifest from Gitea Infrastructure repository
+  ansible.builtin.include_tasks: delete_manifest.yml

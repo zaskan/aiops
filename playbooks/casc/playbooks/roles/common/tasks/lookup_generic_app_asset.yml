@@ -1,0 +1,117 @@
+---
+- name: Load ITSM API credentials for Generic Application asset lookup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_itsm_credential.yml
+
+- name: GET ITSM asset types for Generic Application lookup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/asset-types"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: generic_app_lookup_asset_types
+
+- name: Resolve Generic Application asset type id
+  ansible.builtin.set_fact:
+    generic_app_lookup_asset_type_id: >-
+      {{
+        (
+          generic_app_lookup_asset_types.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_generic_app_asset_type_name | default('Generic Application'))
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Resolve legacy Apache Application asset type id for lookup fallback
+  ansible.builtin.set_fact:
+    generic_app_lookup_legacy_apache_type_id: >-
+      {{
+        (
+          generic_app_lookup_asset_types.json
+          | default([])
+          | selectattr('name', 'equalto', 'Apache Application')
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Build allowed asset type ids for Generic Application lookup
+  ansible.builtin.set_fact:
+    generic_app_lookup_asset_type_ids: >-
+      {{
+        [generic_app_lookup_asset_type_id | int]
+        + (
+          [generic_app_lookup_legacy_apache_type_id | int]
+          if generic_app_lookup_legacy_apache_type_id is not none
+          else []
+        )
+      }}
+
+- name: GET ITSM assets for Generic Application lookup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: generic_app_lookup_assets
+
+- name: Resolve Generic Application ITSM asset for VM
+  ansible.builtin.set_fact:
+    generic_app_itsm_asset: >-
+      {{
+        (
+          generic_app_lookup_assets.json
+          | default([])
+          | selectattr('asset_type_id', 'in', generic_app_lookup_asset_type_ids)
+          | selectattr('custom_fields', 'defined')
+          | selectattr('custom_fields.vm_hostname', 'equalto', vm_name | string | trim)
+          | list
+          | first
+          | default(
+              generic_app_lookup_assets.json
+              | default([])
+              | selectattr('asset_type_id', 'in', generic_app_lookup_asset_type_ids)
+              | selectattr('name', 'search', '^' ~ (vm_name | string | trim | regex_escape) ~ '-')
+              | list
+              | first
+              | default({}, true),
+              true
+            )
+        )
+      }}
+
+- name: Fail when Generic Application ITSM asset was not found
+  ansible.builtin.fail:
+    msg: >-
+      No ITSM Generic Application asset found for vm_name '{{ vm_name | string | trim }}'.
+      Deploy the Generic Application Stack workflow first so the asset is registered.
+  when:
+    - generic_app_itsm_asset.id is not defined
+    - generic_app_asset_lookup_fail_if_missing | default(true) | bool
+
+- name: Set remediation facts from Generic Application ITSM asset
+  ansible.builtin.set_fact:
+    generic_app_asset_id: "{{ generic_app_itsm_asset.id }}"
+    generic_app_asset_custom_fields: "{{ generic_app_itsm_asset.custom_fields | default({}) }}"
+    generic_app_service_from_asset: "{{ generic_app_itsm_asset.custom_fields.app_service | default(generic_app_default_service) | trim }}"
+    generic_app_clone_path_from_asset: "{{ generic_app_itsm_asset.custom_fields.clone_path | default(generic_app_default_clone_path) | trim }}"
+    generic_app_route_url_from_asset: "{{ generic_app_itsm_asset.custom_fields.route_url | default('') | trim }}"
+    generic_app_vm_hostname_from_asset: "{{ generic_app_itsm_asset.custom_fields.vm_hostname | default(vm_name | string | trim) | trim }}"
+  when: generic_app_itsm_asset.id is defined

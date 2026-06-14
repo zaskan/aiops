@@ -4,7 +4,7 @@
   gather_facts: false
   vars_files:
     - ../../group_vars/all/itsm_vm_modification.yml
-    - ../../group_vars/all/itsm_apache_stack.yml
+    - ../../group_vars/all/itsm_generic_app_stack.yml
     - ../../group_vars/all/itsm_kb_vm_cpu_modification.yml
     - ../../group_vars/all/itsm_kb_vm_memory_modification.yml
     - ../../group_vars/all/demo_platform.yml

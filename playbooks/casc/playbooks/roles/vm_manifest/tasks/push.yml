@@ -81,12 +81,19 @@
     dest: "{{ vm_manifest_workdir }}/repo/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
     mode: "0644"
 
+- name: Ensure vms directory placeholder exists for Argo CD
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ vm_manifest_workdir }}/repo/{{ vm_manifest_gitea_path }}/.gitkeep"
+    mode: "0644"
+
 - name: Commit and push VM manifest to Gitea Infrastructure repository
   ansible.builtin.shell: |
     set -euo pipefail
     git config user.email "{{ vm_manifest_git_user_email }}"
     git config user.name "{{ vm_manifest_git_user_name }}"
     git add "{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
+    git add "{{ vm_manifest_gitea_path }}/.gitkeep"
     git commit -m "Add or update VM manifest {{ vm_name }}"
     git -c http.sslVerify={{ 'true' if vm_manifest_validate_certs | bool else 'false' }} push origin "{{ vm_manifest_gitea_branch }}"
   args:

@@ -6,7 +6,7 @@
     force_basic_auth: true
     url_username: "{{ itsm_api_user }}"
     url_password: "{{ itsm_api_password }}"
-    validate_certs: "{{ itsm_change_task_validate_certs }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
     return_content: true
     status_code: [200]
     headers:
@@ -36,7 +36,7 @@
           CTASK '{{ itsm_change_task_ctask_title }}' was not found on change
           {{ itsm_change_ref }} (common when the change predates a new workflow step).
           Continuing without ITSM CTASK start/complete for this job. Submit a new service
-          request after re-running configure_itsm_apache_stack_templates.yml for full
+          request after re-running configure_itsm_generic_app_stack_templates.yml for full
           CTASK tracking.
 
     - name: Disable ITSM change task integration for this job

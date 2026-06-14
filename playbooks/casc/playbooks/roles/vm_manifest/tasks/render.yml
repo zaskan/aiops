@@ -1,5 +1,5 @@
 ---
-- name: Generate random VM password
+- name: Generate random VM password for new VM manifests
   ansible.builtin.set_fact:
     password: >-
       {{
@@ -11,6 +11,7 @@
         )
       }}
   no_log: true
+  when: vm_manifest_existing_cloud_init_userdata is not defined or vm_manifest_existing_cloud_init_userdata | string | trim | length == 0
 
 - name: Ensure VM manifest work directory exists
   ansible.builtin.file:

@@ -1,0 +1,25 @@
+---
+- name: Normalize application package list from extra var
+  ansible.builtin.set_fact:
+    generic_app_packages_resolved: >-
+      {{
+        (
+          app_packages
+          if app_packages is iterable and app_packages is not string
+          else (app_packages | default('') | string).split(',')
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        if (app_packages | default('') | string | trim | length > 0)
+        else generic_app_default_packages
+      }}
+
+- name: Install application RPM packages
+  ansible.builtin.dnf:
+    name: "{{ generic_app_packages_resolved }}"
+    state: present
+
+- name: Open http port in guest firewalld when httpd is among packages
+  ansible.builtin.include_tasks: configure_firewall.yml
+  when: "'httpd' in generic_app_packages_resolved"

@@ -1,0 +1,28 @@
+---
+- name: Configure OpenShift monitoring for Generic Application alerts
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/openshift_generic_app_monitoring.yml
+    - ../../group_vars/all/aap_eda_pipeline.yml
+    - ../../group_vars/all/demo_platform.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    demo_platform_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+  tasks:
+    - name: Check demo platform facts artifact exists
+      ansible.builtin.stat:
+        path: "{{ demo_platform_artifacts_file }}"
+      register: demo_platform_artifacts_stat
+
+    - name: Fail when demo platform facts artifact is missing
+      ansible.builtin.fail:
+        msg: >-
+          artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml or
+          playbooks/casc/configure_aap_eda_pipeline.yml first.
+      when: not demo_platform_artifacts_stat.stat.exists
+
+    - name: Configure Generic Application monitoring and Alertmanager routing to EDA
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: configure_generic_app_monitoring.yml

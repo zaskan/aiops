@@ -10,17 +10,33 @@
 - name: Allocate fixed IP address for VM from pool
   ansible.builtin.include_tasks: allocate_vm_ip.yml
 
+- name: Load existing VM manifest and detect unchanged resources
+  ansible.builtin.include_tasks: load_existing_manifest.yml
+
 - name: Generate VM password and render manifest
   ansible.builtin.include_tasks: render.yml
+  when: not (vm_manifest_skip_push | default(false) | bool)
 
 - name: Push rendered manifest to Gitea Infrastructure repository
   ansible.builtin.include_tasks: push.yml
+  when: not (vm_manifest_skip_push | default(false) | bool)
+
+- name: Record skipped manifest push for ITSM change task comment
+  ansible.builtin.set_fact:
+    vm_manifest_push_skipped: true
+  when: vm_manifest_skip_push | default(false) | bool
 
 - name: Display VM manifest summary
   ansible.builtin.debug:
     msg:
       - "VM name: {{ vm_name }}"
       - "Fixed IP: {{ vm_ip }}"
+      - >-
+        Manifest push: {{
+          'skipped (cpus/mem/ip unchanged)'
+          if vm_manifest_skip_push | default(false) | bool
+          else 'rendered and pushed'
+        }}
       - "Manifest path: {{ vm_manifest_gitea_repo }}/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml"
       - "Target namespace: {{ vm_namespace }}"
       - "Gitea repo URL: {{ vm_manifest_gitea_repo_url }}"

@@ -1,0 +1,35 @@
+---
+- name: Submit Generic Application Stack ITSM service request (demo helper)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_generic_app_stack.yml
+    - ../../group_vars/all/aap_generic_app_stack_pipeline.yml
+  vars:
+    generic_app_stack_sr_artifact_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    itsm_generic_app_stack_validate_certs: false
+  tasks:
+    - name: Load demo platform facts from artifact
+      ansible.builtin.include_vars:
+        file: "{{ generic_app_stack_sr_artifact_file }}"
+
+    - name: Map ITSM API connection from artifact
+      ansible.builtin.set_fact:
+        itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+        itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+        itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+      no_log: true
+
+    - name: Submit Generic Application Stack ITSM service request
+      ansible.builtin.include_role:
+        name: itsm_generic_app_stack
+        tasks_from: submit_service_request.yml
+
+    - name: Display service request and change refs for AAP launch
+      ansible.builtin.debug:
+        msg:
+          - "Service request: {{ itsm_service_request_ref | default(generic_app_stack_submitted_service_request_ref | default('')) }}"
+          - "Change: {{ itsm_change_ref | default(generic_app_stack_submitted_change_ref | default('')) }}"
+          - >-
+            Next: launch AAP workflow '{{ aap_generic_app_stack_pipeline_workflow }}'
+            with stack parameters (REQ/CHG are created automatically when omitted).

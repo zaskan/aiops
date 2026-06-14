@@ -1,14 +1,8 @@
 ---
-itsm_change_task_validate_certs: false
-itsm_change_task_final_ctask_title: AAP — Start httpd
+itsm_change_task_final_ctask_title: AAP — Start application service
+itsm_change_task_completion_summary_heading: Generic Application stack deployment complete.
 
-itsm_change_task_ctask_title_push_vm: AAP — Push VM Manifest
-itsm_change_task_ctask_title_sync_vms: AAP — Sync Infrastructure VMs
-itsm_change_task_ctask_title_register_itsm: AAP — Register ITSM VM Asset
-itsm_change_task_ctask_title_install_httpd: AAP — Install httpd
-itsm_change_task_ctask_title_deploy_app: AAP — Deploy Apache App Repo
-itsm_change_task_ctask_title_expose_apache: AAP — Expose Apache
-itsm_change_task_ctask_title_start_httpd: AAP — Start httpd
-itsm_change_task_ctask_title_patch_vm_cpu: AAP — Patch VM manifest (CPU)
-itsm_change_task_ctask_title_patch_vm_memory: AAP — Patch VM manifest (Memory)
-itsm_change_task_ctask_title_restart_vm: AAP — Restart VM
+itsm_change_task_ctask_title_install_httpd: AAP — Install application packages
+itsm_change_task_ctask_title_deploy_app: AAP — Deploy application repository
+itsm_change_task_ctask_title_expose_apache: AAP — Expose application
+itsm_change_task_ctask_title_start_httpd: AAP — Start application service

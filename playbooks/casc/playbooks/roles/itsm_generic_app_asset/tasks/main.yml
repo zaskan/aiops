@@ -1,0 +1,67 @@
+---
+- name: Resolve target host (prefer vm_name over unresolved AAP workflow passthrough)
+  ansible.builtin.set_fact:
+    itsm_generic_app_target_host: >-
+      {{
+        vm_name | string | trim
+        if vm_name is defined and vm_name | string | trim | length > 0
+        else generic_app_target_host | default('') | string | trim
+        if generic_app_target_host is defined and generic_app_target_host | string | trim | length > 0
+        else target_host | string | trim
+      }}
+
+- name: Validate required Generic Application asset variables
+  ansible.builtin.assert:
+    that:
+      - itsm_generic_app_target_host | string | trim | length > 0
+      - app_repo is defined
+      - app_repo | string | trim | length > 0
+      - itsm_app_git_commit is defined
+      - itsm_app_git_commit | string | trim | length > 0
+    fail_msg: >-
+      vm_name (or target_host), app_repo, and itsm_app_git_commit are required to register the Generic
+      Application ITSM asset (run after Deploy application repository completes the git clone).
+
+- name: Resolve public Gitea repository URL for ITSM asset storage
+  ansible.builtin.include_tasks: ../common/tasks/resolve_app_repo_public_url.yml
+
+- name: Normalize Generic Application repository and deployment fields
+  ansible.builtin.set_fact:
+    itsm_generic_app_repo_record: "{{ app_repo_public_url }}"
+    itsm_generic_app_branch_record: "{{ app_branch | default('main') | string | trim }}"
+    itsm_generic_app_rpms_record: >-
+      {{
+        (
+          app_packages
+          if app_packages is iterable and app_packages is not string
+          else (app_packages | default('') | string).split(',')
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | join(',')
+        if (app_packages | default('') | string | trim | length > 0)
+        else (generic_app_default_packages | join(','))
+      }}
+    itsm_generic_app_clone_path_record: "{{ app_clone_path | default(generic_app_default_clone_path) | trim }}"
+    itsm_generic_app_service_record: "{{ app_service | default(generic_app_default_service) | trim }}"
+
+- name: Derive Generic Application asset naming from repository
+  ansible.builtin.set_fact:
+    itsm_generic_app_repo_short: "{{ app_repo_name }}"
+
+- name: Set Generic Application ITSM asset name and hostname
+  ansible.builtin.set_fact:
+    itsm_generic_app_asset_name: "{{ itsm_generic_app_target_host }}-{{ itsm_generic_app_repo_short }}"
+    itsm_generic_app_hostname: "{{ itsm_generic_app_target_host }}-{{ itsm_generic_app_repo_short }}"
+
+- name: Load ITSM API credentials
+  ansible.builtin.include_tasks: load_itsm_credential.yml
+
+- name: Resolve parent Virtual Machine ITSM asset
+  ansible.builtin.include_tasks: resolve_vm_parent_asset.yml
+
+- name: Resolve application Route URL from OpenShift
+  ansible.builtin.include_tasks: resolve_route_url.yml
+
+- name: Register Generic Application as ITSM asset
+  ansible.builtin.include_tasks: register_asset.yml

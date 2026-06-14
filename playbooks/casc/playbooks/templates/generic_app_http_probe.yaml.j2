@@ -1,0 +1,24 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: {{ apache_exposure_vm_name }}-http-probe
+  namespace: {{ vm_namespace | default('aiops-demo') }}
+  labels:
+    openshift.io/user-monitoring: "true"
+spec:
+  jobName: {{ openshift_generic_app_monitoring_probe_job | default('generic-app-http') }}
+  interval: {{ openshift_generic_app_monitoring_probe_interval | default('15s') }}
+  prober:
+    url: {{ openshift_generic_app_monitoring_blackbox_prober | default('blackbox-exporter.aiops-demo.svc:9115') }}
+    path: /probe
+    scheme: http
+  module: http_2xx
+  targets:
+    staticConfig:
+      static:
+        - http://{{ apache_exposure_service_name }}.{{ vm_namespace | default('aiops-demo') }}.svc.cluster.local/
+      labels:
+        vm_name: "{{ apache_exposure_vm_name }}"
+        service: "{{ apache_exposure_service_name }}"
+        namespace: "{{ vm_namespace | default('aiops-demo') }}"

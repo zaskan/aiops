@@ -1,0 +1,25 @@
+---
+- name: Run AAP Generic Application stack pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Configure AAP master workflow for Generic Application Application stack
+  block:
+    - name: Ensure stack resolver job template exists for incident remediation agents
+      ansible.builtin.include_tasks: job_templates.yml
+
+    - name: Ensure Deploy Generic Application Application Stack master workflow exists
+      ansible.builtin.include_tasks: workflow.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_stack_pipeline_controller_api_prefix }}"
+
+- name: Display AAP Generic Application stack pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_generic_app_stack_pipeline_organization }}"
+      - "Master workflow: {{ aap_generic_app_stack_pipeline_workflow }} (Submit ITSM Request → {{ aap_generic_app_stack_pipeline_vm_subworkflow }} → {{ aap_generic_app_stack_pipeline_generic_app_subworkflow }})"
+      - "Submit ITSM request job template: {{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+      - "Resolver job template: {{ aap_generic_app_stack_pipeline_jt_resolve_vars }}"
+      - "Incident remediation job template: {{ aap_generic_app_stack_pipeline_jt_remediate_incident }}"

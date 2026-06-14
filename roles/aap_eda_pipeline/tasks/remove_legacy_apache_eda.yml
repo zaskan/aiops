@@ -1,0 +1,30 @@
+---
+- name: Remove legacy Apache alert rulebook activation from EDA
+  ansible.eda.rulebook_activation:
+    name: Apache Alert Incident Activation
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    state: absent
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove legacy Apache Alertmanager event stream from EDA
+  ansible.eda.event_stream:
+    name: Apache Alertmanager
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    state: absent
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove legacy Apache Alertmanager Basic Auth credential from EDA
+  ansible.eda.credential:
+    name: Apache Alertmanager Basic Auth
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    state: absent
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  ignore_errors: true

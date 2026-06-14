@@ -1,0 +1,53 @@
+---
+- name: Resolve target host and register Generic Application ITSM asset
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Resolve target host for generic application job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_target_host.yml
+
+- name: Capture deployed application git commit from target VM
+  hosts: generic_app_targets
+  gather_facts: false
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Resolve clone path for git commit lookup
+      ansible.builtin.set_fact:
+        generic_app_clone_path: "{{ app_clone_path | default(generic_app_default_clone_path) | trim }}"
+
+    - name: Verify application repository exists at clone path
+      ansible.builtin.stat:
+        path: "{{ generic_app_clone_path }}/.git"
+      register: generic_app_clone_git
+
+    - name: Fail when application has not been deployed to clone path
+      ansible.builtin.fail:
+        msg: >-
+          No git repository found at {{ generic_app_clone_path }} on {{ inventory_hostname }}.
+          Run Deploy application repository before Register ITSM Generic Application Asset.
+      when: not generic_app_clone_git.stat.exists
+
+    - name: Read git commit from clone path on target host
+      ansible.builtin.command: git -C {{ generic_app_clone_path }} rev-parse HEAD
+      register: itsm_generic_app_git_head
+      changed_when: false
+
+- name: Register Generic Application as ITSM asset (parent Virtual Machine)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Set application git commit fact from target host
+      ansible.builtin.set_fact:
+        itsm_app_git_commit: "{{ hostvars[generic_app_target_host]['itsm_generic_app_git_head'].stdout | trim }}"
+
+    - name: Register Generic Application ITSM asset linked to parent VM
+      ansible.builtin.import_role:
+        name: itsm_generic_app_asset

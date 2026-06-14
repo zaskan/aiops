@@ -1,0 +1,135 @@
+---
+- name: Load ITSM API credentials for incident remediation completion
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_itsm_credential.yml
+
+- name: Load chat-app credentials for remediation summary thread reply
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_chat_credential.yml
+
+- name: Build incident remediation summary text
+  ansible.builtin.set_fact:
+    generic_app_incident_remediation_summary: >-
+      {{
+        generic_app_incident_remediation_summary
+        | default(
+            'Generic Application stack redeployed for '
+            ~ (vm_name | string | trim)
+            ~ ' (service '
+            ~ (app_service | default(generic_app_default_service) | trim)
+            ~ ').',
+            true
+          )
+      }}
+
+- name: Resolve chat webhook URL for incident remediation summary
+  ansible.builtin.set_fact:
+    generic_app_incident_remediation_chat_base_url: >-
+      {{
+        chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+        | regex_replace('/$', '')
+      }}
+
+- name: Build absolute chat webhook URL for incident remediation summary
+  ansible.builtin.set_fact:
+    generic_app_incident_remediation_chat_webhook_url: >-
+      {{
+        chat_webhook_url | trim
+        if (
+          chat_webhook_url | default('', true) | trim
+          | regex_search('^https?://')
+        )
+        else (
+          generic_app_incident_remediation_chat_base_url
+          ~ '/api/v1/webhooks/channels/'
+          ~ (chat_aiops_channel_name | default('operations'))
+          ~ '/messages'
+          if generic_app_incident_remediation_chat_base_url | string | trim | length > 0
+          else ''
+        )
+      }}
+
+- name: POST remediation comment on ITSM incident
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      itsm_incident_ref | string | trim | urlencode }}/comments
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      body: "{{ generic_app_incident_remediation_summary }}"
+    status_code: [200, 400]
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: generic_app_incident_remediation_comment
+  failed_when: >-
+    generic_app_incident_remediation_comment.status == 400
+    and ('not found' not in (generic_app_incident_remediation_comment.json.detail | default('') | lower))
+    and ('closed' not in (generic_app_incident_remediation_comment.json.detail | default('') | lower))
+
+- name: Close ITSM incident after successful stack remediation
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      itsm_incident_ref | string | trim | urlencode }}/close
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body: {}
+    status_code: [200, 400]
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: generic_app_incident_remediation_close
+  failed_when: >-
+    generic_app_incident_remediation_close.status == 400
+    and ('not found' not in (generic_app_incident_remediation_close.json.detail | default('') | lower))
+    and ('closed' not in (generic_app_incident_remediation_close.json.detail | default('') | lower))
+
+- name: Resolve incident notification message for threaded chat reply
+  ansible.builtin.include_tasks: resolve_chat_incident_parent_message.yml
+  when:
+    - generic_app_incident_remediation_post_chat_summary | default(true) | bool
+    - generic_app_incident_remediation_chat_webhook_url | default('') | string | trim | length > 0
+    - generic_app_incident_remediation_chat_webhook_url is search('^https?://')
+    - generic_app_incident_remediation_chat_base_url | default('') | string | trim | length > 0
+    - chat_app_username | default('') | string | trim | length > 0
+    - chat_app_password | default('') | string | trim | length > 0
+  vars:
+    generic_app_troubleshoot_chat_base_url: "{{ generic_app_incident_remediation_chat_base_url }}"
+
+- name: Post remediation summary as thread reply under incident message
+  ansible.builtin.uri:
+    url: "{{ generic_app_incident_remediation_chat_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      body: >-
+        [remediation.complete] {{ itsm_incident_ref | string | trim }} on
+        {{ vm_name | string | trim }} — {{ generic_app_incident_remediation_summary }}
+      parent_id: "{{ generic_app_troubleshoot_chat_parent_message_id }}"
+    validate_certs: false
+    status_code: [201]
+  when:
+    - generic_app_incident_remediation_post_chat_summary | default(true) | bool
+    - generic_app_troubleshoot_chat_parent_message_id | default('') | string | trim | length > 0
+
+- name: Skip chat notification when incident parent message was not found
+  ansible.builtin.debug:
+    msg: >-
+      No [incident.created] chat message found for {{ itsm_incident_ref | string | trim }};
+      skipping remediation summary post to avoid a top-level channel message.
+  when:
+    - generic_app_incident_remediation_post_chat_summary | default(true) | bool
+    - generic_app_incident_remediation_chat_webhook_url | default('') | string | trim | length > 0
+    - generic_app_troubleshoot_chat_parent_message_id | default('') | string | trim | length == 0

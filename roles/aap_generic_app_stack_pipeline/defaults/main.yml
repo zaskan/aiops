@@ -1,0 +1,37 @@
+---
+aap_generic_app_stack_pipeline_organization: AIOps
+aap_generic_app_stack_pipeline_validate_certs: false
+aap_generic_app_stack_pipeline_controller_api_prefix: /api/controller/
+
+aap_generic_app_stack_pipeline_inventory: AIOps Localhost
+aap_generic_app_stack_pipeline_workflow: Deploy Generic Application Stack
+
+aap_generic_app_stack_pipeline_vm_subworkflow: Provision VM
+aap_generic_app_stack_pipeline_generic_app_subworkflow: Deploy Generic Application
+
+aap_generic_app_stack_pipeline_jt_submit_itsm_request: Submit Generic Application Stack ITSM Request
+aap_generic_app_stack_pipeline_playbook_submit_itsm_request: submit_generic_app_stack_itsm_request.yml
+aap_generic_app_stack_pipeline_submit_itsm_request_job_extra_vars:
+  vm_name: ""
+  cpus: ""
+  mem: ""
+  app_repo: ""
+  app_branch: ""
+  app_packages: ""
+  app_clone_path: ""
+  app_service: ""
+  itsm_incident_ref: ""
+
+aap_generic_app_stack_pipeline_jt_resolve_vars: Resolve Generic Application stack vars from ITSM assets
+aap_generic_app_stack_pipeline_playbook_resolve_vars: resolve_generic_app_stack_vars.yml
+aap_generic_app_stack_pipeline_resolver_job_extra_vars:
+  vm_name: ""
+  itsm_incident_ref: ""
+
+aap_generic_app_stack_pipeline_jt_remediate_incident: Remediate Generic Application incident
+aap_generic_app_stack_pipeline_playbook_remediate_incident: remediate_generic_app_incident.yml
+aap_generic_app_stack_pipeline_remediate_incident_job_extra_vars:
+  vm_name: ""
+  itsm_incident_ref: ""
+
+aap_generic_app_stack_pipeline_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"

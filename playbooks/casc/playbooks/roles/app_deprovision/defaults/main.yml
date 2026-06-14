@@ -1,0 +1,13 @@
+---
+app_deprovision_gitea_repo: Infrastructure
+app_deprovision_gitea_path: vms
+app_deprovision_gitea_branch: main
+app_deprovision_workdir: /tmp/app-deprovision
+app_deprovision_git_user_name: aiops-automation
+app_deprovision_git_user_email: aiops@example.com
+app_deprovision_validate_certs: false
+app_deprovision_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+app_deprovision_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+app_deprovision_probe_name: "{{ vm_name }}-http-probe"

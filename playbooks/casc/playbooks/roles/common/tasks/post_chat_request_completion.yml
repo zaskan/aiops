@@ -18,6 +18,12 @@
           ~ ' GiB. '
           ~ (itsm_change_task_completion_comment | default('') | replace('\n', ' '))
         )
+        if (vm_modification_completion_kind | default('') == 'memory')
+        else (
+          (vm_modification_completion_summary_heading | default('Generic Application stack delete complete.'))
+          ~ ' '
+          ~ (itsm_change_task_completion_comment | default('') | replace('\n', ' '))
+        )
       }}
 
 - name: Post service request completion as thread reply under request message

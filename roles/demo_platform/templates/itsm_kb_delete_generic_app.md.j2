@@ -1,0 +1,49 @@
+{{ itsm_kb_generic_app_deletion_tags }}
+
+# {{ itsm_kb_generic_app_deletion_title }}
+
+## When to use
+
+The user asks to **delete**, **remove**, or **decommission** a Generic Application stack in chat. This is a **destructive** operation. Confirm the `vm_name` and explicit intent before proceeding.
+
+**Do not use** for incident remediation (`INC-*`, Generic application down) — use **{{ itsm_kb_generic_app_incident_remediation_title }}** instead.
+
+## Step 1 — Open ITSM service request
+
+Open catalog **{{ itsm_generic_app_delete_request_template_name }}** in itsm-app. Ask the user for `vm_name` only. On submit, itsm-app returns `itsm_service_request_ref` (REQ-*) and `itsm_change_ref` (CHG-*). **User does not provide these refs** — take them from ITSM after submit.
+
+## Step 2 — Launch AAP workflow
+
+After confirmation, launch **{{ aap_generic_app_delete_pipeline_workflow }}** (org **{{ aap_generic_app_delete_pipeline_organization }}**). Use step-1 refs plus `vm_name`. Never ask the user for refs or invent them.
+
+Job template "{{ aap_generic_app_delete_pipeline_workflow }}"
+
+| Extra var | Req | Source |
+|-----------|-----|--------|
+| `itsm_change_ref` | yes | Step 1 (not user) |
+| `itsm_service_request_ref` | no | Step 1 (not user) |
+| `vm_name` | yes | User / catalog |
+
+Example:
+```
+itsm_change_ref: CHG-12
+itsm_service_request_ref: REQ-8
+vm_name: server01
+```
+
+## What gets removed
+
+1. OpenShift HTTP Probe `{vm_name}-http-probe` (Alertmanager target for this VM)
+2. Gitea manifest `Infrastructure/vms/{vm_name}.yaml` (VirtualMachine, Service, Route)
+3. Cluster objects via Argo CD sync on shared Application **infrastructure-vms** (prune)
+4. ITSM **Generic Application** asset (child), then **Virtual Machine** asset
+
+**Not removed:** cluster-wide AlertmanagerConfig, PrometheusRule, or blackbox exporter (shared platform monitoring).
+
+## Guardrails
+
+- **Never** launch **{{ aap_generic_app_stack_pipeline_workflow }}** for delete requests.
+- Require explicit user confirmation before launching the delete workflow.
+- Do not delete ITSM assets or manifests without the service request and change refs from step 1.
+
+AAP: {{ demo_platform.aap.gateway_url }}

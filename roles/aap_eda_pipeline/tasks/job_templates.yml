@@ -1,0 +1,41 @@
+---
+- name: Sync AIOps Playbooks project before creating alert incident job template
+  awx.awx.project_update:
+    project: "{{ aap_eda_pipeline_incident_jt_project }}"
+    organization: "{{ aap_eda_pipeline_incident_jt_organization }}"
+    wait: true
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  register: aap_eda_pipeline_playbooks_project_update
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_eda_pipeline_controller_api_prefix }}"
+
+- name: Fail when AIOps Playbooks SCM sync did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      AIOps Playbooks project SCM sync failed before creating alert incident job template
+      ({{ aap_eda_pipeline_playbooks_project_update.msg | default('unknown error') }}).
+  when: aap_eda_pipeline_playbooks_project_update.failed | default(false)
+
+- name: Ensure Create Generic Application Alert Incident job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_eda_pipeline_jt_create_incident }}"
+    organization: "{{ aap_eda_pipeline_incident_jt_organization }}"
+    project: "{{ aap_eda_pipeline_incident_jt_project }}"
+    inventory: "{{ aap_eda_pipeline_incident_jt_inventory }}"
+    playbook: "{{ aap_eda_pipeline_playbook_create_incident }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_eda_pipeline_incident_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_eda_pipeline_incident_credential_itsm }}"
+      - "{{ aap_eda_pipeline_incident_credential_aap }}"
+      - "{{ aap_eda_pipeline_incident_credential_openshift }}"
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_eda_pipeline_controller_api_prefix }}"

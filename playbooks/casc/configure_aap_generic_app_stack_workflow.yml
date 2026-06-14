@@ -1,0 +1,11 @@
+---
+- name: Configure AAP Deploy Generic Application Stack master workflow
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/aap_generic_app_stack_pipeline.yml
+    - ../../group_vars/all/aap_vm_pipeline.yml
+    - ../../group_vars/all/aap_generic_app_pipeline.yml
+    - ../../group_vars/all/itsm_generic_app_stack.yml
+  roles:
+    - role: aap_generic_app_stack_pipeline

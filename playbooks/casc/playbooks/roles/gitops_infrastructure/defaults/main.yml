@@ -8,3 +8,10 @@ gitops_infrastructure_source_branch: main
 gitops_infrastructure_repo_secret_name: gitea-infrastructure
 gitops_infrastructure_validate_certs: false
 gitops_infrastructure_gitea_insecure: true
+gitops_infrastructure_workdir: /tmp/gitops-infrastructure
+gitops_infrastructure_git_user_name: aiops-automation
+gitops_infrastructure_git_user_email: aiops@example.com
+gitops_infrastructure_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+gitops_infrastructure_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+gitops_infrastructure_automated_allow_empty: true

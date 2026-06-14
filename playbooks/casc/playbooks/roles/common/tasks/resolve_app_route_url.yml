@@ -1,0 +1,43 @@
+---
+- name: Load OpenShift API credentials for Route lookup
+  ansible.builtin.include_tasks: load_openshift_credential.yml
+
+- name: Set Route lookup name from resolved VM hostname
+  ansible.builtin.set_fact:
+    app_route_lookup_name: >-
+      {{
+        app_exposure_route_name | default('')
+        if app_exposure_route_name is defined and app_exposure_route_name | string | trim | length > 0
+        else (
+          itsm_generic_app_target_host | default(generic_app_target_host | default(vm_name | default('')))
+          | string | trim
+        ) ~ '-http'
+      }}
+    app_route_lookup_namespace: "{{ vm_namespace }}"
+    app_route_lookup_vm_name: >-
+      {{ itsm_generic_app_target_host | default(generic_app_target_host | default(vm_name | default(''))) }}
+
+- name: Wait for application Route to be created by Argo CD
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: "{{ app_route_lookup_name }}"
+    namespace: "{{ app_route_lookup_namespace }}"
+  register: app_route_lookup
+  until: >
+    app_route_lookup.resources | default([]) | length > 0
+    and app_route_lookup.resources[0].spec.host | default('') | string | trim | length > 0
+  retries: "{{ app_exposure_route_wait_retries | default(30) }}"
+  delay: "{{ app_exposure_route_wait_delay | default(10) }}"
+
+- name: Build application Route URL from OpenShift Route host
+  ansible.builtin.set_fact:
+    app_route_url: "https://{{ app_route_lookup.resources[0].spec.host | trim }}/"
+    itsm_generic_app_route_url: "https://{{ app_route_lookup.resources[0].spec.host | trim }}/"
+
+- name: Display resolved application Route URL
+  ansible.builtin.debug:
+    msg: "Application Route URL for {{ app_route_lookup_vm_name }}: {{ app_route_url }}"

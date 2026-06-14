@@ -1,0 +1,181 @@
+---
+- name: Set Gitea host for Infrastructure manifest lookup
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_host: >-
+      {{ vm_manifest_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for manifest lookup
+  ansible.builtin.set_fact:
+    vm_manifest_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_internal_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+        if (vm_manifest_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ vm_manifest_gitea_username | urlencode ~ ':'
+          ~ vm_manifest_gitea_password | urlencode ~ '@'
+          ~ vm_manifest_gitea_host ~ '/'
+          ~ vm_manifest_gitea_owner | urlencode ~ '/'
+          ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory for manifest lookup
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/lookup"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository for manifest lookup
+  ansible.builtin.git:
+    repo: "{{ vm_manifest_gitea_clone_repo }}"
+    dest: "{{ vm_manifest_workdir }}/lookup"
+    version: "{{ vm_manifest_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          vm_manifest_gitea_use_internal | default(false) | bool
+          or vm_manifest_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Set existing VM manifest path in Infrastructure repository
+  ansible.builtin.set_fact:
+    vm_manifest_existing_file_path: >-
+      {{ vm_manifest_workdir }}/lookup/{{ vm_manifest_gitea_path }}/{{ vm_name }}.yaml
+
+- name: Check whether VM manifest already exists in Infrastructure repository
+  ansible.builtin.stat:
+    path: "{{ vm_manifest_existing_file_path }}"
+  register: vm_manifest_existing_file_stat
+
+- name: Skip manifest lookup when VM manifest does not exist yet
+  ansible.builtin.set_fact:
+    vm_manifest_skip_push: false
+  when: not vm_manifest_existing_file_stat.stat.exists
+
+- name: Load existing VM manifest from Infrastructure repository
+  when: vm_manifest_existing_file_stat.stat.exists
+  block:
+    - name: Read existing VM manifest from Infrastructure repository
+      ansible.builtin.slurp:
+        src: "{{ vm_manifest_existing_file_path }}"
+      register: vm_manifest_existing_slurp
+
+    - name: Parse VirtualMachine document from multi-document GitOps manifest
+      ansible.builtin.set_fact:
+        vm_manifest_existing_doc: >-
+          {{
+            (vm_manifest_existing_slurp.content | b64decode | from_yaml_all | list | first)
+            | default({})
+          }}
+
+    - name: Resolve CPUs from existing manifest (sockets preferred over legacy cores)
+      ansible.builtin.set_fact:
+        vm_manifest_existing_cpus: >-
+          {{
+            vm_manifest_existing_doc.spec.template.spec.domain.cpu.sockets
+            | default(vm_manifest_existing_doc.spec.template.spec.domain.cpu.cores)
+            | int
+          }}
+
+    - name: Resolve memory GiB from existing manifest (guest preferred over requests)
+      ansible.builtin.set_fact:
+        vm_manifest_existing_mem: >-
+          {{
+            (
+              vm_manifest_existing_doc.spec.template.spec.domain.memory.guest
+              | default(vm_manifest_existing_doc.spec.template.spec.domain.resources.requests.memory, true)
+              | default('', true)
+              | regex_replace('Gi$', '')
+              | trim
+            )
+            | int
+          }}
+
+    - name: Resolve fixed IP from existing manifest annotation
+      ansible.builtin.set_fact:
+        vm_manifest_existing_ip: >-
+          {{
+            vm_manifest_existing_doc.metadata.annotations[vm_ip_annotation | default('aiops.io/ip-address')]
+            | default('')
+            | string
+            | trim
+          }}
+
+    - name: Extract cloud-init userData from existing manifest
+      ansible.builtin.set_fact:
+        vm_manifest_existing_cloud_init_userdata: >-
+          {{
+            (
+              vm_manifest_existing_doc.spec.template.spec.volumes
+              | default([])
+              | selectattr('cloudInitNoCloud', 'defined')
+              | map(attribute='cloudInitNoCloud')
+              | map(attribute='userData')
+              | list
+              | first
+              | default('', true)
+            )
+          }}
+
+    - name: Extract cloud-init networkData from existing manifest
+      ansible.builtin.set_fact:
+        vm_manifest_existing_cloud_init_networkdata: >-
+          {{
+            (
+              vm_manifest_existing_doc.spec.template.spec.volumes
+              | default([])
+              | selectattr('cloudInitNoCloud', 'defined')
+              | map(attribute='cloudInitNoCloud')
+              | map(attribute='networkData')
+              | list
+              | first
+              | default('', true)
+            )
+          }}
+
+    - name: Drop preserved networkData when fixed IP changed
+      ansible.builtin.set_fact:
+        vm_manifest_existing_cloud_init_networkdata: ''
+      when: (vm_manifest_existing_ip | string) != (vm_ip | string)
+
+    - name: Determine whether requested VM manifest matches existing Infrastructure manifest
+      ansible.builtin.set_fact:
+        vm_manifest_skip_push: >-
+          {{
+            (vm_manifest_existing_cpus | int) == (cpus | int)
+            and (vm_manifest_existing_mem | int) == (mem | int)
+            and (vm_manifest_existing_ip | string) == (vm_ip | string)
+          }}
+
+    - name: Display VM manifest push skip decision
+      ansible.builtin.debug:
+        msg: >-
+          Existing manifest for {{ vm_name }}:
+          cpus={{ vm_manifest_existing_cpus }}, mem={{ vm_manifest_existing_mem }}Gi,
+          ip={{ vm_manifest_existing_ip }}.
+          Requested: cpus={{ cpus }}, mem={{ mem }}Gi, ip={{ vm_ip }}.
+          {% if vm_manifest_skip_push | bool %}
+          Skipping re-render and push (unchanged).
+          {% else %}
+          Re-rendering manifest (resources or IP changed); preserving cloud-init.
+          {% endif %}
+
+- name: Remove temporary Infrastructure clone directory after manifest lookup
+  ansible.builtin.file:
+    path: "{{ vm_manifest_workdir }}/lookup"
+    state: absent

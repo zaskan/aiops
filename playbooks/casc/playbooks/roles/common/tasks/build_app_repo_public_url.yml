@@ -1,0 +1,5 @@
+---
+- name: Build public Gitea repository URL for ITSM display
+  ansible.builtin.set_fact:
+    app_repo_public_url: >-
+      {{ gitea_credential_url | regex_replace('/$', '') }}/{{ gitea_credential_username }}/{{ app_repo_name }}.git

@@ -1,6 +1,6 @@
 ---
 itsm_vm_asset_type_name: Virtual Machine
-itsm_apache_app_asset_type_name: Apache Application
+itsm_generic_app_asset_type_name: Generic Application
 
 itsm_asset_types:
   - name: "{{ itsm_vm_asset_type_name }}"
@@ -11,8 +11,8 @@ itsm_asset_types:
       - { field_key: ansible_host, label: Ansible SSH host, field_type: text }
       - { field_key: cpus, label: CPUs, field_type: number }
       - { field_key: memory, label: Memory GiB, field_type: number }
-  - name: "{{ itsm_apache_app_asset_type_name }}"
-    description: Apache httpd application deployed on a provisioned VM
+  - name: "{{ itsm_generic_app_asset_type_name }}"
+    description: Application deployed on a provisioned VM (packages and clone path from extra vars)
     fields:
       - { field_key: hostname, label: Hostname, field_type: text }
       - { field_key: vm_hostname, label: VM hostname, field_type: text }
@@ -21,6 +21,9 @@ itsm_asset_types:
       - { field_key: app_branch, label: Git branch, field_type: text }
       - { field_key: git_commit, label: Deployed git commit, field_type: text }
       - { field_key: route_url, label: Route URL, field_type: text }
+      - { field_key: rpms, label: Installed RPM packages, field_type: text }
+      - { field_key: clone_path, label: Git clone path, field_type: text }
+      - { field_key: app_service, label: systemd service unit, field_type: text }
 
 itsm_ansible_role_check_connection: true
 itsm_ansible_role_admin_settings: false

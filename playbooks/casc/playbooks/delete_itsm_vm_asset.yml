@@ -1,0 +1,109 @@
+---
+- name: Delete Virtual Machine ITSM asset and refresh infrastructure inventory
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Delete Virtual Machine ITSM asset
+      ansible.builtin.include_role:
+        name: itsm_vm_asset
+        tasks_from: delete_asset.yml
+
+    - name: Complete ITSM change task tracking
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml
+
+    - name: Load chat-app credentials for stack delete completion post
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_chat_credential.yml
+      when:
+        - generic_app_delete_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+
+    - name: Resolve chat webhook URL for stack delete completion
+      ansible.builtin.set_fact:
+        generic_app_delete_chat_base_url: >-
+          {{
+            chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+            | regex_replace('/$', '')
+          }}
+        generic_app_delete_chat_webhook_url: >-
+          {{
+            chat_webhook_url | trim
+            if (
+              chat_webhook_url | default('', true) | trim
+              | regex_search('^https?://')
+            )
+            else (
+              (
+                chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+                | regex_replace('/$', '')
+              )
+              ~ '/api/v1/webhooks/channels/'
+              ~ (chat_aiops_channel_name | default('operations'))
+              ~ '/messages'
+              if (
+                chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+                | string | trim | length > 0
+              )
+              else ''
+            )
+          }}
+      when:
+        - generic_app_delete_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+
+    - name: Resolve service request notification message for threaded chat reply
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_chat_service_request_parent_message.yml
+      vars:
+        vm_modification_chat_base_url: "{{ generic_app_delete_chat_base_url }}"
+        vm_modification_chat_webhook_url: "{{ generic_app_delete_chat_webhook_url }}"
+      when:
+        - generic_app_delete_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - generic_app_delete_chat_webhook_url | default('') | string | trim | length > 0
+        - generic_app_delete_chat_webhook_url | regex_search('^https?://')
+        - generic_app_delete_chat_base_url | default('') | string | trim | length > 0
+        - chat_app_username | default('') | string | trim | length > 0
+        - chat_app_password | default('') | string | trim | length > 0
+
+    - name: Post stack delete completion as thread reply under service request message
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: post_chat_request_completion.yml
+      vars:
+        vm_modification_chat_webhook_url: "{{ generic_app_delete_chat_webhook_url }}"
+        vm_modification_completion_kind: delete
+        vm_modification_completion_summary_heading: >-
+          Generic Application stack delete complete for {{ vm_name | string | trim }}.
+      when:
+        - generic_app_delete_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - vm_modification_chat_parent_message_id | default('') | string | trim | length > 0
+        - generic_app_delete_chat_webhook_url | default('') | string | trim | length > 0
+
+    - name: Skip chat notification when service request parent message was not found
+      ansible.builtin.debug:
+        msg: >-
+          No [request.submitted] chat message found for {{ itsm_service_request_ref | string | trim }};
+          skipping delete completion post to avoid a top-level channel message.
+      when:
+        - generic_app_delete_post_chat_summary | default(false) | bool
+        - itsm_service_request_ref is defined
+        - itsm_service_request_ref | string | trim | length > 0
+        - generic_app_delete_chat_webhook_url | default('') | string | trim | length > 0
+        - vm_modification_chat_parent_message_id | default('') | string | trim | length == 0

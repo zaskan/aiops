@@ -1,0 +1,19 @@
+---
+- name: Normalize application repository input to Gitea repository name
+  ansible.builtin.include_tasks: normalize_app_repo_name.yml
+
+- name: Use workflow app_repo when already a public Gitea repository URL
+  ansible.builtin.set_fact:
+    app_repo_public_url: "{{ app_repo | string | trim }}"
+  when:
+    - app_repo | string | trim is search('^https?://')
+    - app_repo | string | trim is not search('\\*')
+
+- name: Build public Gitea repository URL from credential when repo name only
+  when: app_repo_public_url is not defined
+  block:
+    - name: Load Gitea connection facts for repository URL construction
+      ansible.builtin.include_tasks: load_gitea_credential.yml
+
+    - name: Build public Gitea repository URL
+      ansible.builtin.include_tasks: build_app_repo_public_url.yml

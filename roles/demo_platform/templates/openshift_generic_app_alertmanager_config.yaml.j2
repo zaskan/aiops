@@ -1,0 +1,36 @@
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ openshift_generic_app_monitoring_alertmanager_config_name }}
+  namespace: {{ openshift_generic_app_monitoring_namespace }}
+  labels:
+    openshift.io/user-monitoring: "true"
+spec:
+  route:
+    receiver: eda-generic-app-alerts
+    groupWait: {{ openshift_generic_app_monitoring_alertmanager_group_wait }}
+    groupInterval: {{ openshift_generic_app_monitoring_alertmanager_group_interval }}
+    repeatInterval: {{ openshift_generic_app_monitoring_alertmanager_repeat_interval }}
+    groupBy:
+      - alertname
+      - vm_name
+    matchers:
+      - name: alertname
+        matchType: "="
+        value: {{ openshift_generic_app_monitoring_alert_name }}
+  receivers:
+    - name: eda-generic-app-alerts
+      webhookConfigs:
+        - url: {{ openshift_generic_app_monitoring_eda_webhook_url | to_json }}
+          sendResolved: false
+          httpConfig:
+            basicAuth:
+              username:
+                name: {{ openshift_generic_app_monitoring_eda_webhook_secret_name }}
+                key: username
+              password:
+                name: {{ openshift_generic_app_monitoring_eda_webhook_secret_name }}
+                key: password
+            tlsConfig:
+              insecureSkipVerify: true

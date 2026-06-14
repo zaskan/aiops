@@ -1,0 +1,66 @@
+{{ itsm_kb_generic_app_incident_remediation_tags }}
+
+# {{ itsm_kb_generic_app_incident_remediation_title }}
+
+## Incident mode vs service-request mode (read this first)
+
+| Signal in chat | Mode | Launch target | User must provide |
+| --- | --- | --- | --- |
+| `[incident.created] INC-*`, **Generic application down** | **Incident remediation** | Job **{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}** | Confirmation only |
+| User requests new stack, `REQ-*` / `CHG-*` | **Service request** | Workflow **{{ aap_generic_app_stack_pipeline_workflow }}** | Catalog fields (see **{{ itsm_kb_vm_provisioning_title }}**) |
+
+**Critical:** For incidents, **never** launch workflow **{{ aap_generic_app_stack_pipeline_workflow }}** directly via AAP MCP — its survey requires `cpus`, `mem`, `app_repo`, etc., and MCP workflow launch does not pass those extra vars reliably. **Always** launch job template **{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}** instead (only `vm_name` + `itsm_incident_ref`).
+
+**Do not ask the user** for `cpus`, `mem`, `app_repo`, `app_packages`, `app_clone_path`, or `app_service` during incident remediation — the job resolves them from ITSM assets.
+
+## When to use (incident mode)
+
+Chat shows `[incident.created] INC-*` for **Generic application down**. Explain briefly and **ask only for confirmation** ("yes", "remediate", "@aiops fix it"). Never launch without confirmation.
+
+## Step 1 — Gather two values (not from user except confirmation)
+
+| Extra var | Source |
+| --- | --- |
+| `itsm_incident_ref` | Chat / ITSM (`INC-*`) |
+| `vm_name` | Incident description (`vm_name:` line) or linked Generic Application asset |
+
+## Step 2 — Launch incident remediation job (AAP MCP)
+
+After confirmation, launch **{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}** (org **{{ aap_generic_app_stack_pipeline_organization }}**).
+
+Job template "{{ aap_generic_app_stack_pipeline_jt_remediate_incident }}"
+
+**Never** launch workflow **{{ aap_generic_app_stack_pipeline_workflow }}** for `[incident.created]` — use the job template above only.
+
+Pass **only** these extra vars:
+
+```
+vm_name: server01
+itsm_incident_ref: INC-16
+```
+
+The job playbook:
+
+1. Reads **Generic Application** and parent **Virtual Machine** ITSM assets for `vm_name`
+2. Launches workflow **{{ aap_generic_app_stack_pipeline_workflow }}** with full stack extra vars + `itsm_incident_ref`
+3. Omits `itsm_change_ref` and `itsm_service_request_ref`
+
+Optional debug only: job **{{ aap_generic_app_stack_pipeline_jt_resolve_vars }}** prints resolved vars without launching the workflow.
+
+## ITSM asset field mapping (for agent reasoning)
+
+| Workflow extra var | ITSM source |
+| --- | --- |
+| `cpus` | Parent VM `custom_fields.cpus` |
+| `mem` | Parent VM `custom_fields.memory` |
+| `app_repo` | Generic Application `custom_fields.app_repo` |
+| `app_branch` | Generic Application `custom_fields.app_branch` |
+| `app_packages` | Generic Application `custom_fields.rpms` |
+| `app_clone_path` | Generic Application `custom_fields.clone_path` |
+| `app_service` | Generic Application `custom_fields.app_service` |
+
+## What happens on success
+
+Workflow reprovisions VM, redeploys application, closes the incident, and replies in the chat thread under `[incident.created]`.
+
+AAP: {{ demo_platform.aap.gateway_url }}

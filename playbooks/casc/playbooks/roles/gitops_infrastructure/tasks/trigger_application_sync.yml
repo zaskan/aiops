@@ -1,0 +1,34 @@
+---
+- name: Trigger Argo CD sync with prune for Infrastructure VMs
+  kubernetes.core.k8s:
+    state: patched
+    host: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_infrastructure_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_infrastructure_validate_certs }}"
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ gitops_infrastructure_app_name }}"
+    namespace: "{{ gitops_infrastructure_app_namespace }}"
+    definition:
+      operation:
+        initiatedBy:
+          username: "{{ gitops_infrastructure_git_user_name }}"
+        sync:
+          prune: true
+          syncOptions:
+            - CreateNamespace=true
+
+- name: Refresh Argo CD Application repository cache for Infrastructure VMs
+  kubernetes.core.k8s:
+    state: patched
+    host: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_infrastructure_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_infrastructure_validate_certs }}"
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ gitops_infrastructure_app_name }}"
+    namespace: "{{ gitops_infrastructure_app_namespace }}"
+    definition:
+      metadata:
+        annotations:
+          argocd.argoproj.io/refresh: hard

@@ -1,0 +1,102 @@
+---
+- name: Set Gitea host for Infrastructure vms path repair
+  ansible.builtin.set_fact:
+    gitops_infrastructure_gitea_host: >-
+      {{ gitops_infrastructure_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Infrastructure vms path repair
+  ansible.builtin.set_fact:
+    gitops_infrastructure_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ gitops_infrastructure_gitea_username | urlencode ~ ':'
+          ~ gitops_infrastructure_gitea_password | urlencode ~ '@'
+          ~ gitops_infrastructure_gitea_internal_host ~ '/'
+          ~ gitops_infrastructure_gitea_owner | urlencode ~ '/'
+          ~ gitops_infrastructure_gitea_repo | urlencode ~ '.git'
+        )
+        if (gitops_infrastructure_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ gitops_infrastructure_gitea_username | urlencode ~ ':'
+          ~ gitops_infrastructure_gitea_password | urlencode ~ '@'
+          ~ gitops_infrastructure_gitea_host ~ '/'
+          ~ gitops_infrastructure_gitea_owner | urlencode ~ '/'
+          ~ gitops_infrastructure_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory for vms path repair
+  ansible.builtin.file:
+    path: "{{ gitops_infrastructure_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository for vms path repair
+  ansible.builtin.git:
+    repo: "{{ gitops_infrastructure_gitea_clone_repo }}"
+    dest: "{{ gitops_infrastructure_workdir }}/repo"
+    version: "{{ gitops_infrastructure_source_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          gitops_infrastructure_gitea_use_internal | default(false) | bool
+          or gitops_infrastructure_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Check whether Infrastructure vms source path exists in repository
+  ansible.builtin.stat:
+    path: >-
+      {{ gitops_infrastructure_workdir }}/repo/{{ gitops_infrastructure_source_path }}
+  register: gitops_infrastructure_vms_path_stat
+
+- name: Ensure Infrastructure vms source path placeholder exists for Argo CD
+  when: not gitops_infrastructure_vms_path_stat.stat.exists
+  block:
+    - name: Create Infrastructure vms directory in repository checkout
+      ansible.builtin.file:
+        path: >-
+          {{ gitops_infrastructure_workdir }}/repo/{{ gitops_infrastructure_source_path }}
+        state: directory
+        mode: "0755"
+
+    - name: Create Infrastructure vms directory placeholder in repository
+      ansible.builtin.copy:
+        content: ""
+        dest: >-
+          {{ gitops_infrastructure_workdir }}/repo/{{ gitops_infrastructure_source_path }}/.gitkeep
+        mode: "0644"
+
+    - name: Commit and push Infrastructure vms directory placeholder to Gitea
+      ansible.builtin.shell: |
+        set -euo pipefail
+        git config user.email "{{ gitops_infrastructure_git_user_email }}"
+        git config user.name "{{ gitops_infrastructure_git_user_name }}"
+        git add "{{ gitops_infrastructure_source_path }}/.gitkeep"
+        git commit -m "Ensure {{ gitops_infrastructure_source_path }}/ exists for Argo CD after VM manifest deletion"
+        git -c http.sslVerify={{ 'true' if gitops_infrastructure_validate_certs | bool else 'false' }} push origin "{{ gitops_infrastructure_source_branch }}"
+      args:
+        chdir: "{{ gitops_infrastructure_workdir }}/repo"
+      register: gitops_infrastructure_vms_path_push
+      changed_when: gitops_infrastructure_vms_path_push.rc == 0
+      failed_when: >
+        (gitops_infrastructure_vms_path_push.rc not in [0, 1])
+        or (
+          gitops_infrastructure_vms_path_push.rc != 0
+          and ('nothing to commit' not in (gitops_infrastructure_vms_path_push.stdout | default('') | lower))
+          and ('nothing to commit' not in (gitops_infrastructure_vms_path_push.stderr | default('') | lower))
+        )
+      no_log: true
+
+- name: Remove temporary Infrastructure clone directory after vms path repair
+  ansible.builtin.file:
+    path: "{{ gitops_infrastructure_workdir }}/repo"
+    state: absent

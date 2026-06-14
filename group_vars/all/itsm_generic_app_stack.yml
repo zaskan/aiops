@@ -1,0 +1,112 @@
+---
+itsm_generic_app_stack_kb_article_title: Deploy Generic Application Stack (AIOps service request)
+
+itsm_generic_app_stack_task_template_push_vm: AAP — Push VM Manifest
+itsm_generic_app_stack_task_template_sync_vms: AAP — Sync Infrastructure VMs
+itsm_generic_app_stack_task_template_register_itsm: AAP — Register ITSM VM Asset
+itsm_generic_app_stack_task_template_install_packages: AAP — Install application packages
+itsm_generic_app_stack_task_template_deploy_app: AAP — Deploy application repository
+itsm_generic_app_stack_task_template_expose_app: AAP — Expose application
+itsm_generic_app_stack_task_template_start_service: AAP — Start application service
+
+itsm_generic_app_stack_change_template_name: Generic Application Stack — Standard Change
+itsm_generic_app_stack_request_template_name: Generic Application Stack
+
+generic_app_default_packages:
+  - httpd
+  - git
+generic_app_default_clone_path: /var/www/html
+generic_app_default_service: httpd
+
+# Declared on AAP job/workflow templates so workflow node extra_data may pass ITSM vars.
+aap_itsm_job_template_extra_vars:
+  itsm_change_ref: ""
+  itsm_service_request_ref: ""
+  itsm_ctask_template_name: ""
+
+aap_itsm_subworkflow_extra_vars:
+  itsm_incident_ref: ""
+
+aap_generic_app_stack_pipeline_workflow_extra_vars:
+  itsm_incident_ref: ""
+  vm_name: ""
+  cpus: ""
+  mem: ""
+  app_repo: ""
+  app_branch: ""
+  app_packages: ""
+  app_clone_path: ""
+  app_service: ""
+
+aap_register_itsm_vm_asset_job_extra_vars: "{{ aap_itsm_job_template_extra_vars }}"
+
+aap_vm_survey_job_extra_vars:
+  vm_name: ""
+  cpus: ""
+  mem: ""
+
+aap_generic_app_survey_job_extra_vars:
+  target_host: ""
+  vm_name: ""
+  app_repo: ""
+  app_branch: ""
+  app_packages: "{{ generic_app_default_packages | join(',') }}"
+  app_clone_path: "{{ generic_app_default_clone_path }}"
+  app_service: "{{ generic_app_default_service }}"
+
+aap_vm_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_vm_survey_job_extra_vars) }}"
+aap_generic_app_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_generic_app_survey_job_extra_vars) }}"
+
+itsm_task_templates:
+  - name: "{{ itsm_generic_app_stack_task_template_push_vm }}"
+    title: "{{ itsm_generic_app_stack_task_template_push_vm }}"
+    description: Push KubeVirt VM manifest to Gitea Infrastructure and capture git commit.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+    title: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+    description: Sync Infrastructure VMs via Argo CD after manifest push.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_generic_app_stack_task_template_register_itsm }}"
+    title: "{{ itsm_generic_app_stack_task_template_register_itsm }}"
+    description: Register VM as ITSM asset and refresh AIOps Infrastructure inventory.
+    kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
+  - name: "{{ itsm_generic_app_stack_task_template_install_packages }}"
+    title: "{{ itsm_generic_app_stack_task_template_install_packages }}"
+    description: Install application RPM packages on the provisioned VM.
+  - name: "{{ itsm_generic_app_stack_task_template_deploy_app }}"
+    title: "{{ itsm_generic_app_stack_task_template_deploy_app }}"
+    description: Clone Gitea application repository into the configured clone path.
+  - name: "{{ itsm_generic_app_stack_task_template_expose_app }}"
+    title: "{{ itsm_generic_app_stack_task_template_expose_app }}"
+    description: Inject HTTP Service and Route into VM GitOps manifest, apply HTTP Probe outside Git, and sync Argo CD.
+  - name: "{{ itsm_generic_app_stack_task_template_start_service }}"
+    title: "{{ itsm_generic_app_stack_task_template_start_service }}"
+    description: Enable and start the application systemd service on the provisioned VM.
+
+itsm_change_templates:
+  - name: "{{ itsm_generic_app_stack_change_template_name }}"
+    description: Standard change for Generic Application stack (VM provision + application deploy).
+    change_type: standard
+    task_template_names:
+      - "{{ itsm_generic_app_stack_task_template_push_vm }}"
+      - "{{ itsm_generic_app_stack_task_template_sync_vms }}"
+      - "{{ itsm_generic_app_stack_task_template_register_itsm }}"
+      - "{{ itsm_generic_app_stack_task_template_install_packages }}"
+      - "{{ itsm_generic_app_stack_task_template_deploy_app }}"
+      - "{{ itsm_generic_app_stack_task_template_expose_app }}"
+      - "{{ itsm_generic_app_stack_task_template_start_service }}"
+
+itsm_request_templates:
+  - name: "{{ itsm_generic_app_stack_request_template_name }}"
+    description: Request Generic Application stack (KubeVirt VM + application deployment).
+    change_template_name: "{{ itsm_generic_app_stack_change_template_name }}"
+    require_standard_change: false
+    fields:
+      - { field_key: vm_name, label: VM name, field_type: text, required: true }
+      - { field_key: cpus, label: CPUs, field_type: number, required: true }
+      - { field_key: mem, label: Memory GiB, field_type: number, required: true }
+      - { field_key: app_repo, label: Gitea app repository, field_type: text, required: true }
+      - { field_key: app_branch, label: Git branch, field_type: text, required: false }
+      - { field_key: app_packages, label: RPM packages (comma-separated), field_type: text, required: true }
+      - { field_key: app_clone_path, label: Git clone path on VM, field_type: text, required: true }
+      - { field_key: app_service, label: systemd service unit, field_type: text, required: true }

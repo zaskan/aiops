@@ -1,0 +1,122 @@
+---
+- name: Discover current VM IP address from GitOps annotation or VMI
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: discover_vm_ip.yml
+  vars:
+    vm_name: "{{ refresh_itsm_vm_ip_vm_name | default(vm_name | string | trim) }}"
+
+- name: GET ITSM assets to resolve Virtual Machine asset for IP refresh
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: refresh_itsm_vm_ip_assets_list
+
+- name: Resolve Virtual Machine ITSM asset for IP refresh
+  ansible.builtin.set_fact:
+    refresh_itsm_vm_ip_vm_asset: >-
+      {{
+        (
+          refresh_itsm_vm_ip_assets_list.json
+          | default([])
+          | selectattr('name', 'equalto', refresh_itsm_vm_ip_vm_name | default(vm_name | string | trim))
+          | list
+          | first
+          | default({})
+        )
+      }}
+    refresh_itsm_vm_ip_previous: >-
+      {{ refresh_itsm_vm_ip_vm_asset.custom_fields.ip_address | default('') | trim }}
+
+- name: Determine whether VM IP address changed
+  ansible.builtin.set_fact:
+    refresh_itsm_vm_ip_changed: >-
+      {{
+        (itsm_vm_asset_ip | default('') | string | trim | length > 0)
+        and (refresh_itsm_vm_ip_previous | length > 0)
+        and (itsm_vm_asset_ip | string | trim != refresh_itsm_vm_ip_previous)
+      }}
+
+- name: Build refreshed Virtual Machine ITSM custom fields payload
+  ansible.builtin.set_fact:
+    refresh_itsm_vm_ip_vm_custom_fields: >-
+      {{
+        refresh_itsm_vm_ip_vm_asset.custom_fields | default({})
+        | combine(
+            {
+              'hostname': refresh_itsm_vm_ip_vm_name | default(vm_name | string | trim),
+              'ip_address': itsm_vm_asset_ip,
+              'ansible_host': itsm_vm_asset_ansible_host | default(itsm_vm_asset_ip),
+            },
+            recursive=True
+          )
+      }}
+  when:
+    - refresh_itsm_vm_ip_vm_asset.id is defined
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0
+    - refresh_itsm_vm_ip_changed | bool
+
+- name: Update Virtual Machine ITSM asset IP when changed
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{ refresh_itsm_vm_ip_vm_asset.id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: "IP: {{ itsm_vm_asset_ip }}"
+      custom_fields: "{{ refresh_itsm_vm_ip_vm_custom_fields }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - refresh_itsm_vm_ip_vm_asset.id is defined
+    - refresh_itsm_vm_ip_changed | bool
+
+- name: Update Generic Application ITSM asset IP when VM IP changed
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{ generic_app_asset_id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      custom_fields: >-
+        {{
+          generic_app_asset_custom_fields
+          | combine({'ip_address': itsm_vm_asset_ip}, recursive=True)
+        }}
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - generic_app_asset_id is defined
+    - refresh_itsm_vm_ip_changed | bool
+
+- name: Sync AIOps Infrastructure inventory after VM IP refresh
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: sync_inventory.yml
+  when: refresh_itsm_vm_ip_changed | bool
+
+- name: Set ansible host for remediation from refreshed VM IP
+  ansible.builtin.set_fact:
+    generic_app_remediation_ansible_host: >-
+      {{ itsm_vm_asset_ansible_host | default(itsm_vm_asset_ip) | default(generic_app_asset_custom_fields.ip_address | default('')) | trim }}
+  when: itsm_vm_asset_ip is defined or generic_app_asset_custom_fields is defined

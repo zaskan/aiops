@@ -1,0 +1,53 @@
+---
+- name: Resolve Deploy Generic Application Stack extra vars from ITSM assets
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Validate vm_name for stack var resolution
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+        fail_msg: vm_name extra var is required to resolve stack variables from ITSM assets.
+
+    - name: Resolve stack extra vars from ITSM Generic Application and VM assets
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_stack_extra_vars_from_assets.yml
+
+    - name: Build workflow launch extra vars payload
+      ansible.builtin.set_fact:
+        generic_app_stack_workflow_launch_vars: >-
+          {{
+            generic_app_stack_extra_vars
+            | combine(
+                {'itsm_incident_ref': itsm_incident_ref | string | trim}
+                if (
+                  itsm_incident_ref is defined
+                  and itsm_incident_ref | string | trim | length > 0
+                )
+                else {}
+              )
+          }}
+        generic_app_stack_launch_mode: >-
+          {{
+            'incident'
+            if (
+              itsm_incident_ref is defined
+              and itsm_incident_ref | string | trim | length > 0
+            )
+            else 'validation'
+          }}
+
+    - name: Display stack vars for Deploy Generic Application Stack workflow launch
+      ansible.builtin.debug:
+        msg:
+          launch_mode: "{{ generic_app_stack_launch_mode }}"
+          workflow: "{{ aap_generic_app_stack_pipeline_workflow | default('Deploy Generic Application Stack') }}"
+          organization: "{{ aap_generic_app_stack_pipeline_organization | default('AIOps') }}"
+          omit_for_incident:
+            - itsm_change_ref
+            - itsm_service_request_ref
+          extra_vars: "{{ generic_app_stack_workflow_launch_vars }}"

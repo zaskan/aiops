@@ -5,13 +5,19 @@
 - name: Obtain AAP gateway OAuth token for ansible.eda API calls
   ansible.builtin.include_tasks: eda_auth.yml
 
-- name: Configure Event-Driven Ansible for Apache alert incidents
+- name: Configure Event-Driven Ansible for Generic Application alert incidents
   block:
+    - name: Remove legacy Apache EDA alert pipeline resources
+      ansible.builtin.include_tasks: remove_legacy_apache_eda.yml
+
     - name: Ensure EDA credentials exist
       ansible.builtin.include_tasks: credentials.yml
 
     - name: Ensure EDA Rulebooks project exists and is synced
       ansible.builtin.include_tasks: project.yml
+
+    - name: Ensure Create Generic Application Alert Incident job template exists
+      ansible.builtin.include_tasks: job_templates.yml
 
     - name: Ensure AIOps decision environment exists
       ansible.builtin.include_tasks: decision_environment.yml
@@ -19,11 +25,20 @@
     - name: Ensure Alertmanager event stream exists
       ansible.builtin.include_tasks: event_stream.yml
 
-    - name: Ensure Apache alert rulebook activation is enabled
+    - name: Ensure Generic Application alert rulebook activation is enabled
       ansible.builtin.include_tasks: activation.yml
 
     - name: Publish EDA webhook facts to demo platform artifact
       ansible.builtin.include_tasks: update_artifact.yml
+
+- name: Remind operator to re-apply Alertmanager routing when EDA event stream URL changes
+  ansible.builtin.debug:
+    msg: >-
+      Re-run playbooks/casc/configure_generic_app_monitoring.yml after this playbook
+      so AlertmanagerConfig and the webhook secret use the updated EDA event stream URL.
+  when: >-
+    aap_eda_pipeline_event_stream_post_url is defined
+    and aap_eda_pipeline_event_stream_post_url | string | trim | length > 0
 
 - name: Display AAP EDA pipeline summary
   ansible.builtin.debug:
@@ -32,4 +47,5 @@
       - "Project: {{ aap_eda_pipeline_project }}"
       - "Event stream: {{ aap_eda_pipeline_event_stream_name }}"
       - "Activation: {{ aap_eda_pipeline_activation_name }}"
+      - "Alert incident job template: {{ aap_eda_pipeline_jt_create_incident }}"
       - "Alertmanager webhook: {{ aap_eda_pipeline_event_stream_post_url }}"

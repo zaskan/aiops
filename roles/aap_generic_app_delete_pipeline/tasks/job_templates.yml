@@ -1,0 +1,103 @@
+---
+- name: Sync AIOps Playbooks project before creating delete pipeline job templates
+  awx.awx.project_update:
+    project: "{{ aap_generic_app_delete_pipeline_project }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    wait: true
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+  register: aap_generic_app_delete_pipeline_project_update
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_delete_pipeline_controller_api_prefix }}"
+
+- name: Fail when AIOps Playbooks SCM sync did not succeed before delete job template creation
+  ansible.builtin.fail:
+    msg: >-
+      AIOps Playbooks project SCM sync failed ({{
+        aap_generic_app_delete_pipeline_project_update.msg | default('unknown error')
+      }}). Ensure Gitea Playbooks repo contains delete_generic_app_http_probe.yml and related playbooks.
+  when: aap_generic_app_delete_pipeline_project_update.failed | default(false)
+
+- name: Ensure Delete Generic Application HTTP Probe job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_delete_pipeline_jt_delete_probe }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    project: "{{ aap_generic_app_delete_pipeline_project }}"
+    inventory: "{{ aap_generic_app_delete_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_delete_pipeline_playbook_delete_probe }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_delete_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_delete_pipeline_credential_openshift }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_gitea }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+  no_log: false
+
+- name: Ensure Delete VM Manifest job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_delete_pipeline_jt_delete_manifest }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    project: "{{ aap_generic_app_delete_pipeline_project }}"
+    inventory: "{{ aap_generic_app_delete_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_delete_pipeline_playbook_delete_manifest }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_delete_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_delete_pipeline_credential_gitea }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Ensure Delete ITSM Generic Application Asset job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_app }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    project: "{{ aap_generic_app_delete_pipeline_project }}"
+    inventory: "{{ aap_generic_app_delete_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_delete_pipeline_playbook_delete_itsm_app }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_delete_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_delete_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+  no_log: true
+
+- name: Ensure Delete ITSM VM Asset job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_generic_app_delete_pipeline_jt_delete_itsm_vm }}"
+    organization: "{{ aap_generic_app_delete_pipeline_organization }}"
+    project: "{{ aap_generic_app_delete_pipeline_project }}"
+    inventory: "{{ aap_generic_app_delete_pipeline_inventory }}"
+    playbook: "{{ aap_generic_app_delete_pipeline_playbook_delete_itsm_vm }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_generic_app_delete_job_extra_vars }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_generic_app_delete_pipeline_credential_itsm }}"
+      - "{{ aap_generic_app_delete_pipeline_credential_aap }}"
+    controller_host: "{{ aap_generic_app_delete_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_delete_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_delete_pipeline_validate_certs }}"
+  no_log: true

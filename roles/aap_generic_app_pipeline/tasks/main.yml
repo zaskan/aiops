@@ -1,0 +1,25 @@
+---
+- name: Run AAP generic app pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Configure AAP job templates and workflow for Generic Application deployment
+  block:
+    - name: Ensure Generic Application deployment job templates exist
+      ansible.builtin.include_tasks: job_templates.yml
+
+    - name: Ensure Deploy Generic Application App workflow exists
+      ansible.builtin.include_tasks: workflow.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_generic_app_pipeline_controller_api_prefix }}"
+
+- name: Display AAP generic app pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_generic_app_pipeline_organization }}"
+      - "Project: {{ aap_generic_app_pipeline_project }}"
+      - "Inventory: {{ aap_generic_app_pipeline_inventory }} (ITSM Assets SCM source; populated after VM registration)"
+      - "Job templates: {{ aap_generic_app_pipeline_jt_install }}, {{ aap_generic_app_pipeline_jt_deploy }}, {{ aap_generic_app_pipeline_jt_expose }}, {{ aap_generic_app_pipeline_jt_register_itsm }}, {{ aap_generic_app_pipeline_jt_start }}"
+      - "Workflow: {{ aap_generic_app_pipeline_workflow }}"

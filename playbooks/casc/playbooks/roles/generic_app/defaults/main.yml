@@ -1,0 +1,8 @@
+---
+generic_app_default_packages:
+  - httpd
+  - git
+generic_app_default_clone_path: /var/www/html
+generic_app_default_service: httpd
+generic_app_default_branch: main
+generic_app_validate_certs: false

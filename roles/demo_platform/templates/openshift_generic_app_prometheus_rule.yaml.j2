@@ -1,0 +1,21 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ openshift_generic_app_monitoring_prometheus_rule_name }}
+  namespace: {{ openshift_generic_app_monitoring_namespace }}
+  labels:
+    openshift.io/user-monitoring: "true"
+    openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus
+spec:
+  groups:
+    - name: generic-app-http-probes
+      rules:
+        - alert: {{ openshift_generic_app_monitoring_alert_name }}
+          expr: probe_success{job="{{ openshift_generic_app_monitoring_probe_job }}"} == 0
+          for: {{ openshift_generic_app_monitoring_probe_for }}
+          labels:
+            severity: user
+          annotations:
+            summary: "{% raw %}Generic application HTTP probe failed for {{ $labels.vm_name }} ({{ $labels.instance }}){% endraw %}"
+            description: "{% raw %}Service HTTP probe is failing for VM {{ $labels.vm_name }}{% endraw %} in namespace {{ openshift_generic_app_monitoring_namespace }}."

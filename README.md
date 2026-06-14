@@ -14,12 +14,19 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_infrastructure_gitops.yml` | Argo CD Application for Infrastructure/vms |
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
 | `playbooks/casc/configure_itsm_asset_types.yml` | Create/update ITSM **Virtual Machine** and **Apache Application** asset types |
-| `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Apache Application stack (RAG) |
+| `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Generic Application stack (RAG) |
+| `playbooks/casc/configure_itsm_kb_generic_app_incident_remediation.yml` | Publish/update ITSM KB for Generic Application alert incident remediation |
 | `playbooks/casc/configure_itsm_app_rag.yml` | Enable ITSM KB semantic search (embedding API on itsm-app) |
-| `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Apache App workflow (inventory not created) |
-| `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Apache Application stack |
-| `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Apache Application Stack |
-| `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Apache Application Stack service request |
+| `playbooks/casc/configure_aap_generic_app_workflow.yml` | AAP job templates and Deploy Generic Application workflow (inventory not created) |
+| `playbooks/casc/configure_itsm_generic_app_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
+| `playbooks/casc/configure_aap_generic_app_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
+| `playbooks/casc/configure_aap_generic_app_delete_workflow.yml` | AAP workflow Delete Generic Application Stack |
+| `playbooks/casc/configure_itsm_generic_app_delete_templates.yml` | ITSM task/change/request templates for stack delete |
+| `playbooks/casc/configure_itsm_kb_generic_app_deletion.yml` | Publish/update ITSM KB for Generic Application stack deletion (RAG) |
+| `playbooks/casc/submit_generic_app_delete_service_request.yml` | Demo helper: submit ITSM Delete Generic Application Stack service request |
+| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA event stream, activation, and Create Generic Application Alert Incident job template |
+| `playbooks/casc/configure_generic_app_monitoring.yml` | PrometheusRule, AlertmanagerConfig, and blackbox exporter for Generic Application alerts |
+| `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Generic Application Stack service request |
 | `playbooks/casc/playbooks/install_httpd.yml` | Install httpd and git on a RHEL host |
 | `playbooks/casc/playbooks/deploy_apache_app.yml` | Clone Gitea app repo into Apache docroot |
 | `playbooks/casc/playbooks/start_httpd.yml` | Enable and start httpd |
@@ -351,6 +358,8 @@ Edit `group_vars/all/vm_network.yml` (also loaded by `playbooks/casc/playbooks/d
 
 Each new VM receives a **fixed IP** from pool `192.168.100.100`–`192.168.100.250` on secondary UDN **`aiops-vm-network`**. The address is stored in GitOps annotation `aiops.io/ip-address`, applied on guest interface `enp2s0` via cloud-init, and recorded in ITSM as `ip_address`. **AAP SSH uses the primary pod-network IP** (`ansible_host` from VMI interface `default`) because the secondary UDN is isolated from the default cluster network where AAP execution pods run. **Register ITSM VM Asset** waits for the fixed IP on VMI interface `net1` and restarts the VM once if the secondary NIC is not yet active (network and cloud-init changes apply on boot). Override with `-e vm_ip=<address>` when needed. Existing VMs must be recreated to pick up the secondary network and fixed IP.
 
+VM manifests use KubeVirt **LiveUpdate**-friendly CPU (`sockets` + `maxSockets`) and memory (`guest` + `maxGuest`) fields. **Push VM Manifest** skips GitOps when `cpus`, `mem`, and fixed IP are unchanged (incident remediation), and preserves existing cloud-init on re-render so password rotation does not force a restart.
+
 ```bash
 ansible-playbook playbooks/casc/configure_gitea_repos.yml
 ansible-playbook playbooks/casc/configure_infrastructure_gitops.yml
@@ -394,11 +403,11 @@ Deploy an Apache (`httpd`) application on an **existing RHEL server**: install p
 
 The workflow uses inventory **AIOps Infrastructure**, populated from ITSM assets after **Provision VM** registers a VM (`external_inventory: true`). Launch the workflow with `target_host` set to the VM asset name (hostname in that inventory). SSH access uses the **Virtual Machines** credential (same key as KubeVirt-provisioned VMs; default user `fedora`).
 
-For partial re-runs after editing httpd playbooks, use `configure_gitea_repos.yml` and `configure_aap_httpd_workflow.yml`.
+For partial re-runs after editing generic application playbooks, use `configure_gitea_repos.yml` and `configure_aap_generic_app_workflow.yml`.
 
 ### AAP workflow
 
-`configure_aap_httpd_workflow.yml` creates in org **AIOps**:
+`configure_aap_generic_app_workflow.yml` creates in org **AIOps**:
 
 | Resource | Name |
 | -------- | ---- |
@@ -419,30 +428,60 @@ Workflow survey:
 | `app_branch` | no | `main` | Git branch to deploy |
 
 ```bash
-ansible-playbook playbooks/casc/configure_aap_httpd_workflow.yml
+ansible-playbook playbooks/casc/configure_aap_generic_app_workflow.yml
 ```
 
 Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache Route is created in GitOps, `httpd` is active, and content is served from `/var/www/html/`.
 
-## Apache Application stack (service request driven)
+## Generic Application stack (service request driven)
 
-End-to-end delivery: ITSM **service request** → **standard change** with seven CTASKs → master AAP workflow **Deploy Apache Application Stack** (Provision VM → Deploy Apache App). Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
+End-to-end delivery: launch master AAP workflow **Deploy Generic Application Stack** with stack parameters only — the first workflow step auto-submits the ITSM **service request** and **standard change** (seven CTASKs), then Provision VM → Deploy Generic Application. Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
 
 ### ITSM catalog
 
 | Template | Name |
 | -------- | ---- |
-| Request | **Apache Application Stack** |
-| Change | **Apache Application Stack — Standard Change** |
+| Request | **Generic Application Stack** |
+| Change | **Generic Application Stack — Standard Change** |
 | Task templates (7) | AAP — Push VM Manifest, Sync Infrastructure VMs, Register ITSM VM Asset, Install httpd, Deploy Apache App Repo, Expose Apache, Start httpd |
 
-Install creates these via `configure_itsm_apache_stack_templates.yml` (included in `playbooks/install.yml`).
+Install creates these via `configure_itsm_generic_app_stack_templates.yml` (included in `playbooks/install.yml`).
 
 ### Operator flow
 
-1. ITSM **Service Catalog** → **Apache Application Stack** → fill `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
-2. AAP → **Deploy Apache Application Stack** → survey: `itsm_change_ref` (required), matching stack parameters.
+1. AAP → **Deploy Generic Application Stack** → survey: `vm_name`, `cpus`, `mem`, `app_repo`, and related stack fields (omit `itsm_change_ref` / `itsm_service_request_ref` for new deploys).
+2. Workflow step **Submit Generic Application Stack ITSM Request** creates **`REQ-*`** and **`CHG-*`**, then provisions the VM and deploys the application.
 3. Verify all seven CTASKs complete with comments; change **completed**; request **fulfilled**.
+
+Optional: submit ITSM catalog **Generic Application Stack** manually first and pass existing `itsm_change_ref` / `itsm_service_request_ref` to skip auto-submit.
+
+Demo helper (catalog submit only, without workflow):
+
+```bash
+ansible-playbook playbooks/casc/submit_generic_app_stack_service_request.yml \
+  -e vm_name=demo-stack1 -e cpus=2 -e mem=4 -e app_repo=AIOps_App
+```
+
+### Incident remediation (alert-driven)
+
+When Prometheus **GenericApplicationDown** fires, EDA creates an ITSM incident (`INC-*`) and chat posts `[incident.created]`. After user confirmation in chat, the itsm-agent launches AAP job template **Remediate Generic Application incident** with only `vm_name` and `itsm_incident_ref`. That job resolves stack vars from ITSM assets and launches **Deploy Generic Application Stack** server-side (do not launch the master workflow directly from chat — MCP cannot pass the full survey).
+
+The stack workflow reprovisions the VM, redeploys the application, closes the incident, and replies in the chat thread. HTTP **Probe** CRs are applied directly to the cluster (not via GitOps) so monitoring survives accidental manifest removal.
+
+Re-run KB after editing templates:
+
+```bash
+ansible-playbook playbooks/casc/configure_itsm_kb_generic_app_incident_remediation.yml
+```
+
+Re-sync EDA and Alertmanager routing after changing the event stream or monitoring templates:
+
+```bash
+ansible-playbook playbooks/casc/configure_aap_eda_pipeline.yml -e @artifacts/demo_platform_facts.yml
+ansible-playbook playbooks/casc/configure_generic_app_monitoring.yml -e @artifacts/demo_platform_facts.yml
+```
+
+Alertmanager posts to the **in-cluster** EDA event-stream service (`ansible-eda-event-stream.aap.svc`) with a 5m `repeatInterval`, so alerts retry if the EDA activation was not running when the first notification was sent. Confirm **Generic Application Alert Incident Activation** is **Running** in the AAP EDA UI.
 
 Demo API submit (no UI):
 
@@ -453,19 +492,44 @@ ansible-playbook playbooks/casc/submit_apache_stack_service_request.yml \
 
 ### Master AAP workflow
 
-`configure_aap_apache_stack_workflow.yml` creates:
+`configure_aap_generic_app_stack_workflow.yml` creates:
 
 | Resource | Name |
 | -------- | ---- |
-| Master workflow | **Deploy Apache Application Stack** |
-| Sub-workflow 1 | **Provision VM** |
-| Sub-workflow 2 | **Deploy Apache App** |
+| Master workflow | **Deploy Generic Application Stack** |
+| Step 1 (job) | **Submit Generic Application Stack ITSM Request** |
+| Sub-workflow 2 | **Provision VM** |
+| Sub-workflow 3 | **Deploy Generic Application** |
 
-Master workflow survey: `itsm_change_ref`, `itsm_service_request_ref` (optional), `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch`.
+Master workflow survey: `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch`, `app_packages`, `app_clone_path`, `app_service`; optional `itsm_change_ref`, `itsm_service_request_ref` (auto-created when omitted), `itsm_incident_ref` (incident remediation only).
 
 Standalone **Provision VM** and **Deploy Apache App** workflows remain usable without `itsm_change_ref` (ITSM CTASK integration is skipped).
 
-Install also upserts KB article **Deploy Apache Application Stack (ITSM service request + AIOps)** for RAG. Semantic search is enabled automatically during install (`configure_itsm_app_rag.yml` runs before the KB upsert). Re-run after editing the template:
+### Stack deletion (service request + chat)
+
+Full teardown of a deployed stack for a given `vm_name` via ITSM **Delete Generic Application Stack** service request and AAP workflow **Delete Generic Application Stack**:
+
+1. ITSM **Service Catalog** → **Delete Generic Application Stack** → `vm_name` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
+2. Chat (itsm-agent) or AAP UI → launch **Delete Generic Application Stack** with `itsm_change_ref`, `itsm_service_request_ref`, and `vm_name`.
+3. Workflow order: delete HTTP Probe → delete Gitea `Infrastructure/vms/{vm_name}.yaml` → **Sync Infrastructure VMs** (Argo CD prune) → delete ITSM Generic Application asset → delete ITSM VM asset.
+
+The shared Argo CD Application **infrastructure-vms** is **not** removed; only the per-VM Git manifest is deleted and pruned from the cluster.
+
+Demo API submit:
+
+```bash
+ansible-playbook playbooks/casc/submit_generic_app_delete_service_request.yml -e vm_name=server01
+```
+
+Re-run after editing KB or templates:
+
+```bash
+ansible-playbook playbooks/casc/configure_itsm_kb_generic_app_deletion.yml -e @artifacts/demo_platform_facts.yml
+ansible-playbook playbooks/casc/configure_itsm_generic_app_delete_templates.yml -e @artifacts/demo_platform_facts.yml
+ansible-playbook playbooks/casc/configure_aap_generic_app_delete_workflow.yml -e @artifacts/demo_platform_facts.yml
+```
+
+Install also upserts KB article **Deploy Generic Application Stack (ITSM service request + AIOps)** for RAG. Semantic search is enabled automatically during install (`configure_itsm_app_rag.yml` runs before the KB upsert). Re-run after editing the template:
 
 ```bash
 ansible-playbook playbooks/casc/configure_itsm_app_rag.yml
@@ -474,7 +538,7 @@ ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 
 ## VM resource modification (service request driven)
 
-End-to-end CPU and memory resize flows mirror the Apache Application Stack pattern: ITSM **service request** → **standard change** with four CTASKs → AAP workflow (patch manifest → sync → restart → register asset). Manifest patches preserve the existing VM password and cloud-init configuration.
+End-to-end CPU and memory resize flows mirror the Generic Application Stack pattern: ITSM **service request** → **standard change** with three CTASKs → AAP workflow (patch manifest → sync → register asset). KubeVirt **LiveUpdate** applies CPU/memory via hotplug (live migration); no restart step. Manifest patches preserve cloud-init and password.
 
 ### ITSM catalog
 
@@ -483,7 +547,7 @@ End-to-end CPU and memory resize flows mirror the Apache Application Stack patte
 | CPU | **Modify VM CPUs** | **Modify VM CPUs — Standard Change** |
 | Memory | **Modify VM Memory** | **Modify VM Memory — Standard Change** |
 
-Task templates (4 per change): Patch VM manifest (CPU or Memory), Sync Infrastructure VMs, Restart VM, Register ITSM VM Asset.
+Task templates (3 per change): Patch VM manifest (CPU or Memory), Sync Infrastructure VMs, Register ITSM VM Asset.
 
 Install creates these via `configure_itsm_vm_modification_templates.yml` (included in `playbooks/install.yml`).
 
@@ -491,7 +555,7 @@ Install creates these via `configure_itsm_vm_modification_templates.yml` (includ
 
 1. ITSM **Service Catalog** → **Modify VM CPUs** or **Modify VM Memory** → fill `vm_name` and `cpus` or `mem` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
 2. AAP → **Modify VM CPUs** or **Modify VM Memory** → survey: `itsm_change_ref` (required), `itsm_service_request_ref` (optional), matching parameters.
-3. Verify all four CTASKs complete; change **completed**; request **fulfilled**; `[request.complete]` appears as a thread reply under `[request.submitted]` in **#operations**.
+3. Verify all three CTASKs complete; change **completed**; request **fulfilled**; `[request.complete]` appears as a thread reply under `[request.submitted]` in **#operations**.
 
 Demo API submit (no UI):
 
@@ -513,7 +577,6 @@ ansible-playbook playbooks/casc/submit_vm_memory_modification_service_request.ym
 | Workflow | **Modify VM Memory** |
 | Job template | Patch VM CPU Manifest |
 | Job template | Patch VM Memory Manifest |
-| Job template | Restart VM |
 
 Workflow survey (CPU): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`, `cpus`.
 
@@ -768,8 +831,8 @@ aiops/
 ├── group_vars/all/itsm_agent.yml
 ├── group_vars/all/itsm_assets.yml
 ├── group_vars/all/itsm_kb_vm_provisioning.yml
-├── group_vars/all/itsm_apache_stack.yml
-├── group_vars/all/aap_apache_stack_pipeline.yml
+├── group_vars/all/itsm_generic_app_stack.yml
+├── group_vars/all/aap_generic_app_stack_pipeline.yml
 ├── inventory/hosts
 ├── playbooks/
 │   ├── install.yml                  # install demo apps + full AAP setup

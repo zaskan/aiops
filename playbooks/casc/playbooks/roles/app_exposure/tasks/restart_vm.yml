@@ -1,0 +1,71 @@
+---
+- name: Load OpenShift API credentials for VM restart
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+- name: Look up running VMI for Apache exposure port check
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    name: "{{ apache_exposure_vm_name }}"
+    namespace: "{{ vm_namespace }}"
+  register: apache_exposure_vmi_lookup
+
+- name: Determine whether VMI exposes masquerade port 80
+  ansible.builtin.set_fact:
+    apache_exposure_vmi_has_port_80: >-
+      {{
+        (
+          apache_exposure_vmi_lookup.resources | default([])
+          | length > 0
+        )
+        and (
+          apache_exposure_vmi_lookup.resources[0].spec.domain.devices.interfaces | default([])
+          | first
+          | default({})
+        ).ports | default([])
+        | selectattr('port', 'equalto', apache_exposure_service_port | int)
+        | list
+        | length > 0
+      }}
+
+- name: Restart VM when masquerade port 80 is not active on the running VMI
+  when: not apache_exposure_vmi_has_port_80 | bool
+  block:
+    - name: Restart VM to apply masquerade port 80 from GitOps manifest
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: restart_vm.yml
+      vars:
+        vm_restart_name: "{{ apache_exposure_vm_name }}"
+        vm_restart_namespace: "{{ vm_namespace }}"
+
+    - name: Wait for VMI to run with masquerade port 80 after restart
+      kubernetes.core.k8s_info:
+        host: "{{ openshift_credential_host | default(omit) }}"
+        api_key: "{{ openshift_credential_token | default(omit) }}"
+        validate_certs: false
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ apache_exposure_vm_name }}"
+        namespace: "{{ vm_namespace }}"
+      register: apache_exposure_vmi_start_wait
+      until: >
+        apache_exposure_vmi_start_wait.resources | default([]) | length > 0
+        and apache_exposure_vmi_start_wait.resources[0].status.phase | default('') == 'Running'
+        and (
+          apache_exposure_vmi_start_wait.resources[0].spec.domain.devices.interfaces | default([])
+          | first
+          | default({})
+        ).ports | default([])
+        | selectattr('port', 'equalto', apache_exposure_service_port | int)
+        | list
+        | length > 0
+      retries: 36
+      delay: 10
+
+    - name: Record that VM was restarted for Apache masquerade port 80
+      ansible.builtin.set_fact:
+        apache_exposure_vm_restarted: true

@@ -1,0 +1,11 @@
+---
+- name: Submit Generic Application Stack ITSM service request when refs are absent
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Submit or pass through ITSM service request for stack deploy
+      ansible.builtin.include_role:
+        name: itsm_generic_app_stack
+        tasks_from: submit_service_request.yml

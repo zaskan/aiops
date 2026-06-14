@@ -1,0 +1,36 @@
+---
+- name: Load Provision VM workflow survey spec from vm pipeline defaults
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../aap_vm_pipeline/defaults/main.yml"
+  when: aap_vm_pipeline_workflow_survey_spec is not defined
+
+- name: Ensure Provision VM sub-workflow accepts ITSM and survey passthrough from master workflow
+  awx.awx.workflow_job_template:
+    name: "{{ aap_generic_app_stack_pipeline_vm_subworkflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_vm_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Load Deploy Generic Application workflow survey spec from generic app pipeline defaults
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../aap_generic_app_pipeline/defaults/main.yml"
+  when: aap_generic_app_pipeline_workflow_survey_spec is not defined
+
+- name: Ensure Deploy Generic Application sub-workflow accepts ITSM and survey passthrough from master workflow
+  awx.awx.workflow_job_template:
+    name: "{{ aap_generic_app_stack_pipeline_generic_app_subworkflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_generic_app_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_itsm_subworkflow_extra_vars }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"

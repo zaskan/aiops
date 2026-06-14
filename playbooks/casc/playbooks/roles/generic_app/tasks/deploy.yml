@@ -1,0 +1,86 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Resolve application clone path
+  ansible.builtin.set_fact:
+    generic_app_clone_path: "{{ app_clone_path | default(generic_app_default_clone_path) | trim }}"
+
+- name: Capture raw application repository input from workflow survey
+  ansible.builtin.set_fact:
+    app_repo_raw: "{{ app_repo | default('') | trim }}"
+
+- name: Strip URL scheme and .git suffix from repository input
+  ansible.builtin.set_fact:
+    app_repo_normalized: "{{ app_repo_raw | regex_replace('^https?://', '') | regex_replace('\\.git$', '') | trim }}"
+
+- name: Extract Gitea repository name from owner/path or URL segments
+  ansible.builtin.set_fact:
+    generic_app_repo: "{{ app_repo_normalized | split('/') | last | trim }}"
+
+- name: Set application branch from survey or default
+  ansible.builtin.set_fact:
+    generic_app_branch: "{{ app_branch | default(generic_app_default_branch) | trim }}"
+
+- name: Fail when required deploy variables are missing or invalid
+  ansible.builtin.assert:
+    that:
+      - generic_app_repo | length > 0
+      - generic_app_repo is not search('://')
+      - generic_app_repo is not search('/')
+      - generic_app_clone_path | length > 0
+    fail_msg: >-
+      app_repo must be the Gitea repository name (e.g. AIOps_App) and app_clone_path must be set.
+      Received app_repo="{{ app_repo_raw }}" (normalized "{{ generic_app_repo }}"),
+      app_clone_path="{{ generic_app_clone_path }}".
+
+- name: Build Gitea host from credential URL
+  ansible.builtin.set_fact:
+    generic_app_gitea_host: "{{ gitea_credential_url | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+
+- name: Build authenticated Gitea clone URL for application repository
+  ansible.builtin.set_fact:
+    generic_app_repo_clone_url: >-
+      https://{{ gitea_credential_username | urlencode }}:{{
+      gitea_credential_password | urlencode }}@{{ generic_app_gitea_host }}/{{
+      gitea_credential_username | urlencode }}/{{ generic_app_repo | urlencode }}.git
+  no_log: true
+
+- name: Clone application repository into configured path on target host
+  block:
+    - name: Remove existing clone path before fresh clone
+      ansible.builtin.file:
+        path: "{{ generic_app_clone_path }}"
+        state: absent
+
+    - name: Clone application repository
+      ansible.builtin.git:
+        repo: "{{ generic_app_repo_clone_url }}"
+        dest: "{{ generic_app_clone_path }}"
+        version: "{{ generic_app_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: "{{ 'true' if not generic_app_validate_certs | bool else 'false' }}"
+      no_log: true
+      register: generic_app_git_clone
+
+    - name: Capture application repository git commit after clone
+      ansible.builtin.command: git -C {{ generic_app_clone_path }} rev-parse HEAD
+      register: generic_app_git_head
+      changed_when: false
+
+    - name: Record application git commit for ITSM CTASK comment
+      ansible.builtin.set_fact:
+        itsm_app_git_commit: "{{ generic_app_git_head.stdout | trim }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+  rescue:
+    - name: Report application repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ generic_app_repo }} (branch {{ generic_app_branch }}) into
+          {{ generic_app_clone_path }} on {{ inventory_hostname }}. Ensure packages include git, the VM can reach
+          https://{{ generic_app_gitea_host }}, the repository exists in Gitea, and app_repo is the repository
+          name only (e.g. AIOps_App).

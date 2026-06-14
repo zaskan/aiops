@@ -7,3 +7,5 @@ vm_manifest_password_length: 16
 vm_manifest_git_user_name: aiops-automation
 vm_manifest_git_user_email: aiops@example.com
 vm_manifest_validate_certs: false
+vm_cpu_max_sockets: 8
+vm_mem_max_guest: 8Gi

@@ -1,0 +1,131 @@
+---
+- name: Ensure sub-workflows allow ITSM variables from master workflow nodes
+  ansible.builtin.include_tasks: ensure_subworkflows.yml
+
+- name: Ensure Deploy Generic Application Stack master workflow exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    inventory: "{{ aap_generic_app_stack_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_generic_app_stack_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_generic_app_stack_pipeline_workflow_extra_vars }}"
+    ask_variables_on_launch: true
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Ensure Deploy Generic Application sub-workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: deploy_generic_app_stack
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_generic_app_subworkflow }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref | default(\"\") }}' }}"
+      target_host: "{{ '{{ vm_name }}' }}"
+      vm_name: "{{ '{{ vm_name }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Ensure Submit Generic Application Stack ITSM Request workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: submit_generic_app_stack_itsm_request
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+    extra_data:
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Clear Provision VM sub-workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: provision_vm_stack
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_vm_subworkflow }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref | default(\"\") }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Clear Submit Generic Application Stack ITSM Request workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: submit_generic_app_stack_itsm_request
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+    extra_data:
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Ensure Submit Generic Application Stack ITSM Request workflow node links to Provision VM
+  awx.awx.workflow_job_template_node:
+    identifier: submit_generic_app_stack_itsm_request
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_jt_submit_itsm_request }}"
+    extra_data:
+      vm_name: "{{ '{{ vm_name }}' }}"
+      cpus: "{{ '{{ cpus }}' }}"
+      mem: "{{ '{{ mem }}' }}"
+      app_repo: "{{ '{{ app_repo }}' }}"
+      app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      app_packages: "{{ '{{ app_packages }}' }}"
+      app_clone_path: "{{ '{{ app_clone_path }}' }}"
+      app_service: "{{ '{{ app_service }}' }}"
+    success_nodes:
+      - provision_vm_stack
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"
+
+- name: Ensure Provision VM sub-workflow node links to Deploy Generic Application
+  awx.awx.workflow_job_template_node:
+    identifier: provision_vm_stack
+    workflow_job_template: "{{ aap_generic_app_stack_pipeline_workflow }}"
+    organization: "{{ aap_generic_app_stack_pipeline_organization }}"
+    unified_job_template: "{{ aap_generic_app_stack_pipeline_vm_subworkflow }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref | default(\"\") }}' }}"
+    success_nodes:
+      - deploy_generic_app_stack
+    state: present
+    controller_host: "{{ aap_generic_app_stack_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_generic_app_stack_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_generic_app_stack_pipeline_validate_certs }}"

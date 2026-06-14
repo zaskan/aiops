@@ -1,0 +1,44 @@
+---
+- name: Start ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Start ITSM CTASK for Deploy application repository
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: start.yml
+
+    - name: Resolve target host for generic application job
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_generic_app_target_host.yml
+
+- name: Deploy application from Gitea repository
+  hosts: generic_app_targets
+  gather_facts: true
+  become: true
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Clone application repository into configured clone path
+      ansible.builtin.include_role:
+        name: generic_app
+        tasks_from: deploy
+
+- name: Complete ITSM change task tracking
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Restore application git commit from target host facts
+      ansible.builtin.set_fact:
+        itsm_app_git_commit: >-
+          {{ hostvars[generic_app_target_host]['itsm_app_git_commit'] | default(itsm_app_git_commit | default('')) }}
+
+    - name: Complete ITSM CTASK for Deploy application repository
+      ansible.builtin.import_role:
+        name: itsm_change_task
+        tasks_from: complete.yml

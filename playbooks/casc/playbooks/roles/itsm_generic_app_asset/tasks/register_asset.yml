@@ -1,0 +1,144 @@
+---
+- name: GET ITSM asset types
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/asset-types"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_generic_app_asset_types_list
+
+- name: Resolve Generic Application asset type id
+  ansible.builtin.set_fact:
+    itsm_generic_app_asset_type_id: >-
+      {{
+        (
+          itsm_generic_app_asset_types_list.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_generic_app_asset_type_name)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Fail when Generic Application asset type is missing in ITSM
+  ansible.builtin.fail:
+    msg: >-
+      ITSM asset type '{{ itsm_generic_app_asset_type_name }}' was not found. Run playbooks/install.yml
+      or playbooks/casc/configure_itsm_asset_types.yml to create asset types.
+  when: itsm_generic_app_asset_type_id is none
+
+- name: GET existing ITSM assets
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: itsm_generic_app_asset_existing_list
+
+- name: Determine whether Generic Application asset already exists in ITSM
+  ansible.builtin.set_fact:
+    itsm_generic_app_asset_existing: >-
+      {{
+        (
+          itsm_generic_app_asset_existing_list.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_generic_app_asset_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+    itsm_generic_app_asset_already_exists: >-
+      {{
+        (
+          itsm_generic_app_asset_existing_list.json
+          | default([])
+          | selectattr('name', 'equalto', itsm_generic_app_asset_name)
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Build Generic Application asset custom fields payload
+  ansible.builtin.set_fact:
+    itsm_generic_app_asset_custom_fields:
+      hostname: "{{ itsm_generic_app_hostname }}"
+      vm_hostname: "{{ itsm_generic_app_target_host }}"
+      ip_address: "{{ itsm_generic_app_vm_ip }}"
+      app_repo: "{{ itsm_generic_app_repo_record }}"
+      app_branch: "{{ itsm_generic_app_branch_record }}"
+      git_commit: "{{ itsm_app_git_commit | default('') }}"
+      route_url: "{{ itsm_generic_app_route_url | default('') }}"
+      rpms: "{{ itsm_generic_app_rpms_record }}"
+      clone_path: "{{ itsm_generic_app_clone_path_record }}"
+      app_service: "{{ itsm_generic_app_service_record }}"
+
+- name: Create Generic Application asset in ITSM
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      name: "{{ itsm_generic_app_asset_name }}"
+      description: "Generic app on {{ itsm_generic_app_target_host }} ({{ itsm_generic_app_vm_ip }})"
+      external_inventory: true
+      asset_type_id: "{{ itsm_generic_app_asset_type_id | int }}"
+      parent_asset_id: "{{ itsm_generic_app_vm_asset_id | int }}"
+      custom_fields: "{{ itsm_generic_app_asset_custom_fields }}"
+    status_code: [201]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_generic_app_asset_create
+  when: not itsm_generic_app_asset_already_exists | bool
+
+- name: Update existing Generic Application asset custom fields in ITSM
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url }}/api/v1/assets/{{ itsm_generic_app_asset_existing.id }}"
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: "Generic app on {{ itsm_generic_app_target_host }} ({{ itsm_generic_app_vm_ip }})"
+      asset_type_id: "{{ itsm_generic_app_asset_type_id | int }}"
+      parent_asset_id: "{{ itsm_generic_app_vm_asset_id | int }}"
+      custom_fields: "{{ itsm_generic_app_asset_custom_fields }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  register: itsm_generic_app_asset_update
+  when: itsm_generic_app_asset_already_exists | bool
+
+- name: Display ITSM Generic Application asset registration result
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'Created ITSM Generic Application asset ' ~ itsm_generic_app_asset_name
+        ~ ' (parent VM: ' ~ itsm_generic_app_target_host ~ ')'
+        if not itsm_generic_app_asset_already_exists | bool
+        else 'Updated ITSM Generic Application asset ' ~ itsm_generic_app_asset_name
+        ~ ' (parent VM: ' ~ itsm_generic_app_target_host ~ ')'
+      }}

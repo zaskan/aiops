@@ -8,3 +8,4 @@ gitops_infrastructure_source_branch: main
 gitops_infrastructure_repo_secret_name: gitea-infrastructure
 gitops_infrastructure_validate_certs: false
 gitops_infrastructure_gitea_insecure: true
+gitops_infrastructure_automated_allow_empty: true

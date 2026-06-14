@@ -69,18 +69,30 @@
       in Gitea Infrastructure. Run Provision VM (Push VM Manifest) before Expose Apache.
   when: not apache_exposure_manifest_stat.stat.exists
 
+- name: Collapse consecutive YAML document separators in VM manifest
+  ansible.builtin.replace:
+    path: "{{ apache_exposure_manifest_path }}"
+    regexp: '\n---\n---\n'
+    replace: '\n---\n'
+
 - name: Read current VM manifest content from repository clone
   ansible.builtin.slurp:
     src: "{{ apache_exposure_manifest_path }}"
   register: apache_exposure_manifest_slurp
 
-- name: Capture VM manifest content as plain text
+- name: Set VM manifest content fact from repository clone
   ansible.builtin.set_fact:
     apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
 
 - name: Parse VM manifest documents from GitOps file
   ansible.builtin.set_fact:
-    apache_exposure_manifest_docs: "{{ apache_exposure_manifest_content | from_yaml_all | list }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        (apache_exposure_manifest_content | from_yaml_all | list)
+        | reject('equalto', none)
+        | selectattr('kind', 'defined')
+        | list
+      }}
 
 - name: Determine whether VirtualMachine manifest exposes masquerade port 80
   ansible.builtin.set_fact:
@@ -138,7 +150,13 @@
 - name: Refresh VM manifest content fact after port patching
   ansible.builtin.set_fact:
     apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
-    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        ((apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list)
+        | reject('equalto', none)
+        | selectattr('kind', 'defined')
+        | list
+      }}
   when: "{{ not apache_exposure_vm_has_port_80 | bool or ('          - port: 80' in apache_exposure_manifest_content) }}"
 
 - name: Repair incorrect KubeVirt Service selector in existing Apache exposure manifest
@@ -157,7 +175,13 @@
 - name: Refresh VM manifest content fact after Service selector repair
   ansible.builtin.set_fact:
     apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
-    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        ((apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list)
+        | reject('equalto', none)
+        | selectattr('kind', 'defined')
+        | list
+      }}
   when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
 
 - name: Detect whether Probe manifest is already present in VM manifest file

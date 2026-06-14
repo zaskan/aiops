@@ -69,7 +69,7 @@
 - name: Configure itsm-app for AIOps demo
   ansible.builtin.include_tasks: configure_itsm_aiops.yml
 
-- name: Configure ITSM asset types (Virtual Machine, Apache Application)
+- name: Configure ITSM asset types (Virtual Machine, Generic Application)
   ansible.builtin.include_tasks: configure_itsm_asset_types.yml
 
 - name: Publish ITSM KB article for VM provisioning workflow
@@ -81,41 +81,47 @@
 - name: Publish ITSM KB article for VM memory modification workflow
   ansible.builtin.include_tasks: configure_itsm_kb_vm_memory_modification.yml
 
-- name: Publish ITSM KB article for Apache alert remediation
-  ansible.builtin.include_tasks: configure_itsm_kb_apache_troubleshoot.yml
+- name: Publish ITSM KB article for Generic Application incident remediation
+  ansible.builtin.include_tasks: configure_itsm_kb_generic_app_incident_remediation.yml
 
-- name: Configure ITSM Apache Application stack templates
-  ansible.builtin.include_tasks: configure_itsm_apache_stack_templates.yml
+- name: Publish ITSM KB article for Generic Application stack deletion
+  ansible.builtin.include_tasks: configure_itsm_kb_generic_app_deletion.yml
+
+- name: Configure ITSM Generic Application stack templates
+  ansible.builtin.include_tasks: configure_itsm_generic_app_stack_templates.yml
+
+- name: Configure ITSM Generic Application delete catalog templates
+  ansible.builtin.include_tasks: configure_itsm_generic_app_delete_templates.yml
 
 - name: Configure ITSM VM modification catalog templates
   ansible.builtin.include_tasks: configure_itsm_vm_modification_templates.yml
 
-- name: Configure AAP Apache httpd deployment workflow
+- name: Configure AAP Generic Application deployment workflow
   ansible.builtin.include_role:
-    name: aap_httpd_pipeline
+    name: aap_generic_app_pipeline
   vars:
-    aap_httpd_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    aap_generic_app_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
-- name: Configure AAP Apache alert remediation job templates
-  ansible.builtin.include_role:
-    name: aap_apache_troubleshoot_pipeline
-  vars:
-    aap_apache_troubleshoot_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
-
-- name: Configure Event-Driven Ansible Apache alert pipeline
+- name: Configure Event-Driven Ansible Generic Application alert pipeline
   ansible.builtin.include_role:
     name: aap_eda_pipeline
   vars:
     aap_eda_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
-- name: Configure OpenShift monitoring alerts for Apache HTTP probes
-  ansible.builtin.include_tasks: configure_apache_monitoring.yml
+- name: Configure OpenShift monitoring alerts for Generic Application HTTP probes
+  ansible.builtin.include_tasks: configure_generic_app_monitoring.yml
 
-- name: Configure AAP Deploy Apache Application Stack master workflow
+- name: Configure AAP Deploy Generic Application Stack master workflow
   ansible.builtin.include_role:
-    name: aap_apache_stack_pipeline
+    name: aap_generic_app_stack_pipeline
   vars:
-    aap_apache_stack_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    aap_generic_app_stack_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Delete Generic Application Stack workflow
+  ansible.builtin.include_role:
+    name: aap_generic_app_delete_pipeline
+  vars:
+    aap_generic_app_delete_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
 - name: Configure AAP VM modification workflows
   ansible.builtin.include_role:

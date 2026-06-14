@@ -1,0 +1,17 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_tasks: ../common/tasks/load_gitea_credential.yml
+
+- name: Map Gitea facts for app deprovision role
+  ansible.builtin.set_fact:
+    app_deprovision_gitea_api_base: "{{ vm_manifest_gitea_api_base }}"
+    app_deprovision_gitea_username: "{{ vm_manifest_gitea_username }}"
+    app_deprovision_gitea_password: "{{ vm_manifest_gitea_password }}"
+    app_deprovision_gitea_owner: "{{ vm_manifest_gitea_owner }}"
+
+- name: Validate vm_name for application stack deprovision
+  ansible.builtin.assert:
+    that:
+      - vm_name is defined
+      - vm_name | string | trim | length > 0
+    fail_msg: vm_name is required to deprovision a Generic Application stack.

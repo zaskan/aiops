@@ -57,8 +57,8 @@
     aap_uninstall_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
   when: uninstall_remove_aap | bool
 
-- name: Remove OpenShift Apache monitoring alert resources
-  ansible.builtin.include_tasks: uninstall_apache_monitoring.yml
+- name: Remove OpenShift Generic Application monitoring alert resources
+  ansible.builtin.include_tasks: uninstall_generic_app_monitoring.yml
   when: uninstall_remove_aap | bool
 
 - name: Remove OpenShift ServiceAccount and token created for AAP

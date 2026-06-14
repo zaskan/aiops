@@ -1,0 +1,117 @@
+---
+- name: Create ITSM incident from Generic Application alert
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Load ITSM API credentials
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_itsm_credential.yml
+
+    - name: Validate alert extra vars for incident creation
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | string | trim | length > 0
+        fail_msg: vm_name extra var is required to create a Generic Application alert incident.
+
+    - name: Evaluate whether alert incident creation should be skipped
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: evaluate_generic_app_alert_incident_skip.yml
+
+    - name: Build incident title and description from alert payload
+      ansible.builtin.set_fact:
+        generic_app_alert_incident_title: >-
+          Generic application down — {{ vm_name | string | trim }}
+        generic_app_alert_incident_description: |-
+          Automated incident from Alertmanager alert {{ alertname | default('GenericApplicationDown') }}.
+
+          vm_name: {{ vm_name | string | trim }}
+          probe_instance: {{ probe_instance | default('unknown') }}
+          summary: {{ alert_summary | default('Generic application HTTP probe failed') }}
+      when: not (generic_app_alert_skip_incident | default(false) | bool)
+
+    - name: List open ITSM incidents for idempotency check
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents?status=open"
+        method: GET
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        return_content: true
+        status_code: [200]
+        headers:
+          Accept: application/json
+      register: generic_app_alert_open_incidents
+      when: not (generic_app_alert_skip_incident | default(false) | bool)
+
+    - name: Detect existing open incident for the same VM alert
+      ansible.builtin.set_fact:
+        generic_app_alert_existing_incident: >-
+          {{
+            (
+              generic_app_alert_open_incidents.json
+              | default([])
+              | selectattr('title', 'equalto', generic_app_alert_incident_title)
+              | list
+              | first
+              | default({}, true)
+            )
+          }}
+      when: not (generic_app_alert_skip_incident | default(false) | bool)
+
+    - name: Skip incident creation when an open incident already exists
+      ansible.builtin.debug:
+        msg: >-
+          Open incident already exists for {{ vm_name }}:
+          {{ generic_app_alert_existing_incident.public_id | default('unknown') }}
+      when:
+        - not (generic_app_alert_skip_incident | default(false) | bool)
+        - generic_app_alert_existing_incident.public_id is defined
+
+    - name: Create ITSM incident for Generic Application alert
+      ansible.builtin.uri:
+        url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents"
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        body_format: json
+        body: "{{ generic_app_alert_incident_body }}"
+        status_code: [201]
+        return_content: true
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+      vars:
+        generic_app_alert_incident_body: >-
+          {{
+            {
+              'title': generic_app_alert_incident_title,
+              'description': generic_app_alert_incident_description,
+              'severity': 'high'
+            }
+            | combine(
+              {'inventory_asset_id': generic_app_asset_id | int}
+              if generic_app_asset_id is defined
+              else {}
+            )
+          }}
+      register: generic_app_alert_incident_create
+      when:
+        - not (generic_app_alert_skip_incident | default(false) | bool)
+        - generic_app_alert_existing_incident.public_id is not defined
+
+    - name: Display created incident reference
+      ansible.builtin.debug:
+        msg: >-
+          ITSM incident {{
+            generic_app_alert_incident_create.json.public_id
+            | default(generic_app_alert_existing_incident.public_id)
+          }} created or reused for Generic Application alert on {{ vm_name }}.
+      when: not (generic_app_alert_skip_incident | default(false) | bool)

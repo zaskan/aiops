@@ -1,0 +1,27 @@
+---
+aap_generic_app_pipeline_organization: AIOps
+aap_generic_app_pipeline_validate_certs: false
+aap_generic_app_pipeline_controller_api_prefix: /api/controller/
+
+aap_generic_app_pipeline_inventory: AIOps Infrastructure
+aap_generic_app_pipeline_project: AIOps Playbooks
+
+aap_generic_app_pipeline_jt_install: Install application packages
+aap_generic_app_pipeline_jt_deploy: Deploy application repository
+aap_generic_app_pipeline_jt_expose: Expose application
+aap_generic_app_pipeline_jt_register_itsm: Register ITSM Generic Application Asset
+aap_generic_app_pipeline_jt_start: Start application service
+aap_generic_app_pipeline_workflow: Deploy Generic Application
+
+aap_generic_app_pipeline_playbook_install: install_app_packages.yml
+aap_generic_app_pipeline_playbook_deploy: deploy_generic_app.yml
+aap_generic_app_pipeline_playbook_expose: expose_application.yml
+aap_generic_app_pipeline_playbook_register_itsm: register_itsm_generic_app_asset.yml
+aap_generic_app_pipeline_playbook_start: start_application_service.yml
+
+aap_generic_app_pipeline_credential_vms: Virtual Machines
+aap_generic_app_pipeline_credential_gitea: Gitea
+aap_generic_app_pipeline_credential_openshift: OpenShift Cluster
+aap_generic_app_pipeline_credential_itsm: ITSM App
+aap_generic_app_pipeline_credential_chat: Chat App
+aap_generic_app_pipeline_credential_aap: AAP Gateway

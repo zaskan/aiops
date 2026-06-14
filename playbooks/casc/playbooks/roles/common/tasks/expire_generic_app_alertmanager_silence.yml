@@ -1,0 +1,28 @@
+---
+- name: Skip Alertmanager silence expiry when silence id was not provided
+  ansible.builtin.debug:
+    msg: >-
+      No Alertmanager silence id provided for {{ vm_name | string | trim }}; skipping silence expiry.
+  when: generic_app_alert_silence_id | default('') | string | trim | length == 0
+
+- name: Expire Alertmanager silence for Generic Application maintenance via amtool
+  kubernetes.core.k8s_exec:
+    namespace: "{{ openshift_generic_app_monitoring_uwm_alertmanager_namespace }}"
+    pod: "{{ generic_app_alert_am_pod_name }}"
+    container: "{{ openshift_generic_app_monitoring_uwm_alertmanager_container }}"
+    command: >-
+      amtool --alertmanager.url=http://127.0.0.1:9093 silence expire
+      {{ generic_app_alert_silence_id | string | trim }}
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+  register: generic_app_alert_silence_expire
+  changed_when: generic_app_alert_silence_expire.rc == 0
+  when: generic_app_alert_silence_id | default('') | string | trim | length > 0
+
+- name: Display Alertmanager silence expiry summary
+  ansible.builtin.debug:
+    msg: >-
+      Expired Alertmanager silence {{ generic_app_alert_silence_id | string | trim }}
+      for vm_name {{ vm_name | string | trim }}.
+  when: generic_app_alert_silence_id | default('') | string | trim | length > 0

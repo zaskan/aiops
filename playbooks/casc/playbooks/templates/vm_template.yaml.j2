@@ -15,7 +15,13 @@ spec:
     spec:
       domain:
         cpu:
-          cores: {{ cpus }}
+          cores: 1
+          sockets: {{ cpus | int }}
+          threads: 1
+          maxSockets: {{ vm_cpu_max_sockets | default([cpus | int * 4, 8] | max) }}
+        memory:
+          guest: {{ mem }}Gi
+          maxGuest: {{ vm_mem_max_guest | default((mem | int * 2) ~ 'Gi') }}
         resources:
           requests:
             memory: {{ mem }}Gi
@@ -50,6 +56,24 @@ spec:
             imagePullPolicy: IfNotPresent
         - name: cloudinit-disk
           cloudInitNoCloud:
+{% if vm_manifest_existing_cloud_init_userdata is defined and vm_manifest_existing_cloud_init_userdata | string | trim | length > 0 %}
+            userData: |
+{{ vm_manifest_existing_cloud_init_userdata | indent(14, first=True) }}
+{% if vm_manifest_existing_cloud_init_networkdata is defined and vm_manifest_existing_cloud_init_networkdata | string | trim | length > 0 %}
+            networkData: |
+{{ vm_manifest_existing_cloud_init_networkdata | indent(14, first=True) }}
+{% else %}
+            networkData: |
+              version: 2
+              ethernets:
+                {{ vm_primary_guest_interface }}:
+                  dhcp4: true
+                {{ vm_secondary_guest_interface }}:
+                  dhcp4: false
+                  addresses:
+                    - {{ vm_ip }}/{{ vm_ip_prefix_length }}
+{% endif %}
+{% else %}
             userData: |
               #cloud-config
               chpasswd:
@@ -67,6 +91,7 @@ spec:
                   dhcp4: false
                   addresses:
                     - {{ vm_ip }}/{{ vm_ip_prefix_length }}
+{% endif %}
       accessCredentials:
         - sshPublicKey:
             propagationMethod:

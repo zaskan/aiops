@@ -1,0 +1,123 @@
+---
+- name: Set Gitea host for Infrastructure manifest deletion
+  ansible.builtin.set_fact:
+    app_deprovision_gitea_host: >-
+      {{ app_deprovision_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for manifest deletion
+  ansible.builtin.set_fact:
+    app_deprovision_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ app_deprovision_gitea_username | urlencode ~ ':'
+          ~ app_deprovision_gitea_password | urlencode ~ '@'
+          ~ app_deprovision_gitea_internal_host ~ '/'
+          ~ app_deprovision_gitea_owner | urlencode ~ '/'
+          ~ app_deprovision_gitea_repo | urlencode ~ '.git'
+        )
+        if (app_deprovision_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ app_deprovision_gitea_username | urlencode ~ ':'
+          ~ app_deprovision_gitea_password | urlencode ~ '@'
+          ~ app_deprovision_gitea_host ~ '/'
+          ~ app_deprovision_gitea_owner | urlencode ~ '/'
+          ~ app_deprovision_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Infrastructure clone directory for manifest deletion
+  ansible.builtin.file:
+    path: "{{ app_deprovision_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Infrastructure repository for manifest deletion
+  ansible.builtin.git:
+    repo: "{{ app_deprovision_gitea_clone_repo }}"
+    dest: "{{ app_deprovision_workdir }}/repo"
+    version: "{{ app_deprovision_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          app_deprovision_gitea_use_internal | default(false) | bool
+          or app_deprovision_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Set VM manifest path in Infrastructure repository
+  ansible.builtin.set_fact:
+    app_deprovision_manifest_path: >-
+      {{ app_deprovision_workdir }}/repo/{{ app_deprovision_gitea_path }}/{{ vm_name }}.yaml
+
+- name: Check whether VM manifest exists in Infrastructure repository
+  ansible.builtin.stat:
+    path: "{{ app_deprovision_manifest_path }}"
+  register: app_deprovision_manifest_stat
+
+- name: Skip manifest deletion when file is already absent from Git
+  ansible.builtin.debug:
+    msg: >-
+      VM manifest {{ app_deprovision_gitea_path }}/{{ vm_name }}.yaml was not found in Gitea;
+      skipping git delete.
+  when: not app_deprovision_manifest_stat.stat.exists
+
+- name: Remove VM manifest from Infrastructure repository and push
+  when: app_deprovision_manifest_stat.stat.exists
+  block:
+    - name: Ensure vms directory exists after manifest removal
+      ansible.builtin.file:
+        path: "{{ app_deprovision_workdir }}/repo/{{ app_deprovision_gitea_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure vms directory placeholder remains for Argo CD after manifest deletion
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ app_deprovision_workdir }}/repo/{{ app_deprovision_gitea_path }}/.gitkeep"
+        mode: "0644"
+
+    - name: Commit and push VM manifest deletion to Gitea Infrastructure repository
+      ansible.builtin.shell: |
+        set -euo pipefail
+        git config user.email "{{ app_deprovision_git_user_email }}"
+        git config user.name "{{ app_deprovision_git_user_name }}"
+        git rm -f "{{ app_deprovision_gitea_path }}/{{ vm_name }}.yaml"
+        git add "{{ app_deprovision_gitea_path }}/.gitkeep"
+        git commit -m "Delete VM manifest {{ vm_name }} (Generic Application stack teardown)"
+        git -c http.sslVerify={{ 'true' if app_deprovision_validate_certs | bool else 'false' }} push origin "{{ app_deprovision_gitea_branch }}"
+      args:
+        chdir: "{{ app_deprovision_workdir }}/repo"
+      register: app_deprovision_manifest_git_push
+      changed_when: app_deprovision_manifest_git_push.rc == 0
+      failed_when: >
+        (app_deprovision_manifest_git_push.rc not in [0, 1])
+        or (
+          app_deprovision_manifest_git_push.rc != 0
+          and ('nothing to commit' not in (app_deprovision_manifest_git_push.stdout | default('') | lower))
+          and ('nothing to commit' not in (app_deprovision_manifest_git_push.stderr | default('') | lower))
+        )
+      no_log: true
+
+    - name: Capture Infrastructure repository git commit after manifest deletion
+      ansible.builtin.command: git rev-parse HEAD
+      args:
+        chdir: "{{ app_deprovision_workdir }}/repo"
+      register: app_deprovision_manifest_git_head
+      changed_when: false
+
+    - name: Record Infrastructure git commit for ITSM CTASK comment
+      ansible.builtin.set_fact:
+        itsm_vm_git_commit: "{{ app_deprovision_manifest_git_head.stdout | trim }}"
+
+- name: Remove temporary Infrastructure clone directory after manifest deletion
+  ansible.builtin.file:
+    path: "{{ app_deprovision_workdir }}/repo"
+    state: absent

@@ -14,29 +14,34 @@ gitops_infrastructure_repo_secret_name: gitea-infrastructure
 gitops_infrastructure_validate_certs: false
 gitops_infrastructure_gitea_insecure: true
 
-apache_app_docroot: /var/www/html
-apache_app_package: httpd
-apache_app_git_package: git
-apache_app_service: httpd
-apache_app_default_branch: main
-apache_app_validate_certs: false
+generic_app_default_packages:
+  - httpd
+  - git
+generic_app_default_clone_path: /var/www/html
+generic_app_default_service: httpd
+generic_app_default_branch: main
+generic_app_validate_certs: false
 
-apache_exposure_route_wait_retries: 30
-apache_exposure_route_wait_delay: 10
+app_exposure_route_wait_retries: 30
+app_exposure_route_wait_delay: 10
 
-openshift_apache_monitoring_probe_job: apache-http
-openshift_apache_monitoring_probe_interval: 15s
-openshift_apache_monitoring_blackbox_prober: blackbox-exporter.aiops-demo.svc:9115
+openshift_generic_app_monitoring_probe_job: generic-app-http
+openshift_generic_app_monitoring_probe_interval: 15s
+openshift_generic_app_monitoring_blackbox_prober: blackbox-exporter.aiops-demo.svc:9115
+openshift_generic_app_monitoring_alert_name: GenericApplicationDown
+openshift_generic_app_monitoring_uwm_alertmanager_namespace: openshift-user-workload-monitoring
+openshift_generic_app_monitoring_uwm_alertmanager_container: alertmanager
+openshift_generic_app_monitoring_delete_silence_minutes: 5
 
-itsm_apache_app_asset_type_name: Apache Application
+itsm_generic_app_asset_type_name: Generic Application
+itsm_generic_app_stack_request_template_name: Generic Application Stack
 
 chat_aiops_channel_name: operations
 
-# Post remediation summary as a thread reply under the incident.created chat message.
-# When false, remediation does not post to chat (ITSM comment + close still run).
-apache_troubleshoot_post_chat_summary: true
+generic_app_incident_remediation_post_chat_summary: true
 
-# Post VM modification completion as a thread reply under request.submitted chat message.
+generic_app_delete_post_chat_summary: true
+
 vm_modification_post_chat_summary: false
 
 openshift_cluster_domain: apps.ocp.zaskan.es

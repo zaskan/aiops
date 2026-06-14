@@ -1,4 +1,16 @@
 ---
+- name: Load ITSM API credentials for change ref resolution
+  ansible.builtin.include_tasks: ../common/tasks/load_itsm_credential.yml
+  when: >-
+    itsm_change_ref is not defined
+    or itsm_change_ref | string | trim | length == 0
+
+- name: Resolve ITSM change ref when workflow did not pass set_stats refs
+  ansible.builtin.include_tasks: ../common/tasks/resolve_itsm_stack_change_ref.yml
+  when: >-
+    itsm_change_ref is not defined
+    or itsm_change_ref | string | trim | length == 0
+
 - name: Skip ITSM change task integration when change ref is not provided
   ansible.builtin.set_fact:
     itsm_change_task_enabled: >-

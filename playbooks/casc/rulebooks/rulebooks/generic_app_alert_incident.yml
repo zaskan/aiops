@@ -1,0 +1,23 @@
+---
+- name: Generic Application HTTP probe alerts
+  hosts: all
+  sources:
+    - name: listen for alerts
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Open ITSM incident on Generic Application down
+      condition: >
+        event.payload.status == "firing"
+        and event.payload.commonLabels.alertname == "GenericApplicationDown"
+      action:
+        run_job_template:
+          name: Create Generic Application Alert Incident
+          organization: AIOps
+          job_args:
+            extra_vars:
+              vm_name: "{{ event.payload.commonLabels.vm_name | default('') }}"
+              alertname: "{{ event.payload.commonLabels.alertname | default('') }}"
+              probe_instance: "{{ event.payload.commonLabels.instance | default('') }}"
+              alert_summary: "{{ event.payload.commonAnnotations.summary | default('') }}"

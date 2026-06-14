@@ -1,0 +1,70 @@
+---
+- name: Load ITSM API credentials for stack extra var resolution
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_itsm_credential.yml
+
+- name: Lookup Generic Application ITSM asset for VM
+  ansible.builtin.include_tasks: lookup_generic_app_asset.yml
+
+- name: GET ITSM assets to resolve parent Virtual Machine asset
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: generic_app_stack_vm_assets_list
+
+- name: Resolve parent Virtual Machine ITSM asset
+  ansible.builtin.set_fact:
+    generic_app_stack_vm_asset: >-
+      {{
+        (
+          generic_app_stack_vm_assets_list.json
+          | default([])
+          | selectattr('id', 'equalto', generic_app_itsm_asset.parent_asset_id | default(none) | int)
+          | list
+          | first
+          | default(
+              generic_app_stack_vm_assets_list.json
+              | default([])
+              | selectattr('name', 'equalto', vm_name | string | trim)
+              | list
+              | first
+              | default({}, true),
+              true
+            )
+        )
+      }}
+
+- name: Fail when parent Virtual Machine ITSM asset was not found
+  ansible.builtin.fail:
+    msg: >-
+      No parent Virtual Machine ITSM asset found for vm_name '{{ vm_name | string | trim }}'.
+      Deploy the Generic Application Stack workflow first so VM and application assets exist.
+  when: generic_app_stack_vm_asset.id is not defined
+
+- name: Stage application repository from ITSM asset for normalization
+  ansible.builtin.set_fact:
+    app_repo: "{{ generic_app_itsm_asset.custom_fields.app_repo | default('') | trim }}"
+
+- name: Normalize application repository from ITSM asset to Gitea repo name
+  ansible.builtin.include_tasks: normalize_app_repo_name.yml
+
+- name: Build Deploy Generic Application Stack extra vars from ITSM assets
+  ansible.builtin.set_fact:
+    generic_app_stack_extra_vars:
+      vm_name: "{{ generic_app_itsm_asset.custom_fields.vm_hostname | default(vm_name | string | trim) | trim }}"
+      cpus: "{{ generic_app_stack_vm_asset.custom_fields.cpus | default(0) | int }}"
+      mem: "{{ generic_app_stack_vm_asset.custom_fields.memory | default(0) | int }}"
+      app_repo: "{{ app_repo_name }}"
+      app_branch: "{{ generic_app_itsm_asset.custom_fields.app_branch | default('main') | trim }}"
+      app_packages: "{{ generic_app_itsm_asset.custom_fields.rpms | default(generic_app_default_packages | join(',')) | trim }}"
+      app_clone_path: "{{ generic_app_itsm_asset.custom_fields.clone_path | default(generic_app_default_clone_path) | trim }}"
+      app_service: "{{ generic_app_itsm_asset.custom_fields.app_service | default(generic_app_default_service) | trim }}"

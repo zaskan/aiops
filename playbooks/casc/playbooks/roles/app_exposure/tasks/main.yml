@@ -1,0 +1,34 @@
+---
+- name: Run Apache exposure preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Patch VM manifest with Apache Service and Route
+  ansible.builtin.include_tasks: patch_manifest.yml
+
+- name: Push patched manifest to Gitea Infrastructure repository
+  ansible.builtin.include_tasks: push.yml
+
+- name: Sync Infrastructure VMs via Argo CD
+  ansible.builtin.include_tasks: sync.yml
+
+- name: Apply HTTP Probe for Generic Application monitoring outside GitOps
+  ansible.builtin.include_tasks: apply_http_probe.yml
+
+- name: Restart VM when masquerade port 80 is not active on running VMI
+  ansible.builtin.include_tasks: restart_vm.yml
+
+- name: Refresh Virtual Machine ITSM asset IP after VM restart
+  ansible.builtin.include_tasks: refresh_itsm_vm_ip.yml
+  when: apache_exposure_vm_restarted | default(false) | bool
+
+- name: Resolve Apache Route URL from OpenShift
+  ansible.builtin.include_tasks: resolve_route.yml
+
+- name: Display Apache exposure summary
+  ansible.builtin.debug:
+    msg:
+      - "VM name: {{ apache_exposure_vm_name }}"
+      - "Service: {{ apache_exposure_service_name }}"
+      - "Route host: {{ apache_exposure_route_host }}"
+      - "Route URL: {{ apache_app_route_url | default('pending') }}"
+      - "Manifest path: {{ apache_exposure_gitea_repo }}/{{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml"

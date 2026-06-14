@@ -13,3 +13,7 @@ Install now automatically patches itsm-app during image build and before RAG set
 roles/demo_platform/tasks/build_itsm_app_image.yml — clone + patch + binary build
 roles/demo_platform/tasks/ensure_itsm_app_vllm_embedding_patch.yml — rebuild if the running pod lacks the patch
 Wired into install_itsm_app.yml and configure_itsm_app_rag.yml
+
+-------------------
+The Nomic-embed-text-v2-moe model on your LiteLLM/vLLM gateway rejects inputs longer than ~1500 characters with 400 Bad Request.
+Truncate index text to 1500 chars in the itsm-app build patch (alongside the existing encoding_format: float patch)

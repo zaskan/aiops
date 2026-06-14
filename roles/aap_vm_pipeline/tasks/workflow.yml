@@ -22,7 +22,7 @@
     extra_data:
       itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
       itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
-      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_register_itsm }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_register_itsm }}"
       vm_name: "{{ '{{ vm_name }}' }}"
       cpus: "{{ '{{ cpus }}' }}"
       mem: "{{ '{{ mem }}' }}"
@@ -41,7 +41,7 @@
     extra_data:
       itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
       itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
-      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
@@ -57,7 +57,7 @@
     extra_data:
       itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
       itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
-      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_sync_vms }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_sync_vms }}"
     success_nodes:
       - register_itsm_vm_asset
     state: present
@@ -74,7 +74,7 @@
     extra_data:
       itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
       itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
-      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_push_vm }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_push_vm }}"
       vm_name: "{{ '{{ vm_name }}' }}"
       cpus: "{{ '{{ cpus }}' }}"
       mem: "{{ '{{ mem }}' }}"
@@ -93,7 +93,7 @@
     extra_data:
       itsm_change_ref: "{{ '{{ itsm_change_ref }}' }}"
       itsm_service_request_ref: "{{ '{{ itsm_service_request_ref | default(\"\") }}' }}"
-      itsm_ctask_template_name: "{{ itsm_apache_stack_task_template_push_vm }}"
+      itsm_ctask_template_name: "{{ itsm_generic_app_stack_task_template_push_vm }}"
       vm_name: "{{ '{{ vm_name }}' }}"
       cpus: "{{ '{{ cpus }}' }}"
       mem: "{{ '{{ mem }}' }}"

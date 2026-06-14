@@ -1,0 +1,5 @@
+---
+- name: Verify ITSM KB semantic search after generic application deletion article publish
+  ansible.builtin.include_tasks: verify_itsm_kb_rag.yml
+  vars:
+    itsm_kb_rag_verify_title: "{{ itsm_kb_generic_app_deletion_title }}"

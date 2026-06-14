@@ -9,6 +9,8 @@
     itsm_api_user: "{{ demo_platform.itsm_app.username }}"
     itsm_api_password: "{{ demo_platform.itsm_app.password }}"
     itsm_validate_certs: false
+    itsm_kb_vm_provisioning_example_app_repo: >-
+      {{ demo_platform.gitea.url | regex_replace('/$', '') }}/{{ demo_platform.gitea.username }}/AIOps_App.git
   no_log: true
 
 - name: Render ITSM KB article body for VM provisioning workflow
