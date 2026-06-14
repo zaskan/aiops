@@ -24,8 +24,10 @@
 
 - name: Set gitea external hostname
   ansible.builtin.set_fact:
-    demo_gitea_host: "gitea-gitea.{{ openshift_cluster_domain }}"
-    demo_gitea_root_url: "https://gitea-gitea.{{ openshift_cluster_domain }}/"
+    demo_gitea_host: "{{ gitea_external_host }}"
+    demo_gitea_root_url: "https://{{ gitea_external_host }}/"
+  vars:
+    gitea_external_host: "{{ ('gitea-gitea.' ~ openshift_cluster_domain) | replace('.apps.apps.', '.apps.') }}"
 
 - name: Install gitea from GitHub Kustomize overlay
   when: demo_gitea_needs_install | bool
@@ -122,7 +124,6 @@
       changed_when: false
 
 - name: Ensure gitea route and host configuration
-  when: demo_gitea_available.rc == 0
   block:
     - name: Update gitea host ConfigMap
       kubernetes.core.k8s:
@@ -272,9 +273,35 @@
       when: gitea_admin_user in demo_gitea_admin_list.stdout
       no_log: true
 
+- name: Read gitea Route host for URL fact
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - gitea
+      - -n
+      - "{{ gitea_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: demo_gitea_route_host
+  changed_when: false
+
+- name: Fail when gitea route host is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      gitea is not available. Could not resolve Route host in namespace
+      {{ gitea_namespace }}. Check: oc get pods,route -n {{ gitea_namespace }}
+  when: demo_gitea_route_host.stdout | trim == ""
+
 - name: Set gitea URL fact
   ansible.builtin.set_fact:
-    gitea_url: "{{ demo_gitea_root_url | regex_replace('/$', '') }}"
+    gitea_url: >-
+      {{
+        ('https://' ~ demo_gitea_route_host.stdout | trim)
+        | replace('.apps.apps.', '.apps.')
+        | regex_replace('/$', '')
+      }}
 
 - name: Verify gitea health endpoint
   ansible.builtin.uri:
