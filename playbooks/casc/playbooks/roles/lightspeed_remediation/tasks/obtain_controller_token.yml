@@ -1,0 +1,26 @@
+---
+- name: Load AAP controller connection for Lightspeed remediation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_aap_controller_credential.yml
+
+- name: Obtain AAP gateway OAuth token for Lightspeed remediation
+  ansible.builtin.uri:
+    url: "{{ aap_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_controller_username }}"
+    password: "{{ aap_controller_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      description: lightspeed-remediation automation
+      scope: write
+    status_code: 201
+  register: lightspeed_remediation_gateway_token_create
+  no_log: true
+
+- name: Set AAP controller OAuth token fact for Lightspeed remediation
+  ansible.builtin.set_fact:
+    lightspeed_remediation_controller_oauthtoken: "{{ lightspeed_remediation_gateway_token_create.json.token }}"
+  no_log: true

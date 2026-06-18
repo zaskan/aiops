@@ -26,6 +26,27 @@
   ansible.builtin.set_fact:
     itsm_apache_app_repo_record: "{{ app_repo | string | trim }}"
     itsm_apache_app_branch_record: "{{ app_branch | default('main') | string | trim }}"
+    itsm_apache_app_rpm_packages_record: >-
+      {{
+        apache_app_rpm_packages
+        | default(itsm_apache_app_default_rpm_packages | default('httpd,git'))
+        | string
+        | trim
+      }}
+    itsm_apache_app_enabled_services_record: >-
+      {{
+        apache_app_enabled_services
+        | default(itsm_apache_app_default_enabled_services | default('httpd'))
+        | string
+        | trim
+      }}
+    itsm_apache_app_clone_path_record: >-
+      {{
+        apache_app_docroot
+        | default(itsm_apache_app_default_clone_path | default('/var/www/html'))
+        | string
+        | trim
+      }}
 
 - name: Derive Apache Application asset naming from repository
   ansible.builtin.set_fact:

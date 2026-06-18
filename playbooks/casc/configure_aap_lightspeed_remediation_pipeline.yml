@@ -1,0 +1,18 @@
+---
+- name: Configure AAP Lightspeed Remediation workflow
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/gitea_repos.yml
+    - ../../group_vars/all/aap_lightspeed_remediation_pipeline.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    gitea_repos_local_base: "{{ playbook_dir }}"
+    aap_lightspeed_remediation_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  tasks:
+    - name: Sync Gitea repositories before configuring Lightspeed remediation pipeline
+      ansible.builtin.import_tasks: ../../roles/demo_platform/tasks/configure_gitea_repos.yml
+
+    - name: Configure AAP Lightspeed Remediation workflow
+      ansible.builtin.include_role:
+        name: aap_lightspeed_remediation_pipeline

@@ -1,0 +1,11 @@
+---
+- name: Upload Lightspeed remediation playbook to Gitea
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Push remediation playbook to Gitea Playbooks repository
+      ansible.builtin.include_role:
+        name: lightspeed_remediation
+        tasks_from: push_playbook.yml

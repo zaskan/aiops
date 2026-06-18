@@ -1,6 +1,9 @@
 ---
 itsm_vm_asset_type_name: Virtual Machine
 itsm_apache_app_asset_type_name: Apache Application
+itsm_apache_app_default_rpm_packages: "httpd,git"
+itsm_apache_app_default_enabled_services: httpd
+itsm_apache_app_default_clone_path: /var/www/html
 
 itsm_asset_types:
   - name: "{{ itsm_vm_asset_type_name }}"
@@ -19,8 +22,11 @@ itsm_asset_types:
       - { field_key: ip_address, label: IP address, field_type: text }
       - { field_key: app_repo, label: Application repository, field_type: text }
       - { field_key: app_branch, label: Git branch, field_type: text }
+      - { field_key: app_clone_path, label: Repository clone path, field_type: text }
       - { field_key: git_commit, label: Deployed git commit, field_type: text }
       - { field_key: route_url, label: Route URL, field_type: text }
+      - { field_key: rpm_packages, label: RPM packages, field_type: text }
+      - { field_key: enabled_services, label: Services to enable, field_type: text }
 
 itsm_ansible_role_check_connection: true
 itsm_ansible_role_admin_settings: false

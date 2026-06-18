@@ -1,0 +1,54 @@
+---
+- name: Read itsm-agent Apache asset extra-vars patch markers from running pod
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - exec
+      - deployment/itsm-agent
+      - --
+      - grep
+      - -E
+      - enrich_collected_from_apache_asset|apache_app_rpm_packages
+      - /app/bot/runner.py
+      - /app/bot/apache_assets.py
+  register: itsm_agent_apache_asset_patch_check
+  changed_when: false
+  failed_when: false
+  when: itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+
+- name: Rebuild itsm-agent image with Apache asset extra-vars patch
+  ansible.builtin.include_tasks: build_itsm_agent_image.yml
+  when:
+    - itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+    - (itsm_agent_apache_asset_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none
+
+- name: Rollout restart itsm-agent after Apache asset extra-vars patch rebuild
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - rollout
+      - restart
+      - deployment/itsm-agent
+  when:
+    - itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+    - (itsm_agent_apache_asset_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none
+  changed_when: true
+
+- name: Wait for itsm-agent rollout after Apache asset extra-vars patch rebuild
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - rollout
+      - status
+      - deployment/itsm-agent
+      - --timeout=300s
+  changed_when: false
+  when:
+    - itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+    - (itsm_agent_apache_asset_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none

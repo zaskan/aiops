@@ -1,0 +1,52 @@
+---
+- name: Create temporary directory for itsm-agent source build
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: itsm-agent-build-
+  register: itsm_agent_build_dir
+
+- name: Clone itsm-agent source for image build
+  ansible.builtin.git:
+    repo: "{{ itsm_agent_git_url }}"
+    version: "{{ itsm_agent_git_ref }}"
+    depth: 1
+    dest: "{{ itsm_agent_build_dir.path }}/itsm-agent"
+  register: itsm_agent_build_clone
+
+- name: Add Apache Application asset extra-vars module to itsm-agent
+  ansible.builtin.copy:
+    src: itsm_agent/bot/apache_assets.py
+    dest: "{{ itsm_agent_build_dir.path }}/itsm-agent/bot/apache_assets.py"
+    mode: "0644"
+  when: itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+
+- name: Patch itsm-agent runner to enrich AAP extra vars from Apache assets
+  ansible.builtin.command:
+    chdir: "{{ itsm_agent_build_dir.path }}/itsm-agent"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ role_path }}/files/itsm_agent_runner_apache_assets.patch"
+  register: itsm_agent_apache_assets_patch_apply
+  changed_when: itsm_agent_apache_assets_patch_apply.rc == 0
+  failed_when: itsm_agent_apache_assets_patch_apply.rc != 0
+  when: itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+
+- name: Build itsm-agent image from patched source directory
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - start-build
+      - itsm-agent
+      - "--from-dir={{ itsm_agent_build_dir.path }}/itsm-agent"
+      - --wait
+  register: itsm_agent_binary_build
+  changed_when: itsm_agent_binary_build.rc == 0
+
+- name: Remove temporary itsm-agent build directory
+  ansible.builtin.file:
+    path: "{{ itsm_agent_build_dir.path }}"
+    state: absent

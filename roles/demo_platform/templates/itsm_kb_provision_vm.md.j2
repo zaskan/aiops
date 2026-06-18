@@ -20,6 +20,16 @@ Launch **{{ aap_apache_stack_pipeline_workflow }}** (org **{{ aap_apache_stack_p
 | `app_repo` | yes | User |
 | `app_branch` | no | User, optional |
 
+When an **Apache Application** ITSM asset exists for the VM and repository, the bot also passes these extra vars from the asset (overriding playbook defaults when set):
+
+| ITSM asset field | AAP extra var |
+|------------------|---------------|
+| RPM packages | `apache_app_rpm_packages` |
+| Services to enable | `apache_app_enabled_services` |
+| Repository clone path | `apache_app_docroot` |
+
+`apache_app_rpm_packages` replaces `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` replaces `apache_app_service`.
+
 Example:
 ```
 itsm_change_ref: CHG-6

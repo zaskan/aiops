@@ -664,6 +664,16 @@ Re-run bot install or refresh secrets without a full install:
 ansible-playbook playbooks/casc/configure_itsm_agent.yml
 ```
 
+When launching Apache-related AAP workflows, the bot looks up a matching **Apache Application** ITSM asset (by `vm_name` / `target_host` and `app_repo`) and merges these asset custom fields into workflow `extra_vars` (overriding playbook defaults when set):
+
+| ITSM asset field | AAP extra var |
+| ---------------- | ------------- |
+| RPM packages | `apache_app_rpm_packages` |
+| Services to enable | `apache_app_enabled_services` |
+| Repository clone path | `apache_app_docroot` |
+
+`apache_app_rpm_packages` also derives `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` derives `apache_app_service`. Implemented via patched `bot/apache_assets.py` at itsm-agent image build (`itsm_agent_apache_asset_extra_vars_patch`).
+
 There is no public Route for the bot; health checks run on port **8080** inside the pod (`/healthz`, `/readyz`).
 
 ## Uninstall demo apps

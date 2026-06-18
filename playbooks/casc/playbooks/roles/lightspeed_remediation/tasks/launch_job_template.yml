@@ -1,0 +1,81 @@
+---
+- name: Validate required extra vars for remediation job template launch
+  ansible.builtin.assert:
+    that:
+      - itsm_incident_ref is defined
+      - itsm_incident_ref | string | trim | length > 0
+    fail_msg: itsm_incident_ref is required to launch a Lightspeed remediation job template.
+
+- name: Set dynamic remediation job template name
+  ansible.builtin.set_fact:
+    lightspeed_remediation_dynamic_jt_name: >-
+      {{ lightspeed_remediation_jt_name_prefix }} - {{ itsm_incident_ref | string | trim }}
+
+- name: Obtain AAP controller OAuth token for job template launch
+  ansible.builtin.include_tasks: obtain_controller_token.yml
+
+- name: Lookup dynamic remediation job template in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/?name={{
+      lightspeed_remediation_dynamic_jt_name | urlencode }}&organization__name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_jt_lookup
+
+- name: Fail when dynamic remediation job template was not found in AAP
+  ansible.builtin.fail:
+    msg: >-
+      Job template '{{ lightspeed_remediation_dynamic_jt_name }}' was not found. Ensure the
+      Create Lightspeed Remediation Job Template workflow node completed successfully.
+  when: lightspeed_remediation_jt_lookup.json.count | default(0) == 0
+
+- name: Build launch payload for dynamic remediation job template
+  ansible.builtin.set_fact:
+    lightspeed_remediation_launch_body: >-
+      {{
+        {'limit': limit | string | trim}
+        if (limit | default('') | string | trim | length > 0)
+        else {}
+      }}
+
+- name: Launch dynamic remediation job template in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/{{
+      lightspeed_remediation_jt_lookup.json.results[0].id }}/launch/
+    method: POST
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+      Content-Type: application/json
+    validate_certs: false
+    body_format: json
+    body: "{{ lightspeed_remediation_launch_body }}"
+    status_code: 201
+  register: lightspeed_remediation_job_launch
+
+- name: Wait for dynamic remediation job to complete
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/jobs/{{
+      lightspeed_remediation_job_launch.json.id }}/
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_job_status
+  until: lightspeed_remediation_job_status.json.status in ['successful', 'failed', 'error', 'canceled']
+  retries: "{{ lightspeed_remediation_job_launch_wait_retries }}"
+  delay: "{{ lightspeed_remediation_job_launch_wait_delay }}"
+
+- name: Fail when dynamic remediation job did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      Remediation job '{{ lightspeed_remediation_dynamic_jt_name }}' finished with status
+      {{ lightspeed_remediation_job_status.json.status | default('unknown') }}.
+  when: lightspeed_remediation_job_status.json.status != 'successful'

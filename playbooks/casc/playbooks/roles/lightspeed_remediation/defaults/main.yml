@@ -1,0 +1,27 @@
+---
+lightspeed_remediation_gitea_repo: Playbooks
+lightspeed_remediation_gitea_path: remediations
+lightspeed_remediation_gitea_branch: main
+lightspeed_remediation_workdir: /tmp/lightspeed-remediation
+lightspeed_remediation_git_user_name: aiops-automation
+lightspeed_remediation_git_user_email: aiops@example.com
+lightspeed_remediation_validate_certs: false
+lightspeed_remediation_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+lightspeed_remediation_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+lightspeed_remediation_jt_name_prefix: Lightspeed Remediation
+lightspeed_remediation_workflow_name: Lightspeed Remediation
+lightspeed_remediation_organization: AIOps
+lightspeed_remediation_project: AIOps Playbooks
+lightspeed_remediation_inventory: AIOps Infrastructure
+
+lightspeed_remediation_credential_vms: Virtual Machines
+
+lightspeed_remediation_jt_credentials:
+  - "{{ lightspeed_remediation_credential_vms }}"
+
+lightspeed_remediation_project_update_wait_retries: 60
+lightspeed_remediation_project_update_wait_delay: 5
+lightspeed_remediation_job_launch_wait_retries: 120
+lightspeed_remediation_job_launch_wait_delay: 10

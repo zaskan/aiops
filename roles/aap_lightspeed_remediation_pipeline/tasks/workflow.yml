@@ -1,0 +1,119 @@
+---
+- name: Ensure Lightspeed Remediation workflow job template exists in AAP
+  awx.awx.workflow_job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    survey_enabled: true
+    survey_spec: "{{ aap_lightspeed_remediation_pipeline_workflow_survey_spec }}"
+    extra_vars: "{{ aap_lightspeed_remediation_survey_extra_vars }}"
+    ask_variables_on_launch: true
+    ask_limit_on_launch: true
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Close Incident workflow node exists
+  awx.awx.workflow_job_template_node:
+    identifier: close_incident
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_close }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Launch Remediation Job Template workflow node links to Close Incident
+  awx.awx.workflow_job_template_node:
+    identifier: launch_remediation_job_template
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_launch }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref }}' }}"
+      limit: "{{ '{{ limit | default(\"\") }}' }}"
+    success_nodes:
+      - close_incident
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Create Remediation Job Template workflow node links to Launch
+  awx.awx.workflow_job_template_node:
+    identifier: create_remediation_job_template
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_create }}"
+    extra_data:
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref }}' }}"
+      limit: "{{ '{{ limit | default(\"\") }}' }}"
+    success_nodes:
+      - launch_remediation_job_template
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Clear Sync Playbooks Project workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: sync_playbooks_project
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_sync }}"
+    extra_data: {}
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Clear Upload Remediation Playbook workflow node edges before re-linking
+  awx.awx.workflow_job_template_node:
+    identifier: upload_remediation_playbook
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_upload }}"
+    extra_data:
+      ansible_playbook: "{{ '{{ ansible_playbook }}' }}"
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref }}' }}"
+    success_nodes: []
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Sync Playbooks Project workflow node links to Create Remediation Job Template
+  awx.awx.workflow_job_template_node:
+    identifier: sync_playbooks_project
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_sync }}"
+    extra_data: {}
+    success_nodes:
+      - create_remediation_job_template
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Upload Remediation Playbook workflow node links to Sync Playbooks Project
+  awx.awx.workflow_job_template_node:
+    identifier: upload_remediation_playbook
+    workflow_job_template: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    unified_job_template: "{{ aap_lightspeed_remediation_pipeline_jt_upload }}"
+    extra_data:
+      ansible_playbook: "{{ '{{ ansible_playbook }}' }}"
+      itsm_incident_ref: "{{ '{{ itsm_incident_ref }}' }}"
+    success_nodes:
+      - sync_playbooks_project
+    state: present
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"

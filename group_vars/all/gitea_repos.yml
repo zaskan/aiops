@@ -21,6 +21,8 @@ gitea_repos_sync_repo_defs:
       - vms
   - name: Playbooks
     local_dir: playbooks
+    preserve_paths:
+      - remediations
   - name: Rulebooks
     local_dir: rulebooks
   - name: AIOps_App

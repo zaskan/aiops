@@ -1,0 +1,57 @@
+---
+aap_lightspeed_remediation_pipeline_organization: AIOps
+aap_lightspeed_remediation_pipeline_validate_certs: false
+aap_lightspeed_remediation_pipeline_controller_api_prefix: /api/controller/
+
+aap_lightspeed_remediation_pipeline_inventory: AIOps Localhost
+aap_lightspeed_remediation_pipeline_remediation_inventory: AIOps Infrastructure
+aap_lightspeed_remediation_pipeline_project: AIOps Playbooks
+aap_lightspeed_remediation_pipeline_workflow: Lightspeed Remediation
+
+aap_lightspeed_remediation_pipeline_jt_upload: Upload Lightspeed Remediation Playbook
+aap_lightspeed_remediation_pipeline_jt_sync: Sync AIOps Playbooks Project
+aap_lightspeed_remediation_pipeline_jt_create: Create Lightspeed Remediation Job Template
+aap_lightspeed_remediation_pipeline_jt_launch: Launch Lightspeed Remediation Job Template
+aap_lightspeed_remediation_pipeline_jt_close: Close Lightspeed Remediation Incident
+
+aap_lightspeed_remediation_pipeline_playbook_upload: upload_lightspeed_remediation_playbook.yml
+aap_lightspeed_remediation_pipeline_playbook_sync: sync_aap_playbooks_project.yml
+aap_lightspeed_remediation_pipeline_playbook_create: create_lightspeed_remediation_job_template.yml
+aap_lightspeed_remediation_pipeline_playbook_launch: launch_lightspeed_remediation_job_template.yml
+aap_lightspeed_remediation_pipeline_playbook_close: close_lightspeed_remediation_incident.yml
+
+aap_lightspeed_remediation_survey_extra_vars:
+  ansible_playbook: ""
+  itsm_incident_ref: ""
+
+aap_lightspeed_remediation_pipeline_job_extra_vars_upload:
+  ansible_playbook: ""
+  itsm_incident_ref: ""
+aap_lightspeed_remediation_pipeline_job_extra_vars_create:
+  itsm_incident_ref: ""
+  limit: ""
+aap_lightspeed_remediation_pipeline_job_extra_vars_launch: "{{ aap_lightspeed_remediation_pipeline_job_extra_vars_create }}"
+aap_lightspeed_remediation_pipeline_job_extra_vars_close:
+  itsm_incident_ref: ""
+
+aap_lightspeed_remediation_pipeline_workflow_survey_spec:
+  name: Lightspeed Remediation
+  description: Upload and run a Lightspeed-generated remediation playbook against inventory hosts
+  spec:
+    - question_name: ansible_playbook
+      question_description: Raw Ansible playbook YAML content to store and execute
+      required: true
+      type: textarea
+      variable: ansible_playbook
+    - question_name: itsm_incident_ref
+      question_description: ITSM incident reference (e.g. INC-001) used as the playbook filename
+      required: true
+      type: text
+      variable: itsm_incident_ref
+
+aap_lightspeed_remediation_pipeline_credential_gitea: Gitea
+aap_lightspeed_remediation_pipeline_credential_itsm: ITSM App
+aap_lightspeed_remediation_pipeline_credential_aap: AAP Gateway
+aap_lightspeed_remediation_pipeline_credential_vms: Virtual Machines
+
+lightspeed_remediation_jt_name_prefix: Lightspeed Remediation

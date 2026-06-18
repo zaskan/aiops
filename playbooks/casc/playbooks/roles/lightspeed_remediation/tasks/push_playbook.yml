@@ -1,0 +1,125 @@
+---
+- name: Validate required extra vars for remediation playbook upload
+  ansible.builtin.assert:
+    that:
+      - ansible_playbook is defined
+      - ansible_playbook | string | trim | length > 0
+      - itsm_incident_ref is defined
+      - itsm_incident_ref | string | trim | length > 0
+    fail_msg: ansible_playbook and itsm_incident_ref are required to upload a Lightspeed remediation playbook.
+
+- name: Load Gitea credentials for remediation playbook upload
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_gitea_credential.yml
+
+- name: Map Gitea facts for Playbooks repository upload
+  ansible.builtin.set_fact:
+    lightspeed_remediation_gitea_api_base: "{{ gitea_credential_url }}"
+    lightspeed_remediation_gitea_username: "{{ gitea_credential_username }}"
+    lightspeed_remediation_gitea_password: "{{ gitea_credential_password }}"
+    lightspeed_remediation_gitea_owner: "{{ gitea_credential_username }}"
+  no_log: true
+
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    lightspeed_remediation_gitea_host: >-
+      {{ lightspeed_remediation_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Playbooks repository
+  ansible.builtin.set_fact:
+    lightspeed_remediation_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ lightspeed_remediation_gitea_username | urlencode ~ ':'
+          ~ lightspeed_remediation_gitea_password | urlencode ~ '@'
+          ~ lightspeed_remediation_gitea_internal_host ~ '/'
+          ~ lightspeed_remediation_gitea_owner | urlencode ~ '/'
+          ~ lightspeed_remediation_gitea_repo | urlencode ~ '.git'
+        )
+        if (lightspeed_remediation_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ lightspeed_remediation_gitea_username | urlencode ~ ':'
+          ~ lightspeed_remediation_gitea_password | urlencode ~ '@'
+          ~ lightspeed_remediation_gitea_host ~ '/'
+          ~ lightspeed_remediation_gitea_owner | urlencode ~ '/'
+          ~ lightspeed_remediation_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Playbooks clone directory
+  ansible.builtin.file:
+    path: "{{ lightspeed_remediation_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Playbooks repository
+  block:
+    - name: Clone Gitea Playbooks repository from Gitea
+      ansible.builtin.git:
+        repo: "{{ lightspeed_remediation_gitea_clone_repo }}"
+        dest: "{{ lightspeed_remediation_workdir }}/repo"
+        version: "{{ lightspeed_remediation_gitea_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              lightspeed_remediation_gitea_use_internal | default(false) | bool
+              or lightspeed_remediation_validate_certs | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+  rescue:
+    - name: Report Gitea Playbooks repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ lightspeed_remediation_gitea_owner }}/{{ lightspeed_remediation_gitea_repo }}
+          (branch {{ lightspeed_remediation_gitea_branch }}). Verify the Gitea credential and repository exist.
+
+- name: Ensure remediations directory exists in Playbooks repository
+  ansible.builtin.file:
+    path: "{{ lightspeed_remediation_workdir }}/repo/{{ lightspeed_remediation_gitea_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Write remediation playbook into Playbooks repository
+  ansible.builtin.copy:
+    content: "{{ ansible_playbook }}"
+    dest: >-
+      {{ lightspeed_remediation_workdir }}/repo/{{ lightspeed_remediation_gitea_path }}/{{
+      itsm_incident_ref | string | trim }}.yml
+    mode: "0644"
+
+- name: Commit and push remediation playbook to Gitea Playbooks repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ lightspeed_remediation_git_user_email }}"
+    git config user.name "{{ lightspeed_remediation_git_user_name }}"
+    git add "{{ lightspeed_remediation_gitea_path }}/{{ itsm_incident_ref | string | trim }}.yml"
+    git commit -m "Add Lightspeed remediation playbook {{ itsm_incident_ref | string | trim }}"
+    git -c http.sslVerify={{ 'true' if lightspeed_remediation_validate_certs | bool else 'false' }} push origin "{{ lightspeed_remediation_gitea_branch }}"
+  args:
+    chdir: "{{ lightspeed_remediation_workdir }}/repo"
+  register: lightspeed_remediation_git_push
+  changed_when: lightspeed_remediation_git_push.rc == 0
+  failed_when: >
+    (lightspeed_remediation_git_push.rc not in [0, 1])
+    or (
+      lightspeed_remediation_git_push.rc != 0
+      and ('nothing to commit' not in (lightspeed_remediation_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (lightspeed_remediation_git_push.stderr | default('') | lower))
+      and ('up to date' not in (lightspeed_remediation_git_push.stdout | default('') | lower))
+      and ('up to date' not in (lightspeed_remediation_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Remove temporary Playbooks clone directory after push
+  ansible.builtin.file:
+    path: "{{ lightspeed_remediation_workdir }}/repo"
+    state: absent

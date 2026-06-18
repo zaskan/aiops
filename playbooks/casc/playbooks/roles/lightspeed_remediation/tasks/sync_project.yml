@@ -1,0 +1,59 @@
+---
+- name: Obtain AAP controller OAuth token for project sync
+  ansible.builtin.include_tasks: obtain_controller_token.yml
+
+- name: Lookup AIOps Playbooks project in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/projects/?name={{
+      lightspeed_remediation_project | urlencode }}&organization__name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_project_lookup
+
+- name: Fail when AIOps Playbooks project was not found in AAP
+  ansible.builtin.fail:
+    msg: >-
+      Project '{{ lightspeed_remediation_project }}' was not found in organization
+      '{{ lightspeed_remediation_organization }}'.
+  when: lightspeed_remediation_project_lookup.json.count | default(0) == 0
+
+- name: Trigger AIOps Playbooks project SCM sync
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/projects/{{
+      lightspeed_remediation_project_lookup.json.results[0].id }}/update/
+    method: POST
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: [201, 202]
+  register: lightspeed_remediation_project_update
+
+- name: Wait for AIOps Playbooks project SCM sync to complete
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/project_updates/{{
+      lightspeed_remediation_project_update.json.id }}/
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_project_update_status
+  until: >-
+    lightspeed_remediation_project_update_status.json.status
+    in ['successful', 'failed', 'error', 'canceled']
+  retries: "{{ lightspeed_remediation_project_update_wait_retries }}"
+  delay: "{{ lightspeed_remediation_project_update_wait_delay }}"
+
+- name: Fail when AIOps Playbooks project SCM sync did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      Project '{{ lightspeed_remediation_project }}' SCM sync failed with status
+      {{ lightspeed_remediation_project_update_status.json.status | default('unknown') }}.
+  when: lightspeed_remediation_project_update_status.json.status != 'successful'

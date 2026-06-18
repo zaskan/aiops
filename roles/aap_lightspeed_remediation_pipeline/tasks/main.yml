@@ -1,0 +1,32 @@
+---
+- name: Run AAP Lightspeed remediation pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Sync AIOps Playbooks project from Gitea
+  ansible.builtin.include_tasks: project_update.yml
+
+- name: Configure AAP job templates and workflow for Lightspeed remediation
+  block:
+    - name: Ensure Lightspeed remediation job templates exist
+      ansible.builtin.include_tasks: job_templates.yml
+
+    - name: Ensure Lightspeed Remediation workflow exists
+      ansible.builtin.include_tasks: workflow.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_lightspeed_remediation_pipeline_controller_api_prefix }}"
+
+- name: Display AAP Lightspeed remediation pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_lightspeed_remediation_pipeline_organization }}"
+      - "Project: {{ aap_lightspeed_remediation_pipeline_project }}"
+      - "Workflow: {{ aap_lightspeed_remediation_pipeline_workflow }}"
+      - >-
+        Job templates: {{ aap_lightspeed_remediation_pipeline_jt_upload }},
+        {{ aap_lightspeed_remediation_pipeline_jt_sync }},
+        {{ aap_lightspeed_remediation_pipeline_jt_create }},
+        {{ aap_lightspeed_remediation_pipeline_jt_launch }},
+        {{ aap_lightspeed_remediation_pipeline_jt_close }}

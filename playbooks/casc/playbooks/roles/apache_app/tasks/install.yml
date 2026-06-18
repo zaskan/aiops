@@ -1,9 +1,20 @@
 ---
-- name: Install httpd and git packages
+- name: Build RPM package list from comma-separated packages field
+  ansible.builtin.set_fact:
+    apache_app_rpm_package_list: >-
+      {{
+        (
+          apache_app_rpm_packages | default(apache_app_package ~ ',' ~ apache_app_git_package)
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+
+- name: Install RPM packages
   ansible.builtin.dnf:
-    name:
-      - "{{ apache_app_package }}"
-      - "{{ apache_app_git_package }}"
+    name: "{{ apache_app_rpm_package_list }}"
     state: present
 
 - name: Open http port in guest firewalld

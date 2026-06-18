@@ -1,0 +1,165 @@
+---
+- name: Validate required extra vars for remediation job template creation
+  ansible.builtin.assert:
+    that:
+      - itsm_incident_ref is defined
+      - itsm_incident_ref | string | trim | length > 0
+    fail_msg: itsm_incident_ref is required to create a Lightspeed remediation job template.
+
+- name: Set dynamic remediation job template name
+  ansible.builtin.set_fact:
+    lightspeed_remediation_dynamic_jt_name: >-
+      {{ lightspeed_remediation_jt_name_prefix }} - {{ itsm_incident_ref | string | trim }}
+    lightspeed_remediation_dynamic_playbook: >-
+      {{ lightspeed_remediation_gitea_path }}/{{ itsm_incident_ref | string | trim }}.yml
+
+- name: Obtain AAP controller OAuth token for job template creation
+  ansible.builtin.include_tasks: obtain_controller_token.yml
+
+- name: Lookup AIOps organization in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/organizations/?name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_org_lookup
+
+- name: Fail when AIOps organization was not found in AAP
+  ansible.builtin.fail:
+    msg: "Organization '{{ lightspeed_remediation_organization }}' was not found in AAP."
+  when: lightspeed_remediation_org_lookup.json.count | default(0) == 0
+
+- name: Lookup AIOps Playbooks project in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/projects/?name={{
+      lightspeed_remediation_project | urlencode }}&organization__name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_project_lookup
+
+- name: Fail when AIOps Playbooks project was not found in AAP
+  ansible.builtin.fail:
+    msg: "Project '{{ lightspeed_remediation_project }}' was not found in AAP."
+  when: lightspeed_remediation_project_lookup.json.count | default(0) == 0
+
+- name: Lookup AIOps Infrastructure inventory in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/inventories/?name={{
+      lightspeed_remediation_inventory | urlencode }}&organization__name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_inventory_lookup
+
+- name: Fail when AIOps Infrastructure inventory was not found in AAP
+  ansible.builtin.fail:
+    msg: "Inventory '{{ lightspeed_remediation_inventory }}' was not found in AAP."
+  when: lightspeed_remediation_inventory_lookup.json.count | default(0) == 0
+
+- name: Lookup remediation job template credentials in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/credentials/?name={{
+      item | urlencode }}&organization__name={{ lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  loop: "{{ lightspeed_remediation_jt_credentials }}"
+  register: lightspeed_remediation_credential_lookup
+
+- name: Fail when a remediation job template credential was not found in AAP
+  ansible.builtin.fail:
+    msg: "Credential '{{ item.item }}' was not found in organization '{{ lightspeed_remediation_organization }}'."
+  loop: "{{ lightspeed_remediation_credential_lookup.results }}"
+  when: item.json.count | default(0) == 0
+
+- name: Build remediation job template credential ID list
+  ansible.builtin.set_fact:
+    lightspeed_remediation_credential_ids: >-
+      {{
+        lightspeed_remediation_credential_lookup.results
+        | map(attribute='json.results')
+        | map('first')
+        | map(attribute='id')
+        | list
+      }}
+
+- name: Lookup existing dynamic remediation job template in AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/?name={{
+      lightspeed_remediation_dynamic_jt_name | urlencode }}&organization__name={{
+      lightspeed_remediation_organization | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+    validate_certs: false
+    status_code: 200
+  register: lightspeed_remediation_jt_lookup
+
+- name: Create dynamic remediation job template in AAP
+  when: lightspeed_remediation_jt_lookup.json.count | default(0) == 0
+  ansible.builtin.uri:
+    url: "{{ aap_controller_host }}/api/controller/v2/job_templates/"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+      Content-Type: application/json
+    validate_certs: false
+    body_format: json
+    body:
+      name: "{{ lightspeed_remediation_dynamic_jt_name }}"
+      description: >-
+        Ephemeral Lightspeed remediation job template for incident {{
+        itsm_incident_ref | string | trim }}
+      job_type: run
+      organization: "{{ lightspeed_remediation_org_lookup.json.results[0].id }}"
+      inventory: "{{ lightspeed_remediation_inventory_lookup.json.results[0].id }}"
+      project: "{{ lightspeed_remediation_project_lookup.json.results[0].id }}"
+      playbook: "{{ lightspeed_remediation_dynamic_playbook }}"
+      ask_variables_on_launch: false
+    status_code: 201
+  register: lightspeed_remediation_jt_create
+
+- name: Update existing dynamic remediation job template in AAP
+  when: lightspeed_remediation_jt_lookup.json.count | default(0) > 0
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/{{
+      lightspeed_remediation_jt_lookup.json.results[0].id }}/
+    method: PATCH
+    headers:
+      Authorization: "Bearer {{ lightspeed_remediation_controller_oauthtoken }}"
+      Content-Type: application/json
+    validate_certs: false
+    body_format: json
+    body:
+      name: "{{ lightspeed_remediation_dynamic_jt_name }}"
+      description: >-
+        Ephemeral Lightspeed remediation job template for incident {{
+        itsm_incident_ref | string | trim }}
+      job_type: run
+      inventory: "{{ lightspeed_remediation_inventory_lookup.json.results[0].id }}"
+      project: "{{ lightspeed_remediation_project_lookup.json.results[0].id }}"
+      playbook: "{{ lightspeed_remediation_dynamic_playbook }}"
+      ask_variables_on_launch: false
+    status_code: 200
+  register: lightspeed_remediation_jt_update
+
+- name: Ensure Virtual Machines credential is associated with dynamic remediation job template
+  ansible.builtin.include_tasks: associate_credentials.yml

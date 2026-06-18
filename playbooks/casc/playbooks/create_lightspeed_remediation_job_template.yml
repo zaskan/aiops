@@ -1,0 +1,11 @@
+---
+- name: Create Lightspeed remediation job template in AAP
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Ensure dynamic remediation job template exists in AAP
+      ansible.builtin.include_role:
+        name: lightspeed_remediation
+        tasks_from: create_job_template.yml

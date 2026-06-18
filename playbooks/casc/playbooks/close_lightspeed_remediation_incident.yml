@@ -1,0 +1,55 @@
+---
+- name: Close ITSM incident after successful Lightspeed remediation
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Load ITSM API credentials
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_itsm_credential.yml
+
+    - name: Validate required extra vars for incident close
+      ansible.builtin.assert:
+        that:
+          - itsm_incident_ref is defined
+          - itsm_incident_ref | string | trim | length > 0
+        fail_msg: itsm_incident_ref is required to close the ITSM incident.
+
+    - name: POST remediation completion comment on ITSM incident
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+          itsm_incident_ref | string | trim | urlencode }}/comments
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        body_format: json
+        body:
+          body: >-
+            Lightspeed remediation completed successfully via workflow
+            {{ lightspeed_remediation_workflow_name | default('Lightspeed Remediation') }}.
+        status_code: [200]
+        headers:
+          Accept: application/json
+          Content-Type: application/json
+
+    - name: Close ITSM incident after successful Lightspeed remediation
+      ansible.builtin.uri:
+        url: >-
+          {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+          itsm_incident_ref | string | trim | urlencode }}/close
+        method: POST
+        force_basic_auth: true
+        url_username: "{{ itsm_api_user }}"
+        url_password: "{{ itsm_api_password }}"
+        validate_certs: "{{ itsm_validate_certs | default(false) }}"
+        body_format: json
+        body: {}
+        status_code: [200]
+        headers:
+          Accept: application/json
+          Content-Type: application/json

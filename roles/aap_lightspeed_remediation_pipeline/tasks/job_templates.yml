@@ -1,0 +1,89 @@
+---
+- name: Ensure Upload Lightspeed Remediation Playbook job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_jt_upload }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    project: "{{ aap_lightspeed_remediation_pipeline_project }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    playbook: "{{ aap_lightspeed_remediation_pipeline_playbook_upload }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_lightspeed_remediation_pipeline_job_extra_vars_upload }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_lightspeed_remediation_pipeline_credential_gitea }}"
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Sync AIOps Playbooks Project job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_jt_sync }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    project: "{{ aap_lightspeed_remediation_pipeline_project }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    playbook: "{{ aap_lightspeed_remediation_pipeline_playbook_sync }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    ask_variables_on_launch: false
+    credentials:
+      - "{{ aap_lightspeed_remediation_pipeline_credential_aap }}"
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Create Lightspeed Remediation Job Template job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_jt_create }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    project: "{{ aap_lightspeed_remediation_pipeline_project }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    playbook: "{{ aap_lightspeed_remediation_pipeline_playbook_create }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_lightspeed_remediation_pipeline_job_extra_vars_create }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_lightspeed_remediation_pipeline_credential_aap }}"
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Launch Lightspeed Remediation Job Template job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_jt_launch }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    project: "{{ aap_lightspeed_remediation_pipeline_project }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    playbook: "{{ aap_lightspeed_remediation_pipeline_playbook_launch }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_lightspeed_remediation_pipeline_job_extra_vars_launch }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_lightspeed_remediation_pipeline_credential_aap }}"
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+
+- name: Ensure Close Lightspeed Remediation Incident job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_lightspeed_remediation_pipeline_jt_close }}"
+    organization: "{{ aap_lightspeed_remediation_pipeline_organization }}"
+    project: "{{ aap_lightspeed_remediation_pipeline_project }}"
+    inventory: "{{ aap_lightspeed_remediation_pipeline_inventory }}"
+    playbook: "{{ aap_lightspeed_remediation_pipeline_playbook_close }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_lightspeed_remediation_pipeline_job_extra_vars_close }}"
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_lightspeed_remediation_pipeline_credential_itsm }}"
+    controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"

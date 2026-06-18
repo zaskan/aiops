@@ -147,17 +147,8 @@
       changed_when: demo_itsm_agent_import_base.rc == 0
       failed_when: false
 
-    - name: Build itsm-agent image from Git
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_agent_namespace }}"
-          - start-build
-          - itsm-agent
-          - --follow
-      register: demo_itsm_agent_start_build
-      changed_when: demo_itsm_agent_start_build.rc == 0
+    - name: Build itsm-agent image from patched Git source
+      ansible.builtin.include_tasks: build_itsm_agent_image.yml
 
     - name: Enable local ImageStream lookup for itsm-agent
       ansible.builtin.command:
@@ -208,6 +199,9 @@
       - deployment/itsm-agent
       - --timeout=300s
   changed_when: false
+
+- name: Ensure itsm-agent enriches Apache Application asset fields for AAP extra vars
+  ansible.builtin.include_tasks: ensure_itsm_agent_apache_asset_patch.yml
 
 - name: Set itsm-agent demo platform facts
   ansible.builtin.set_fact:

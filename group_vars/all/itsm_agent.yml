@@ -14,3 +14,4 @@ itsm_agent_llm_api_key: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_API_KE
 itsm_agent_llm_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_MODEL', default='llama-scout-17b') }}"
 itsm_agent_llm_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_EMBEDDING_MODEL', default='') }}"
 itsm_agent_aap_tls_verify: "false"
+itsm_agent_apache_asset_extra_vars_patch: true
