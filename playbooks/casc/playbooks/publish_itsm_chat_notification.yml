@@ -1,0 +1,87 @@
+---
+- name: Publish ITSM notification to chat
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Load chat-app credentials
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: load_chat_credential.yml
+
+    - name: Validate required ITSM chat notification extra vars
+      ansible.builtin.assert:
+        that:
+          - itsm_chat_event is defined
+          - itsm_chat_event | string | trim | length > 0
+          - itsm_chat_public_id is defined
+          - itsm_chat_title is defined
+        fail_msg: >-
+          itsm_chat_event, itsm_chat_public_id, and itsm_chat_title are required.
+
+    - name: Build incident.created chat message body
+      ansible.builtin.set_fact:
+        itsm_chat_message_body: >-
+          [incident.created] {{ itsm_chat_public_id | string | trim }}
+          — {{ itsm_chat_title | string | trim }}
+          ({{ itsm_chat_severity | default('medium') | string | trim }})
+      when: itsm_chat_event | string | trim == 'incident.created'
+
+    - name: Build request.submitted chat message body
+      ansible.builtin.set_fact:
+        itsm_chat_message_body: >-
+          [request.submitted] {{ itsm_chat_public_id | string | trim }}
+          — {{ itsm_chat_title | string | trim }}
+      when: itsm_chat_event | string | trim == 'request.submitted'
+
+    - name: Fail when ITSM chat event type is unsupported
+      ansible.builtin.fail:
+        msg: >-
+          Unsupported itsm_chat_event '{{ itsm_chat_event | default('') }}'.
+          Expected incident.created or request.submitted.
+      when: itsm_chat_message_body is not defined
+
+    - name: Resolve chat webhook URL for ITSM notification
+      ansible.builtin.set_fact:
+        itsm_chat_webhook_url: >-
+          {{
+            chat_webhook_url | trim
+            if (
+              chat_webhook_url | default('', true) | trim
+              | regex_search('^https?://')
+            )
+            else (
+              chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+              | regex_replace('/$', '')
+              ~ '/api/v1/webhooks/channels/'
+              ~ (chat_aiops_channel_name | default('operations'))
+              ~ '/messages'
+              if (
+                chat_app_url | default(demo_platform.chat_app.url | default('', true), true)
+                | string | trim | length > 0
+              )
+              else ''
+            )
+          }}
+
+    - name: Fail when chat webhook URL is unavailable
+      ansible.builtin.fail:
+        msg: >-
+          Chat webhook URL is missing. Attach the Chat App credential to the job template
+          or set chat_webhook_url to a full https URL.
+      when: itsm_chat_webhook_url | default('') | string | trim | length == 0
+
+    - name: Post ITSM notification to chat operations channel
+      ansible.builtin.uri:
+        url: "{{ itsm_chat_webhook_url }}"
+        method: POST
+        body_format: json
+        body:
+          body: "{{ itsm_chat_message_body }}"
+        validate_certs: false
+        status_code: [201]
+
+    - name: Display published ITSM chat notification
+      ansible.builtin.debug:
+        msg: "{{ itsm_chat_message_body }}"

@@ -52,3 +52,22 @@ vm_udn_name: aiops-vm-network
 vm_udn_pod_interface: net1
 vm_primary_guest_interface: enp1s0
 vm_secondary_guest_interface: enp2s0
+
+vm_manifest_gitea_repo: Infrastructure
+vm_manifest_gitea_path: vms
+vm_manifest_gitea_branch: main
+vm_manifest_workdir: /tmp/vm-manifest
+vm_manifest_password_length: 16
+vm_manifest_git_user_name: aiops-automation
+vm_manifest_git_user_email: aiops@example.com
+vm_manifest_validate_certs: false
+vm_manifest_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+vm_manifest_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+apache_troubleshoot_gitea_workdir: /tmp/apache-troubleshoot-gitops
+apache_exposure_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+
+aap_vm_pipeline_organization: AIOps
+aap_vm_pipeline_infrastructure_inventory: AIOps Infrastructure
+aap_vm_pipeline_inventory_source: ITSM Assets

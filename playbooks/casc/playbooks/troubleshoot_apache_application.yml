@@ -34,6 +34,24 @@
         name: common
         tasks_from: resolve_apache_app_asset_from_itsm.yml
 
+    - name: Initialize troubleshooting summary facts
+      ansible.builtin.set_fact:
+        apache_troubleshoot_summary_lines:
+          - >-
+            Troubleshooting Apache on {{ vm_name | string | trim }}
+            (incident {{ itsm_incident_ref | string | trim }}) using ITSM asset
+            {{ apache_troubleshoot_app_asset.name | default('unknown') }}.
+
+    - name: Ensure GitOps VM and Apache exposure exist before SSH remediation
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ensure_apache_gitops_stack.yml
+
+    - name: Refresh VM SSH target, ITSM asset connectivity, and AAP inventory
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: refresh_vm_ssh_target.yml
+
     - name: Resolve chat webhook URL for remediation summary
       ansible.builtin.set_fact:
         apache_troubleshoot_chat_base_url: >-
@@ -66,14 +84,6 @@
         name: common
         tasks_from: resolve_apache_app_target_host.yml
 
-    - name: Initialize troubleshooting summary facts
-      ansible.builtin.set_fact:
-        apache_troubleshoot_summary_lines:
-          - >-
-            Troubleshooting Apache on {{ vm_name | string | trim }}
-            (incident {{ itsm_incident_ref | string | trim }}) using ITSM asset
-            {{ apache_troubleshoot_app_asset.name | default('unknown') }}.
-
 - name: Verify and remediate Apache application stack on target VM
   hosts: apache_app_targets
   gather_facts: true
@@ -83,6 +93,10 @@
   tasks:
     - name: Verify SSH connectivity to target VM
       ansible.builtin.ping:
+      register: apache_troubleshoot_ssh_ping
+      until: apache_troubleshoot_ssh_ping is succeeded
+      retries: 18
+      delay: 10
 
     - name: Load effective Apache application configuration from ITSM asset
       ansible.builtin.include_role:

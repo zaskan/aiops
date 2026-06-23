@@ -1,0 +1,304 @@
+---
+- name: Load demo platform facts artifact for ITSM EDA webhook configuration
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Map itsm-app and chat API connections
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+    chat_api_base: "{{ demo_platform.chat_app.url }}"
+    chat_admin_username: "{{ demo_platform.chat_app.username }}"
+    chat_admin_password: "{{ demo_platform.chat_app.password }}"
+  no_log: true
+
+- name: Resolve ITSM webhook EDA event stream facts from artifact
+  ansible.builtin.set_fact:
+    itsm_eda_webhook_post_url: "{{ demo_platform.eda.itsm_webhook_event_stream_post_url | default('') | string | trim }}"
+    itsm_eda_webhook_username: "{{ demo_platform.eda.itsm_webhook_event_stream_username | default('') | string | trim }}"
+    itsm_eda_webhook_password: "{{ demo_platform.eda.itsm_webhook_event_stream_password | default('') | string | trim }}"
+    itsm_eda_webhook_activation_name: "{{ demo_platform.eda.itsm_webhook_activation_name | default(aap_eda_itsm_webhook_pipeline_activation_name) }}"
+  no_log: true
+
+- name: Fail when ITSM webhook EDA event stream URL is not in artifact
+  ansible.builtin.fail:
+    msg: >-
+      demo_platform.eda.itsm_webhook_event_stream_post_url is missing. Run
+      configure_aap_eda_itsm_webhook_pipeline.yml and configure_aap_itsm_chat_pipeline.yml first.
+  when: itsm_eda_webhook_post_url | length == 0
+
+- name: Extract EDA event stream UUID from external POST URL
+  ansible.builtin.set_fact:
+    itsm_eda_webhook_stream_uuid: >-
+      {{
+        (
+          (itsm_eda_webhook_post_url | split('/external_event_stream/'))[1]
+          | default('')
+          | split('/')
+          | first
+          | default('')
+        ) | trim
+      }}
+
+- name: Fail when EDA event stream UUID could not be parsed from POST URL
+  ansible.builtin.fail:
+    msg: >-
+      Could not parse event stream UUID from '{{ itsm_eda_webhook_post_url }}'.
+  when: itsm_eda_webhook_stream_uuid | string | trim | length == 0
+
+- name: Build itsm-app webhook URL for EDA event stream ingress
+  ansible.builtin.set_fact:
+    itsm_eda_webhook_url: >-
+      {{
+        (
+          'http://'
+          ~ (itsm_eda_webhook_username | urlencode)
+          ~ ':'
+          ~ (itsm_eda_webhook_password | urlencode)
+          ~ '@'
+          ~ aap_eda_itsm_webhook_pipeline_event_stream_internal_host
+          ~ '/api/eda/v1/external_event_stream/'
+          ~ itsm_eda_webhook_stream_uuid
+          ~ '/post/'
+        )
+        if (aap_eda_itsm_webhook_pipeline_use_internal_event_stream_url | default(true) | bool)
+        else (
+          itsm_eda_webhook_post_url
+          | regex_replace(
+              '^(https?://)',
+              '\1'
+              ~ (itsm_eda_webhook_username | urlencode)
+              ~ ':'
+              ~ (itsm_eda_webhook_password | urlencode)
+              ~ '@'
+            )
+        )
+      }}
+  no_log: true
+
+- name: Verify EDA ITSM webhook ingress accepts authenticated POST
+  ansible.builtin.uri:
+    url: "{{ itsm_eda_webhook_post_url }}"
+    method: POST
+    user: "{{ itsm_eda_webhook_username }}"
+    password: "{{ itsm_eda_webhook_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      event: incident.created
+      incident:
+        public_id: EDA-PROBE
+        title: EDA ingress probe
+        severity: low
+    status_code: [200, 202, 204]
+  register: itsm_eda_webhook_probe
+
+- name: Remove deprecated itsm-chat-bridge Deployment
+  kubernetes.core.k8s:
+    state: absent
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Remove deprecated itsm-chat-bridge Service
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Service
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Remove deprecated itsm-chat-bridge ConfigMap
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: ConfigMap
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Register itsm-app outbound webhook to EDA event stream
+  ansible.builtin.include_role:
+    name: demos.utils.itsm_ansible_role
+  vars:
+    itsm_ansible_role_check_connection: false
+    itsm_ansible_role_admin_settings: true
+    itsm_ansible_role_users: false
+    itsm_ansible_role_asset_types: false
+    itsm_ansible_role_assets: false
+    itsm_ansible_role_inventory: false
+    itsm_ansible_role_kb: false
+    itsm_ansible_role_incidents: false
+    itsm_ansible_role_followups: false
+    itsm_ansible_role_task_templates: false
+    itsm_ansible_role_change_templates: false
+    itsm_ansible_role_request_templates: false
+    itsm_ansible_role_service_requests: false
+    itsm_ansible_role_changes: false
+    itsm_ansible_role_change_tasks: false
+    itsm_webhooks:
+      - url: "{{ itsm_eda_webhook_url }}"
+        label: EDA ITSM chat notifications
+        enabled: true
+    itsm_webhooks_remove_unlisted: true
+
+- name: Obtain AAP gateway OAuth token for EDA activation status check
+  ansible.builtin.uri:
+    url: "{{ demo_platform.aap.gateway_url }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ demo_platform.aap.username }}"
+    password: "{{ demo_platform.aap.password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      description: configure-itsm-eda-webhook activation check
+      scope: write
+    status_code: 201
+  register: itsm_eda_webhook_gateway_token
+  no_log: true
+
+- name: Wait for ITSM EDA rulebook activation to reach running state
+  ansible.builtin.uri:
+    url: >-
+      {{ demo_platform.aap.gateway_url }}/api/eda/v1/activations/?name={{
+      itsm_eda_webhook_activation_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_eda_webhook_gateway_token.json.token }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: itsm_eda_webhook_activation_status
+  until: >
+    (
+      itsm_eda_webhook_activation_status.json.results
+      | default([])
+      | selectattr('name', 'equalto', itsm_eda_webhook_activation_name)
+      | selectattr('status', 'equalto', 'running')
+      | list
+      | length
+    ) > 0
+  retries: 30
+  delay: 5
+
+- name: Authenticate to chat-app as admin for webhook verification
+  ansible.builtin.uri:
+    url: "{{ chat_api_base }}/api/v1/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ chat_admin_username }}"
+      password: "{{ chat_admin_password }}"
+    validate_certs: false
+    status_code: 200
+  register: itsm_eda_webhook_chat_login
+  no_log: true
+
+- name: Create test incident in itsm-app for EDA webhook verification
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body:
+      title: "{{ itsm_test_incident_title }}"
+      description: "{{ itsm_test_incident_description }}"
+      severity: "{{ itsm_test_incident_severity }}"
+    status_code: 201
+    return_content: true
+  register: itsm_eda_webhook_test_incident_create
+
+- name: Record test incident public_id for chat verification
+  ansible.builtin.set_fact:
+    itsm_eda_webhook_test_incident_ref: "{{ itsm_eda_webhook_test_incident_create.json.public_id }}"
+    itsm_eda_webhook_incident_body_pattern: >-
+      ^\[incident\.created\] {{
+      itsm_eda_webhook_test_incident_create.json.public_id | regex_escape
+      }} —
+
+- name: Wait for incident notification in chat operations channel
+  ansible.builtin.uri:
+    url: >-
+      {{ chat_api_base }}/api/v1/channels/{{ chat_aiops_channel_name | urlencode }}/messages?limit=30
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_eda_webhook_chat_login.json.access_token }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: itsm_eda_webhook_chat_messages
+  until: >
+    (
+      itsm_eda_webhook_chat_messages.json['items']
+      | default([])
+      | map(attribute='body')
+      | select('search', itsm_eda_webhook_incident_body_pattern)
+      | list
+      | length
+    ) > 0
+  retries: "{{ itsm_chat_webhook_verify_retries }}"
+  delay: "{{ itsm_chat_webhook_verify_delay }}"
+
+- name: Resolve chat message for test incident
+  ansible.builtin.set_fact:
+    itsm_eda_webhook_test_chat_message: >-
+      {{
+        (
+          itsm_eda_webhook_chat_messages.json['items']
+          | default([])
+          | selectattr('body', 'search', itsm_eda_webhook_incident_body_pattern)
+          | list
+          | first
+          | default({}, true)
+        ).body | default('')
+      }}
+
+- name: Fail when chat message for test incident was not received
+  ansible.builtin.fail:
+    msg: >-
+      No chat message containing '{{ itsm_eda_webhook_test_incident_ref }}' appeared in channel
+      '{{ chat_aiops_channel_name }}' within {{
+      itsm_chat_webhook_verify_retries * itsm_chat_webhook_verify_delay }}s.
+      Check EDA activation '{{ itsm_eda_webhook_activation_name }}' and AAP job
+      'Publish ITSM Chat Notification'.
+  when: itsm_eda_webhook_test_chat_message | string | trim | length == 0
+
+- name: Fail when chat message does not match incident.created format
+  ansible.builtin.assert:
+    that:
+      - itsm_eda_webhook_test_chat_message is search('^\[incident\.created\]')
+      - itsm_eda_webhook_test_incident_ref in itsm_eda_webhook_test_chat_message
+      - itsm_test_incident_title in itsm_eda_webhook_test_chat_message
+    fail_msg: >-
+      Chat message '{{ itsm_eda_webhook_test_chat_message }}' does not match the expected
+      [incident.created] INC-* — title (severity) format.
+
+- name: Close test incident in itsm-app
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      itsm_eda_webhook_test_incident_ref | urlencode }}/close
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body: {}
+    status_code: 200
+
+- name: Display ITSM EDA webhook configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "itsm webhook (EDA ingress): {{ itsm_eda_webhook_url | regex_replace('://[^@]+@', '://***@') }}"
+      - "EDA external POST URL: {{ itsm_eda_webhook_post_url }}"
+      - "EDA activation: {{ itsm_eda_webhook_activation_name }}"
+      - "test incident: {{ itsm_eda_webhook_test_incident_ref }} (closed)"
+      - "chat verification: {{ itsm_eda_webhook_test_chat_message }}"

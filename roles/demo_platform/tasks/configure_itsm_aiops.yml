@@ -65,11 +65,7 @@
       configure_itsm_aiops.
   when: not itsm_aiops_operations_channel.allow_anonymous_webhook | default(false) | bool
 
-- name: Deploy itsm-app to chat-app webhook bridge
-  ansible.builtin.include_role:
-    name: itsm_chat_bridge
-
-- name: Provision itsm-app user and outbound webhook
+- name: Provision itsm-app AIOps user
   ansible.builtin.include_role:
     name: demos.utils.itsm_ansible_role
   vars:
@@ -88,89 +84,11 @@
     itsm_ansible_role_service_requests: false
     itsm_ansible_role_changes: false
     itsm_ansible_role_change_tasks: false
-    itsm_webhooks:
-      - url: "{{ itsm_chat_bridge_url }}"
-        label: chat operations via bridge
-        enabled: true
+    itsm_webhooks: []
     itsm_webhooks_remove_unlisted: false
 
-- name: Create test incident in itsm-app
-  ansible.builtin.uri:
-    url: "{{ itsm_api_base_url }}/api/v1/incidents"
-    method: POST
-    force_basic_auth: true
-    url_username: "{{ itsm_api_user }}"
-    url_password: "{{ itsm_api_password }}"
-    validate_certs: false
-    body_format: json
-    body:
-      title: "{{ itsm_test_incident_title }}"
-      description: "{{ itsm_test_incident_description }}"
-      severity: "{{ itsm_test_incident_severity }}"
-    status_code: 201
-    return_content: true
-  register: itsm_aiops_test_incident_create
-
-- name: Record test incident public_id
-  ansible.builtin.set_fact:
-    itsm_aiops_test_incident_ref: "{{ itsm_aiops_test_incident_create.json.public_id }}"
-
-- name: Wait for incident notification in chat operations channel
-  ansible.builtin.uri:
-    url: >-
-      {{ chat_api_base }}/api/v1/channels/{{ chat_aiops_channel_name | urlencode }}/messages?limit=30
-    method: GET
-    headers:
-      Authorization: "Bearer {{ itsm_aiops_chat_login.json.access_token }}"
-    validate_certs: false
-    status_code: 200
-    return_content: true
-  register: itsm_aiops_chat_messages
-  until: >
-    (
-      itsm_aiops_chat_messages.json['items']
-      | default([])
-      | selectattr('body', 'search', itsm_aiops_test_incident_ref)
-      | list
-      | length
-    ) > 0
-  retries: "{{ itsm_chat_webhook_verify_retries }}"
-  delay: "{{ itsm_chat_webhook_verify_delay }}"
-
-- name: Fail when chat message for test incident was not received
-  ansible.builtin.fail:
-    msg: >-
-      No chat message containing '{{ itsm_aiops_test_incident_ref }}' appeared in channel
-      '{{ chat_aiops_channel_name }}' within {{
-      itsm_chat_webhook_verify_retries * itsm_chat_webhook_verify_delay }}s.
-      Check itsm-chat-bridge logs: oc logs -n {{ itsm_chat_bridge_namespace }}
-      deployment/{{ itsm_chat_bridge_name }}
-  when: >
-    (
-      itsm_aiops_chat_messages.json['items']
-      | default([])
-      | selectattr('body', 'search', itsm_aiops_test_incident_ref)
-      | list
-      | length
-    ) == 0
-
-- name: Close test incident in itsm-app
-  ansible.builtin.uri:
-    url: "{{ itsm_api_base_url }}/api/v1/incidents/{{ itsm_aiops_test_incident_ref | urlencode }}/close"
-    method: POST
-    force_basic_auth: true
-    url_username: "{{ itsm_api_user }}"
-    url_password: "{{ itsm_api_password }}"
-    validate_certs: false
-    body_format: json
-    body: {}
-    status_code: 200
-
-- name: Display itsm AIOps configuration summary
+- name: Display itsm AIOps user provisioning summary
   ansible.builtin.debug:
     msg:
       - "itsm user: {{ itsm_aiops_username }}"
-      - "itsm webhook (bridge): {{ itsm_chat_bridge_url }}"
-      - "chat webhook: {{ itsm_chat_webhook_url }}"
-      - "test incident: {{ itsm_aiops_test_incident_ref }} (closed)"
-      - "chat verification: message received in #{{ chat_aiops_channel_name }}"
+      - "outbound webhook: configured later by configure_itsm_eda_webhook (EDA event stream)"

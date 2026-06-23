@@ -1,0 +1,18 @@
+---
+aap_itsm_chat_pipeline_organization: AIOps
+aap_itsm_chat_pipeline_validate_certs: false
+aap_itsm_chat_pipeline_controller_api_prefix: /api/controller/
+
+aap_itsm_chat_pipeline_inventory: AIOps Infrastructure
+aap_itsm_chat_pipeline_project: AIOps Playbooks
+
+aap_itsm_chat_pipeline_jt_publish: Publish ITSM Chat Notification
+aap_itsm_chat_pipeline_playbook_publish: publish_itsm_chat_notification.yml
+
+aap_itsm_chat_pipeline_job_extra_vars:
+  itsm_chat_event: ""
+  itsm_chat_public_id: ""
+  itsm_chat_title: ""
+  itsm_chat_severity: ""
+
+aap_itsm_chat_pipeline_credential_chat: Chat App

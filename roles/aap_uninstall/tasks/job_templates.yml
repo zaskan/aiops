@@ -26,6 +26,16 @@
     - "{{ aap_apache_troubleshoot_pipeline_jt_create_incident }}"
     - "{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}"
 
+- name: Remove ITSM chat notification job template from AAP
+  awx.awx.job_template:
+    name: "{{ aap_itsm_chat_pipeline_jt_publish }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
 - name: Remove Lightspeed remediation pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"

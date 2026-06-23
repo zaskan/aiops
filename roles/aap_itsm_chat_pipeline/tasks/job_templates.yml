@@ -1,0 +1,22 @@
+---
+- name: Ensure Publish ITSM Chat Notification job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_itsm_chat_pipeline_jt_publish }}"
+    organization: "{{ aap_itsm_chat_pipeline_organization }}"
+    project: "{{ aap_itsm_chat_pipeline_project }}"
+    inventory: "{{ aap_itsm_chat_pipeline_inventory }}"
+    playbook: "{{ aap_itsm_chat_pipeline_playbook_publish }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: >-
+      {{
+        aap_itsm_chat_pipeline_job_extra_vars
+        | combine({'chat_webhook_url': aap_itsm_chat_pipeline_chat_webhook_url}, recursive=True)
+      }}
+    ask_variables_on_launch: true
+    credentials:
+      - "{{ aap_itsm_chat_pipeline_credential_chat }}"
+    controller_host: "{{ aap_itsm_chat_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_itsm_chat_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_itsm_chat_pipeline_validate_certs }}"

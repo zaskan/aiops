@@ -1,0 +1,21 @@
+---
+- name: Obtain AAP gateway OAuth token for ansible.eda modules
+  ansible.builtin.uri:
+    url: "{{ aap_eda_itsm_webhook_pipeline_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_eda_itsm_webhook_pipeline_controller_username }}"
+    password: "{{ aap_eda_itsm_webhook_pipeline_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_eda_itsm_webhook_pipeline_validate_certs }}"
+    body_format: json
+    body:
+      description: aap-eda-itsm-webhook-pipeline ansible automation
+      scope: write
+    status_code: 201
+  register: aap_eda_itsm_webhook_pipeline_gateway_token_create
+  no_log: true
+
+- name: Set EDA API OAuth token fact
+  ansible.builtin.set_fact:
+    aap_eda_itsm_webhook_pipeline_controller_oauthtoken: "{{ aap_eda_itsm_webhook_pipeline_gateway_token_create.json.token }}"
+  no_log: true

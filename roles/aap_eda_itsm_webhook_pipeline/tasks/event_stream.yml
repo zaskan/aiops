@@ -1,0 +1,38 @@
+---
+- name: Ensure ITSM App Webhook event stream exists in EDA
+  ansible.eda.event_stream:
+    name: "{{ aap_eda_itsm_webhook_pipeline_event_stream_name }}"
+    organization_name: "{{ aap_eda_itsm_webhook_pipeline_organization }}"
+    credential_name: "{{ aap_eda_itsm_webhook_pipeline_event_stream_credential }}"
+    forward_events: "{{ aap_eda_itsm_webhook_pipeline_event_stream_forward_events | bool }}"
+    state: present
+    controller_host: "{{ aap_eda_itsm_webhook_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_itsm_webhook_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_itsm_webhook_pipeline_validate_certs }}"
+
+- name: Read ITSM App Webhook event stream details
+  ansible.eda.event_stream_info:
+    name: "{{ aap_eda_itsm_webhook_pipeline_event_stream_name }}"
+    controller_host: "{{ aap_eda_itsm_webhook_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_itsm_webhook_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_itsm_webhook_pipeline_validate_certs }}"
+  register: aap_eda_itsm_webhook_pipeline_event_stream_info
+
+- name: Capture ITSM webhook EDA event stream POST URL
+  ansible.builtin.set_fact:
+    aap_eda_itsm_webhook_pipeline_event_stream_post_url: >-
+      {{
+        (
+          aap_eda_itsm_webhook_pipeline_event_stream_info.event_streams
+          | default([])
+          | first
+          | default({})
+        ).url | default('')
+      }}
+
+- name: Fail when ITSM webhook EDA event stream URL could not be resolved
+  ansible.builtin.fail:
+    msg: >-
+      EDA event stream '{{ aap_eda_itsm_webhook_pipeline_event_stream_name }}' was created but
+      no webhook URL was returned.
+  when: aap_eda_itsm_webhook_pipeline_event_stream_post_url | string | trim | length == 0

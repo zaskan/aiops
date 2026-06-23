@@ -1,4 +1,31 @@
 ---
+- name: Remove ITSM App Chat rulebook activation from EDA
+  ansible.eda.rulebook_activation:
+    name: "{{ aap_eda_itsm_webhook_pipeline_activation_name }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove ITSM App Webhook event stream from EDA
+  ansible.eda.event_stream:
+    name: "{{ aap_eda_itsm_webhook_pipeline_event_stream_name }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove ITSM webhook Basic Auth credential from EDA
+  ansible.eda.credential:
+    name: "{{ aap_eda_itsm_webhook_pipeline_event_stream_credential }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
 - name: Remove Apache alert rulebook activation from EDA
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"

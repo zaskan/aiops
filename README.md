@@ -431,6 +431,16 @@ ansible-playbook playbooks/casc/configure_aap_httpd_workflow.yml
 
 Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache Route is created in GitOps, `httpd` is active, and content is served from `/var/www/html/`.
 
+### Apache HTTP monitoring
+
+Install (`playbooks/install.yml` step 18) deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter, `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the EDA event stream.
+
+Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps manifest. **Expose application** applies each `{vm_name}-http-probe` directly to the cluster via the OpenShift API after Argo CD sync creates the in-cluster Service. GitOps owns only the VirtualMachine, Service, and Route documents.
+
+Re-run **Expose application** on existing VMs to strip any legacy Probe documents from GitOps manifests and apply the direct Probe.
+
+**Troubleshoot apache application** restores a deleted VM/stack before SSH remediation: it syncs Argo CD when the manifest still exists in Gitea **Infrastructure**, or recreates the manifest from the ITSM **Virtual Machine** asset when it does not, then re-exposes the application if the in-cluster Service is missing. It also discovers the live pod-network `ansible_host`, updates the ITSM **Virtual Machine** asset when the IP changed, and syncs the **AIOps Infrastructure** inventory before connecting over SSH.
+
 ## Generic Application stack (service request driven)
 
 End-to-end delivery: ITSM **service request** → **standard change** with seven CTASKs → master AAP workflow **Deploy Generic Application Stack** (Provision VM → Deploy Generic App). Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
@@ -582,7 +592,7 @@ curl -X POST \
 
 ## Configure itsm-app for AIOps
 
-Provisions the **aiops** user, an outbound itsm-app webhook, an in-cluster **itsm-chat-bridge** relay, and verifies end-to-end delivery to the chat **operations** channel.
+Provisions the **aiops** user in itsm-app. Outbound webhook registration and chat delivery verification run later via EDA (see below).
 
 **Prerequisite chain:**
 
@@ -600,9 +610,9 @@ export ITSM_AIOPS_PASSWORD=your-secret
 ansible-playbook playbooks/casc/configure_itsm_aiops.yml
 ```
 
-### Why the bridge?
+### ITSM outbound webhooks via EDA
 
-itsm-app outbound webhooks POST:
+itsm-app outbound webhooks POST structured JSON:
 
 ```json
 {"event":"incident.created","timestamp":"...","actor":"admin","incident":{...}}
@@ -614,12 +624,19 @@ chat-app inbound webhooks expect:
 {"body":"message text"}
 ```
 
-A direct itsm → chat URL will not work. The playbook deploys **itsm-chat-bridge** in the `demo-chat` namespace. It receives itsm webhook POSTs, formats a message on `incident.created`, and POSTs to the chat operations anonymous webhook URL.
-
-The bridge uses an **in-cluster HTTP URL** to reach chat-app (`http://demo-chat.demo-chat.svc.cluster.local:8000/...`) because OpenShift route TLS certificates are not trusted from inside the pod.
+AIOps routes itsm-app webhooks to an **EDA event stream** instead of posting directly to chat-app. The rulebook `itsm_app_chat_notifications.yml` launches AAP job template **Publish ITSM Chat Notification**, which formats the message and POSTs to the chat **operations** anonymous webhook.
 
 ```
-itsm-app  →  itsm-chat-bridge  →  chat-app operations webhook
+itsm-app  →  EDA (ITSM App Webhook)  →  AAP Publish ITSM Chat Notification  →  chat-app
+```
+
+**Configure (after `playbooks/install.yml` or when updating):**
+
+```bash
+ansible-playbook playbooks/casc/configure_gitea_repos.yml          # sync rulebook to Gitea
+ansible-playbook playbooks/casc/configure_aap_eda_itsm_webhook_pipeline.yml
+ansible-playbook playbooks/casc/configure_aap_itsm_chat_pipeline.yml
+ansible-playbook playbooks/casc/configure_itsm_eda_webhook.yml    # register itsm webhook + E2E test
 ```
 
 **What it creates:**
@@ -627,8 +644,10 @@ itsm-app  →  itsm-chat-bridge  →  chat-app operations webhook
 | Resource | Value |
 | -------- | ----- |
 | itsm user | `aiops` (non-admin) |
-| itsm webhook | Points to in-cluster bridge at `/hook` |
-| Bridge | `itsm-chat-bridge` Deployment + Service in `demo-chat` |
+| EDA event stream | `ITSM App Webhook` |
+| EDA activation | `ITSM App Chat Activation` |
+| AAP job template | `Publish ITSM Chat Notification` |
+| itsm webhook | EDA event stream POST URL (basic auth embedded in URL for itsm-app) |
 
 **Manual test** (after configuration):
 
@@ -825,7 +844,8 @@ aiops/
 │       ├── configure_aap_credentials.yml  # AAP org + credentials
 │       ├── configure_gitea_repos.yml      # Gitea AIOps repositories
 │       ├── configure_chat_aiops.yml     # chat-app aiops user + webhook
-│       ├── configure_itsm_aiops.yml     # itsm-app aiops user + webhook bridge
+│       ├── configure_itsm_aiops.yml     # itsm-app aiops user
+│       ├── configure_itsm_eda_webhook.yml  # itsm webhook → EDA + chat E2E verify
 │       └── configure_itsm_agent.yml     # itsm-agent bot deploy + secrets
 ├── roles/
 │   ├── aap_casc/                    # AAP CASC provisioning
@@ -839,7 +859,7 @@ aiops/
 │   │       └── uninstall_*.yml          # app removal
 │   ├── chat_app/                    # chat-app REST API provisioning
 │   ├── itsm_ansible_role/           # DEPRECATED — use demos.utils.itsm_ansible_role collection
-│   └── itsm_chat_bridge/            # itsm → chat webhook relay
+│   └── itsm_chat_bridge/            # deprecated; replaced by EDA + AAP chat JT
 └── artifacts/                     # generated facts (gitignored)
 ```
 
@@ -854,7 +874,7 @@ aiops/
 | OpenShift Virtualization not ready  | Confirm `openshift-cnv` namespace, HyperConverged Available, and `virt-api` deployment  |
 | itsm/chat build fails on base image | Cluster needs registry access; playbook imports `python:3.12-slim-bookworm` automatically |
 | Wrong app URLs after install        | Re-run install playbook to refresh facts                                                  |
-| ITSM AIOps chat message not received | Check bridge logs: `oc logs -n demo-chat deployment/itsm-chat-bridge`                      |
+| ITSM AIOps chat message not received | Check EDA activation `ITSM App Chat Activation` and AAP job `Publish ITSM Chat Notification` |
 | ITSM AIOps preflight fails           | Run `playbooks/casc/configure_chat_aiops.yml` first (operations channel + anonymous webhook required)   |
 
 

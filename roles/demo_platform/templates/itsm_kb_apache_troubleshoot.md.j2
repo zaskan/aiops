@@ -34,9 +34,11 @@ vm_name: server01
 
 1. Resolve `vm_name` from the ITSM incident when not passed as an extra var
 2. Load the **Generic Application** ITSM asset for that VM (`rpm_packages`, `app_clone_path`, `enabled_services`, `app_repo`, `exposed_port`)
-3. On the VM: verify RPMs, git docroot, and enabled services; auto-install, redeploy, or start when checks fail
-4. Verify HTTP on the VM (uses `exposed_port` from the asset when present)
-5. Close the ITSM incident and post a **thread reply** under the `[incident.created]` chat message (skipped if that message cannot be found)
+3. When the VM is missing or not running (e.g. deleted via GitOps): restore from the **Infrastructure** GitOps manifest in Gitea via Argo CD sync, or recreate the manifest from the **Virtual Machine** ITSM asset and sync; re-run **Expose application** steps when Service/Route are absent
+4. Discover the live VM `ansible_host` (pod-network IP) and `ip_address` (fixed UDN IP); update the **Virtual Machine** ITSM asset and sync **AIOps Infrastructure** inventory when they changed
+5. On the VM: verify RPMs, git docroot, and enabled services; auto-install, redeploy, or start when checks fail
+6. Verify HTTP on the VM (uses `exposed_port` from the asset when present)
+7. Close the ITSM incident and post a **thread reply** under the `[incident.created]` chat message (skipped if that message cannot be found)
 
 AAP: {{ demo_platform.aap.gateway_url }}
 

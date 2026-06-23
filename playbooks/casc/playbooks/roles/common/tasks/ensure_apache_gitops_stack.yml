@@ -1,0 +1,238 @@
+---
+- name: Load OpenShift API credentials for GitOps recovery checks
+  ansible.builtin.include_tasks: load_openshift_credential.yml
+
+- name: Look up VirtualMachine for Apache troubleshooting target
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachine
+    name: "{{ vm_name }}"
+    namespace: "{{ vm_namespace }}"
+  register: apache_troubleshoot_vm_lookup
+
+- name: Look up VirtualMachineInstance for Apache troubleshooting target
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    name: "{{ vm_name }}"
+    namespace: "{{ vm_namespace }}"
+  register: apache_troubleshoot_vmi_lookup
+
+- name: Determine whether GitOps recovery is required for the target VM
+  ansible.builtin.set_fact:
+    apache_troubleshoot_gitops_recovery_needed: >-
+      {{
+        (apache_troubleshoot_vm_lookup.resources | default([]) | length == 0)
+        or (apache_troubleshoot_vmi_lookup.resources | default([]) | length == 0)
+        or (
+          apache_troubleshoot_vmi_lookup.resources[0].status.phase | default('')
+          != 'Running'
+        )
+      }}
+
+- name: Recover Apache stack from GitOps when VM is missing or not running
+  when: apache_troubleshoot_gitops_recovery_needed | bool
+  block:
+    - name: Load Gitea credentials for Infrastructure manifest lookup
+      ansible.builtin.include_tasks: load_gitea_credential.yml
+
+    - name: Ensure vm_manifest variables are available for GitOps recovery tasks
+      ansible.builtin.set_fact:
+        vm_manifest_gitea_repo: "{{ vm_manifest_gitea_repo | default(gitops_infrastructure_gitea_repo | default('Infrastructure')) }}"
+        vm_manifest_gitea_path: "{{ vm_manifest_gitea_path | default(gitops_infrastructure_source_path | default('vms')) }}"
+        vm_manifest_gitea_branch: "{{ vm_manifest_gitea_branch | default(gitops_infrastructure_source_branch | default('main')) }}"
+        vm_manifest_workdir: "{{ vm_manifest_workdir | default('/tmp/vm-manifest') }}"
+        vm_manifest_password_length: "{{ vm_manifest_password_length | default(16) }}"
+        vm_manifest_git_user_name: "{{ vm_manifest_git_user_name | default('aiops-automation') }}"
+        vm_manifest_git_user_email: "{{ vm_manifest_git_user_email | default('aiops@example.com') }}"
+        vm_manifest_validate_certs: "{{ vm_manifest_validate_certs | default(false) }}"
+        vm_manifest_gitea_internal_host: >-
+          {{
+            vm_manifest_gitea_internal_host
+            | default(apache_exposure_gitea_internal_host | default('gitea-http.gitea.svc.cluster.local:3000'))
+          }}
+
+    - name: Map OpenShift credentials for GitOps infrastructure sync
+      ansible.builtin.set_fact:
+        gitops_infrastructure_openshift_api_server: "{{ openshift_credential_host | default(omit) }}"
+        gitops_infrastructure_openshift_token: "{{ openshift_credential_token | default(omit) }}"
+        gitops_infrastructure_dest_namespace: "{{ vm_namespace }}"
+      when:
+        - openshift_credential_host is defined
+        - openshift_credential_token is defined
+      no_log: true
+
+    - name: Set Gitea host for Infrastructure repository clone during GitOps recovery
+      ansible.builtin.set_fact:
+        apache_troubleshoot_gitea_host: >-
+          {{ gitea_credential_url | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+    - name: Build authenticated Gitea clone URL for Infrastructure manifest lookup
+      ansible.builtin.set_fact:
+        apache_troubleshoot_gitea_clone_repo: >-
+          {{
+            (
+              'http://'
+              ~ vm_manifest_gitea_username | urlencode ~ ':'
+              ~ vm_manifest_gitea_password | urlencode ~ '@'
+              ~ vm_manifest_gitea_internal_host ~ '/'
+              ~ vm_manifest_gitea_owner | urlencode ~ '/'
+              ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+            )
+            if (vm_manifest_gitea_use_internal | default(false) | bool)
+            else (
+              'https://'
+              ~ vm_manifest_gitea_username | urlencode ~ ':'
+              ~ vm_manifest_gitea_password | urlencode ~ '@'
+              ~ apache_troubleshoot_gitea_host ~ '/'
+              ~ vm_manifest_gitea_owner | urlencode ~ '/'
+              ~ vm_manifest_gitea_repo | urlencode ~ '.git'
+            )
+          }}
+      no_log: true
+
+    - name: Remove temporary Infrastructure clone directory for GitOps recovery
+      ansible.builtin.file:
+        path: "{{ apache_troubleshoot_gitea_workdir | default('/tmp/apache-troubleshoot-gitops') }}/repo"
+        state: absent
+
+    - name: Clone Infrastructure repository to locate VM manifest
+      ansible.builtin.git:
+        repo: "{{ apache_troubleshoot_gitea_clone_repo }}"
+        dest: "{{ apache_troubleshoot_gitea_workdir | default('/tmp/apache-troubleshoot-gitops') }}/repo"
+        version: "{{ vm_manifest_gitea_branch | default('main') }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              vm_manifest_gitea_use_internal | default(false) | bool
+              or vm_manifest_validate_certs | default(false) | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+
+    - name: Set path to VM manifest in cloned Infrastructure repository
+      ansible.builtin.set_fact:
+        apache_troubleshoot_manifest_path: >-
+          {{ apache_troubleshoot_gitea_workdir | default('/tmp/apache-troubleshoot-gitops') }}/repo/{{
+          vm_manifest_gitea_path | default('vms') }}/{{ vm_name }}.yaml
+
+    - name: Check whether VM manifest exists in Infrastructure repository
+      ansible.builtin.stat:
+        path: "{{ apache_troubleshoot_manifest_path }}"
+      register: apache_troubleshoot_manifest_stat
+
+    - name: Record whether Infrastructure GitOps manifest exists for target VM
+      ansible.builtin.set_fact:
+        apache_troubleshoot_manifest_in_repo: "{{ apache_troubleshoot_manifest_stat.stat.exists | default(false) | bool }}"
+
+    - name: Redeploy VM from existing Infrastructure GitOps manifest via Argo CD
+      when: apache_troubleshoot_manifest_in_repo | bool
+      block:
+        - name: Sync Infrastructure VMs via Argo CD
+          ansible.builtin.include_tasks: ../../gitops_infrastructure/tasks/sync.yml
+
+        - name: Record GitOps restore from existing manifest in troubleshooting summary
+          ansible.builtin.set_fact:
+            apache_troubleshoot_summary_lines: >-
+              {{
+                apache_troubleshoot_summary_lines
+                + ['Restored VM ' ~ vm_name ~ ' from existing Infrastructure GitOps manifest via Argo CD sync.']
+              }}
+
+    - name: Recreate VM manifest from ITSM Virtual Machine asset when missing from repository
+      when: not apache_troubleshoot_manifest_in_repo | bool
+      block:
+        - name: Resolve VM cpus and memory from ITSM Virtual Machine asset
+          ansible.builtin.include_tasks: lookup_itsm_vm_asset_resources.yml
+
+        - name: Set VM sizing facts for manifest render from ITSM asset
+          ansible.builtin.set_fact:
+            cpus: "{{ vm_asset_resolved_cpus | int }}"
+            mem: "{{ vm_asset_resolved_mem | int }}"
+            vm_ip: >-
+              {{
+                itsm_vm_asset_resources_record.custom_fields.ip_address
+                | default('', true)
+                | string
+                | trim
+              }}
+
+        - name: Fail when ITSM Virtual Machine asset has no fixed IP for manifest recreation
+          ansible.builtin.fail:
+            msg: >-
+              Infrastructure manifest vms/{{ vm_name }}.yaml is missing and ITSM VM asset '{{
+              vm_name }}' has no ip_address custom field. Re-run Provision VM or update the asset.
+          when: vm_ip | default('') | string | trim | length == 0
+
+        - name: Render VM manifest from ITSM asset data
+          ansible.builtin.include_tasks: ../../vm_manifest/tasks/render.yml
+
+        - name: Push recreated VM manifest to Gitea Infrastructure repository
+          ansible.builtin.include_tasks: ../../vm_manifest/tasks/push.yml
+
+        - name: Sync recreated VM manifest via Argo CD
+          ansible.builtin.include_tasks: ../../gitops_infrastructure/tasks/sync.yml
+
+        - name: Record GitOps manifest recreation in troubleshooting summary
+          ansible.builtin.set_fact:
+            apache_troubleshoot_summary_lines: >-
+              {{
+                apache_troubleshoot_summary_lines
+                + [
+                  'Recreated Infrastructure GitOps manifest for '
+                  ~ vm_name
+                  ~ ' from ITSM Virtual Machine asset and synced via Argo CD.'
+                ]
+              }}
+
+    - name: Remove temporary Infrastructure clone directory after GitOps recovery
+      ansible.builtin.file:
+        path: "{{ apache_troubleshoot_gitea_workdir | default('/tmp/apache-troubleshoot-gitops') }}/repo"
+        state: absent
+
+    - name: Look up Apache Service after GitOps VM recovery
+      kubernetes.core.k8s_info:
+        host: "{{ openshift_credential_host | default(omit) }}"
+        api_key: "{{ openshift_credential_token | default(omit) }}"
+        validate_certs: false
+        api_version: v1
+        kind: Service
+        name: "{{ vm_name }}-http"
+        namespace: "{{ vm_namespace }}"
+      register: apache_troubleshoot_service_lookup
+
+    - name: Expose Apache application when Service is missing after GitOps recovery
+      when: apache_troubleshoot_service_lookup.resources | default([]) | length == 0
+      block:
+        - name: Set Apache exposure service port from ITSM Generic Application asset
+          ansible.builtin.set_fact:
+            apache_exposure_service_port: >-
+              {{
+                apache_troubleshoot_effective_apache_exposure_service_port
+                | default(itsm_apache_app_exposed_port | default('80', true), true)
+                | int
+              }}
+
+        - name: Add Service, Route, and HTTP Probe for recovered VM
+          ansible.builtin.include_role:
+            name: apache_exposure
+
+        - name: Record Apache exposure remediation in troubleshooting summary
+          ansible.builtin.set_fact:
+            apache_troubleshoot_summary_lines: >-
+              {{
+                apache_troubleshoot_summary_lines
+                + ['Exposed Apache application for ' ~ vm_name ~ ' (Service, Route, HTTP Probe).']
+              }}
+

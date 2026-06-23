@@ -1,0 +1,34 @@
+---
+- name: ITSM outbound webhooks to chat
+  hosts: all
+  sources:
+    - name: listen for itsm events
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Post incident.created to chat
+      condition: event.payload.event == "incident.created"
+      action:
+        run_job_template:
+          name: Publish ITSM Chat Notification
+          organization: AIOps
+          job_args:
+            extra_vars:
+              itsm_chat_event: incident.created
+              itsm_chat_public_id: "{{ event.payload.incident.public_id | default('?') }}"
+              itsm_chat_title: "{{ event.payload.incident.title | default('Untitled') }}"
+              itsm_chat_severity: "{{ event.payload.incident.severity | default('medium') }}"
+
+    - name: Post request.submitted to chat
+      condition: event.payload.event == "request.submitted"
+      action:
+        run_job_template:
+          name: Publish ITSM Chat Notification
+          organization: AIOps
+          job_args:
+            extra_vars:
+              itsm_chat_event: request.submitted
+              itsm_chat_public_id: "{{ event.payload.request.public_id | default('?') }}"
+              itsm_chat_title: >-
+                {{ event.payload.request.name | default(event.payload.request.title | default('Service request')) }}

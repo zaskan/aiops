@@ -1,0 +1,24 @@
+---
+- name: Configure itsm-app outbound webhook via EDA
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/itsm_aiops.yml
+    - ../../group_vars/all/chat_aiops.yml
+    - ../../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+  tasks:
+    - name: Check demo platform facts artifact exists
+      ansible.builtin.stat:
+        path: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+      register: demo_platform_artifacts_stat
+
+    - name: Fail when demo platform facts artifact is missing
+      ansible.builtin.fail:
+        msg: >-
+          artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml first.
+      when: not demo_platform_artifacts_stat.stat.exists
+
+    - name: Point itsm-app webhook to EDA and verify chat notification
+      ansible.builtin.import_tasks: ../../roles/demo_platform/tasks/configure_itsm_eda_webhook.yml

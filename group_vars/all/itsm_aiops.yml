@@ -3,16 +3,18 @@ itsm_aiops_username: aiops
 itsm_aiops_user_password: "{{ lookup('ansible.builtin.env', 'ITSM_AIOPS_PASSWORD', default='aiops-secret') }}"
 
 itsm_chat_bridge_namespace: demo-chat
+itsm_chat_bridge_name: itsm-chat-bridge
 itsm_test_incident_title: AIOps webhook test incident
-itsm_test_incident_description: Automated end-to-end webhook test from configure_itsm_aiops playbook
+itsm_test_incident_description: Automated end-to-end webhook test from configure_itsm_eda_webhook playbook
 itsm_test_incident_severity: low
 itsm_chat_webhook_verify_retries: 15
 itsm_chat_webhook_verify_delay: 2
 
 itsm_ansible_role_check_connection: true
-itsm_ansible_role_admin_settings: true
-itsm_ansible_role_users: true
+itsm_ansible_role_admin_settings: false
+itsm_ansible_role_users: false
 itsm_ansible_role_asset_types: false
+itsm_ansible_role_assets: false
 itsm_ansible_role_inventory: false
 itsm_ansible_role_kb: false
 itsm_ansible_role_incidents: false
@@ -26,9 +28,6 @@ itsm_users:
     password: "{{ itsm_aiops_user_password }}"
     role: user
 
-itsm_webhooks:
-  - url: "{{ itsm_chat_bridge_url }}"
-    label: chat operations via bridge
-    enabled: true
-
+# Registered at runtime by configure_itsm_eda_webhook.yml after EDA pipeline is provisioned.
+itsm_webhooks: []
 itsm_webhooks_remove_unlisted: false

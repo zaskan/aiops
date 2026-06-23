@@ -1,0 +1,33 @@
+---
+aap_eda_itsm_webhook_pipeline_organization: Default
+aap_eda_itsm_webhook_pipeline_validate_certs: false
+
+aap_eda_itsm_webhook_pipeline_project: AIOps Rulebooks
+aap_eda_itsm_webhook_pipeline_scm_branch: main
+
+aap_eda_itsm_webhook_pipeline_event_stream_name: ITSM App Webhook
+aap_eda_itsm_webhook_pipeline_event_stream_credential: ITSM App Webhook Basic Auth
+aap_eda_itsm_webhook_pipeline_event_stream_username: aiops-itsm-webhook
+aap_eda_itsm_webhook_pipeline_event_stream_password: >-
+  {{ lookup('ansible.builtin.env', 'AAP_EDA_ITSM_WEBHOOK_PASSWORD')
+  | default('aiops-eda-itsm-webhook-secret', true) }}
+
+aap_eda_itsm_webhook_pipeline_rulebook: itsm_app_chat_notifications.yml
+aap_eda_itsm_webhook_pipeline_activation_name: ITSM App Chat Activation
+aap_eda_itsm_webhook_pipeline_rulebook_source_name: listen for itsm events
+
+aap_eda_itsm_webhook_pipeline_event_stream_forward_events: true
+aap_eda_itsm_webhook_pipeline_event_stream_require_auth: true
+
+# itsm-app httpx verifies TLS on outbound webhooks; use in-cluster HTTP ingress instead of the
+# external Route URL (self-signed cert chain fails webhook delivery from the itsm-app pod).
+aap_eda_itsm_webhook_pipeline_use_internal_event_stream_url: true
+aap_eda_itsm_webhook_pipeline_event_stream_internal_host: ansible-eda-event-stream.aap.svc.cluster.local:8000
+
+# Reuse resources provisioned by aap_eda_pipeline
+aap_eda_itsm_webhook_pipeline_decision_environment: "{{ aap_eda_pipeline_decision_environment }}"
+aap_eda_itsm_webhook_pipeline_controller_credential: "{{ aap_eda_pipeline_controller_credential }}"
+aap_eda_itsm_webhook_pipeline_gitea_credential: "{{ aap_eda_pipeline_gitea_credential }}"
+aap_eda_itsm_webhook_pipeline_gitea_repo: "{{ aap_eda_pipeline_gitea_repo }}"
+aap_eda_itsm_webhook_pipeline_gitea_scm_use_internal: "{{ aap_eda_pipeline_gitea_scm_use_internal }}"
+aap_eda_itsm_webhook_pipeline_gitea_scm_internal_host: "{{ aap_eda_pipeline_gitea_scm_internal_host }}"

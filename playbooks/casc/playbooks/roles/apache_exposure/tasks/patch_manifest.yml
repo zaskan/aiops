@@ -187,9 +187,9 @@
       }}
   when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
 
-- name: Detect whether Probe manifest is already present in VM manifest file
+- name: Detect legacy HTTP Probe document in GitOps manifest
   ansible.builtin.set_fact:
-    apache_exposure_has_probe: >-
+    apache_exposure_has_probe_in_gitops: >-
       {{
         (
           apache_exposure_manifest_docs
@@ -200,6 +200,51 @@
           | length
         ) > 0
       }}
+
+- name: Initialize manifest documents without legacy HTTP Probe
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_docs_stripped: []
+  when: apache_exposure_has_probe_in_gitops | bool
+
+- name: Collect manifest documents excluding legacy HTTP Probe
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_docs_stripped: >-
+      {{ apache_exposure_manifest_docs_stripped + [item] }}
+  loop: "{{ apache_exposure_manifest_docs }}"
+  when:
+    - apache_exposure_has_probe_in_gitops | bool
+    - >-
+      not (
+        item.kind | default('') == 'Probe'
+        and (item.metadata.name | default('')) == apache_exposure_vm_name ~ '-http-probe'
+      )
+
+- name: Rewrite GitOps manifest without legacy HTTP Probe document
+  ansible.builtin.copy:
+    dest: "{{ apache_exposure_manifest_path }}"
+    mode: "0644"
+    content: |
+      {{ apache_exposure_manifest_docs_stripped | map('to_nice_yaml', indent=2) | join('---\n') }}
+  when: apache_exposure_has_probe_in_gitops | bool
+
+- name: Re-read VM manifest after stripping legacy HTTP Probe
+  ansible.builtin.slurp:
+    src: "{{ apache_exposure_manifest_path }}"
+  register: apache_exposure_manifest_slurp
+  when: apache_exposure_has_probe_in_gitops | bool
+
+- name: Refresh VM manifest content fact after stripping legacy HTTP Probe
+  ansible.builtin.set_fact:
+    apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        (apache_exposure_manifest_slurp.content | b64decode)
+        | from_yaml_all
+        | list
+        | select('mapping')
+        | list
+      }}
+  when: apache_exposure_has_probe_in_gitops | bool
 
 - name: Detect whether Service manifest is already present in VM manifest file
   ansible.builtin.set_fact:
@@ -262,25 +307,3 @@
     - apache_exposure_has_service | bool
     - not apache_exposure_has_route | bool
   changed_when: true
-
-- name: Render HTTP Probe manifest fragment for Apache Service monitoring
-  ansible.builtin.template:
-    src: apache_http_probe.yaml.j2
-    dest: "{{ apache_exposure_workdir }}/append-probe.yaml"
-    mode: "0640"
-  when: not apache_exposure_has_probe | bool
-
-- name: Append Probe document to VM manifest file
-  ansible.builtin.shell: |
-    set -euo pipefail
-    printf '\n---\n' >> "{{ apache_exposure_manifest_path }}"
-    cat "{{ apache_exposure_workdir }}/append-probe.yaml" >> "{{ apache_exposure_manifest_path }}"
-  when: not apache_exposure_has_probe | bool
-  changed_when: true
-
-- name: Update HTTP Probe prober URL in existing VM manifest
-  ansible.builtin.replace:
-    path: "{{ apache_exposure_manifest_path }}"
-    regexp: 'url: blackbox-exporter\.openshift-user-workload-monitoring\.svc:9115'
-    replace: 'url: {{ openshift_apache_monitoring_blackbox_prober | default("blackbox-exporter.aiops-demo.svc:9115") }}'
-  when: apache_exposure_has_probe | bool

@@ -1,0 +1,11 @@
+---
+- name: Load OpenShift API credentials for HTTP Probe apply
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+- name: Apply HTTP Probe for Apache Service monitoring outside GitOps
+  kubernetes.core.k8s:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    state: present
+    definition: "{{ lookup('template', playbook_dir ~ '/templates/apache_http_probe.yaml.j2') | from_yaml }}"

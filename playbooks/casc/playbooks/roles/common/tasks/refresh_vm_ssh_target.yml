@@ -1,0 +1,16 @@
+---
+- name: Discover current VM pod-network and fixed IPs from cluster
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: discover_vm_ip.yml
+
+- name: Refresh ITSM VM asset and AAP inventory when connectivity addresses changed
+  ansible.builtin.include_tasks: refresh_itsm_vm_asset_connectivity.yml
+  when:
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0
+    - itsm_vm_asset_ansible_host | default('') | string | trim | length > 0
+
+- name: Capture Ansible SSH target for in-memory inventory override
+  ansible.builtin.set_fact:
+    apache_troubleshoot_ansible_host: "{{ itsm_vm_asset_ansible_host }}"
+  when: itsm_vm_asset_ansible_host | default('') | string | trim | length > 0

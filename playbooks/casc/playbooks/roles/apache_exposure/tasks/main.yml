@@ -11,6 +11,9 @@
 - name: Sync Infrastructure VMs via Argo CD
   ansible.builtin.include_tasks: sync.yml
 
+- name: Apply HTTP Probe for Apache monitoring outside GitOps
+  ansible.builtin.include_tasks: apply_http_probe.yml
+
 - name: Restart VM when configured service port is not active on running VMI
   ansible.builtin.include_tasks: restart_vm.yml
 
@@ -28,4 +31,5 @@
       - "Service: {{ apache_exposure_service_name }}"
       - "Route host: {{ apache_exposure_route_host }}"
       - "Route URL: {{ apache_app_route_url | default('pending') }}"
+      - "HTTP Probe: {{ apache_exposure_vm_name }}-http-probe (applied outside GitOps)"
       - "Manifest path: {{ apache_exposure_gitea_repo }}/{{ apache_exposure_gitea_path }}/{{ apache_exposure_vm_name }}.yaml"

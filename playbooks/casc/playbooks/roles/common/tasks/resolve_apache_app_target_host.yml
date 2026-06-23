@@ -12,3 +12,4 @@
   ansible.builtin.add_host:
     name: "{{ apache_app_target_host }}"
     groups: apache_app_targets
+    ansible_host: "{{ apache_troubleshoot_ansible_host | default(omit) }}"

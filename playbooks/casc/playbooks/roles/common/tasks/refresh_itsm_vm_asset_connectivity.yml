@@ -1,0 +1,122 @@
+---
+- name: GET ITSM assets to resolve Virtual Machine asset for connectivity refresh
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: apache_troubleshoot_vm_itsm_assets_list
+
+- name: Resolve Virtual Machine ITSM asset for connectivity refresh
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_itsm_asset: >-
+      {{
+        (
+          apache_troubleshoot_vm_itsm_assets_list.json
+          | default([])
+          | selectattr('name', 'equalto', vm_name)
+          | list
+          | first
+          | default({})
+        )
+      }}
+
+- name: Determine whether ITSM VM asset connectivity fields need updating
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_itsm_current_ansible_host: >-
+      {{
+        apache_troubleshoot_vm_itsm_asset.custom_fields.ansible_host
+        | default('', true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_vm_itsm_current_ip: >-
+      {{
+        apache_troubleshoot_vm_itsm_asset.custom_fields.ip_address
+        | default('', true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_vm_itsm_connectivity_changed: >-
+      {{
+        (apache_troubleshoot_vm_itsm_asset.id is defined)
+        and (
+          (itsm_vm_asset_ansible_host | default('') | string | trim)
+          != (apache_troubleshoot_vm_itsm_asset.custom_fields.ansible_host | default('') | string | trim)
+          or (itsm_vm_asset_ip | default('') | string | trim)
+          != (apache_troubleshoot_vm_itsm_asset.custom_fields.ip_address | default('') | string | trim)
+        )
+      }}
+  when: apache_troubleshoot_vm_itsm_asset.id is defined
+
+- name: Build refreshed Virtual Machine ITSM custom fields for connectivity
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_itsm_custom_fields: >-
+      {{
+        apache_troubleshoot_vm_itsm_asset.custom_fields | default({})
+        | combine(
+            {
+              'hostname': vm_name,
+              'ip_address': itsm_vm_asset_ip,
+              'ansible_host': itsm_vm_asset_ansible_host | default(itsm_vm_asset_ip),
+            },
+            recursive=True
+          )
+      }}
+  when:
+    - apache_troubleshoot_vm_itsm_asset.id is defined
+    - apache_troubleshoot_vm_itsm_connectivity_changed | default(false) | bool
+    - itsm_vm_asset_ip | default('') | string | trim | length > 0
+    - itsm_vm_asset_ansible_host | default('') | string | trim | length > 0
+
+- name: Update Virtual Machine ITSM asset with discovered connectivity addresses
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{
+      apache_troubleshoot_vm_itsm_asset.id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: "IP: {{ itsm_vm_asset_ip }}"
+      custom_fields: "{{ apache_troubleshoot_vm_itsm_custom_fields }}"
+    status_code: [200]
+    return_content: true
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+  when:
+    - apache_troubleshoot_vm_itsm_asset.id is defined
+    - apache_troubleshoot_vm_itsm_connectivity_changed | default(false) | bool
+
+- name: Record ITSM VM asset connectivity refresh in troubleshooting summary
+  ansible.builtin.set_fact:
+    apache_troubleshoot_summary_lines: >-
+      {{
+        apache_troubleshoot_summary_lines
+        + [
+          'Updated ITSM VM asset '
+          ~ vm_name
+          ~ ' connectivity (ansible_host '
+          ~ itsm_vm_asset_ansible_host
+          ~ ', ip_address '
+          ~ itsm_vm_asset_ip
+          ~ ').'
+        ]
+      }}
+  when: apache_troubleshoot_vm_itsm_connectivity_changed | default(false) | bool
+
+- name: Sync AIOps Infrastructure inventory after ITSM VM asset connectivity refresh
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: sync_inventory.yml
+  when: apache_troubleshoot_vm_itsm_connectivity_changed | default(false) | bool
