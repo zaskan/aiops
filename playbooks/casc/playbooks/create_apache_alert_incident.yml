@@ -69,7 +69,7 @@
       ansible.builtin.uri:
         url: >-
           {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets?asset_type={{
-          itsm_apache_app_asset_type_name | default('Apache Application') | urlencode
+          itsm_apache_app_asset_type_name | default('Generic Application') | urlencode
           }}
         method: GET
         force_basic_auth: true
@@ -90,7 +90,7 @@
             (
               apache_alert_asset_lookup.json
               | default([])
-              | selectattr('asset_type_name', 'equalto', itsm_apache_app_asset_type_name | default('Apache Application'))
+              | selectattr('asset_type_name', 'equalto', itsm_apache_app_asset_type_name | default('Generic Application'))
               | selectattr('custom_fields', 'defined')
               | selectattr('custom_fields.vm_hostname', 'equalto', vm_name | string | trim)
               | list

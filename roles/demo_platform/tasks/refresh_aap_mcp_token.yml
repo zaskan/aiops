@@ -1,0 +1,76 @@
+---
+- name: Assert Ansible MCP URL is available for token refresh
+  ansible.builtin.assert:
+    that:
+      - aap_mcp_url is defined
+      - aap_mcp_url | string | trim | length > 0
+    fail_msg: Ansible MCP server URL is not set. Run install_aap_mcp first.
+
+- name: Probe Ansible MCP token with initialize request
+  ansible.builtin.uri:
+    url: "{{ aap_mcp_url }}/mcp/"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ aap_mcp_token }}"
+      Content-Type: application/json
+      Accept: application/json, text/event-stream
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 1
+      method: initialize
+      params:
+        protocolVersion: "2024-11-05"
+        capabilities: {}
+        clientInfo:
+          name: aiops-demo
+          version: "1"
+    status_code: [200, 401]
+    validate_certs: "{{ validate_certs | default(false) }}"
+  register: aap_mcp_token_probe
+  failed_when: false
+  no_log: true
+
+- name: Fail when pinned AAP MCP token override is invalid
+  ansible.builtin.fail:
+    msg: >-
+      AAP_MCP_TOKEN is set in the environment but the MCP server rejected it
+      (HTTP 401). Mint a new gateway token and update AAP_MCP_TOKEN, or unset
+      the variable to allow automatic refresh.
+  when:
+    - aap_mcp_token_probe.status | default(0) == 401
+    - aap_mcp_token_override | default('') | string | trim | length > 0
+
+- name: Mint replacement Ansible MCP OAuth token when current token is invalid
+  when:
+    - aap_mcp_token_probe.status | default(0) == 401
+    - aap_mcp_token_override | default('') | string | trim | length == 0
+  block:
+    - name: POST replacement OAuth token for Ansible MCP server integration
+      ansible.builtin.uri:
+        url: "{{ aap_gateway_url }}/api/gateway/v1/tokens/"
+        method: POST
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs | default(false) }}"
+        body_format: json
+        body:
+          description: "{{ aap_mcp_token_description }}"
+          scope: "{{ aap_mcp_token_scope }}"
+        status_code: 201
+      register: aap_mcp_token_refresh_create
+      no_log: true
+
+    - name: Record refreshed Ansible MCP OAuth token
+      ansible.builtin.set_fact:
+        aap_mcp_token: "{{ aap_mcp_token_refresh_create.json.token }}"
+      no_log: true
+
+    - name: Display Ansible MCP token refresh notice
+      ansible.builtin.debug:
+        msg: Minted a new Ansible MCP OAuth token because the previous token was invalid or expired.
+
+    - name: Record that Ansible MCP token was refreshed
+      ansible.builtin.set_fact:
+        aap_mcp_token_refreshed: true

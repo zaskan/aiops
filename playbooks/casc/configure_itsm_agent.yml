@@ -3,10 +3,15 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../../group_vars/all/demo_platform.yml
     - ../../group_vars/all/itsm_agent.yml
     - ../../group_vars/all/chat_aiops.yml
+    - ../../group_vars/all/aap_lightspeed_remediation_pipeline.yml
+    - ../../group_vars/all/aap_apache_troubleshoot_pipeline.yml
+    - ../../group_vars/all/itsm_kb_apache_troubleshoot.yml
   vars:
     demo_platform_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    demo_platform_role_path: "{{ playbook_dir }}/../../roles/demo_platform"
   tasks:
     - name: Check demo platform facts artifact exists
       ansible.builtin.stat:
@@ -24,12 +29,40 @@
       ansible.builtin.include_vars:
         file: "{{ demo_platform_artifacts_file }}"
 
+    - name: Map AAP namespace for Lightspeed discovery
+      ansible.builtin.set_fact:
+        itsm_agent_lightspeed_discover_namespace: "{{ demo_platform.aap.namespace | default('aap') }}"
+
     - name: Map AAP MCP connection from artifact for itsm-agent
       ansible.builtin.set_fact:
         aap_mcp_url: "{{ demo_platform.aap.mcp.url | default('') }}"
         aap_mcp_token: "{{ demo_platform.aap.mcp.token | default('') }}"
         aap_gateway_url: "{{ demo_platform.aap.gateway_url | default('') }}"
+        aap_username: "{{ demo_platform.aap.username }}"
+        aap_password: "{{ demo_platform.aap.password }}"
       no_log: true
+
+    - name: Refresh stale Ansible MCP OAuth token before updating itsm-agent
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: refresh_aap_mcp_token.yml
+      when:
+        - aap_mcp_enabled | default(true) | bool
+        - aap_mcp_url | string | trim | length > 0
+        - aap_mcp_token | string | trim | length > 0
+
+    - name: Persist refreshed Ansible MCP token to demo platform artifact
+      ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: update_aap_mcp_artifact.yml
+      vars:
+        demo_platform_artifacts_file: "{{ demo_platform_artifacts_file }}"
+      when:
+        - aap_mcp_enabled | default(true) | bool
+        - aap_mcp_token_refreshed | default(false) | bool
+
+    - name: Discover Ansible Lightspeed API URL and validate token
+      ansible.builtin.include_tasks: ../../roles/demo_platform/tasks/discover_aap_lightspeed_api.yml
 
     - name: Ensure itsm-agent bot is installed and configured
       ansible.builtin.include_tasks: ../../roles/demo_platform/tasks/install_itsm_agent.yml

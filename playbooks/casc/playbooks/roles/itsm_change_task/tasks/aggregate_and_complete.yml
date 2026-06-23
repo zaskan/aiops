@@ -93,7 +93,7 @@
 - name: Build final CTASK completion comment with audit summary
   ansible.builtin.set_fact:
     itsm_change_task_completion_comment: |-
-      {{ itsm_change_task_completion_summary_heading | default('Apache Application stack deployment complete.') }}
+      {{ itsm_change_task_completion_summary_heading | default('Generic Application stack deployment complete.') }}
       {% if itsm_service_request_ref is defined and itsm_service_request_ref | length > 0 %}Service request: {{ itsm_service_request_ref }}
       {% endif %}Change: {{ itsm_change_ref }}
       VM: {{ vm_name | default(target_host | default('unknown')) }}

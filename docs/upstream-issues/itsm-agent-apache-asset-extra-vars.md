@@ -1,6 +1,6 @@
 ## Problem
 
-AAP Apache playbooks accept `apache_app_rpm_packages`, `apache_app_enabled_services`, and `apache_app_docroot` (comma-separated lists / clone path). ITSM **Apache Application** assets store the same data as custom fields (`rpm_packages`, `enabled_services`, `app_clone_path`).
+AAP Apache playbooks accept `apache_app_rpm_packages`, `apache_app_enabled_services`, and `apache_app_docroot` (comma-separated lists / clone path). ITSM **Generic Application** assets store the same data as custom fields (`rpm_packages`, `enabled_services`, `app_clone_path`).
 
 The chatbot should resolve a matching asset before workflow launch and pass those values as `extra_vars`, overriding playbook defaults.
 
@@ -9,7 +9,7 @@ The chatbot should resolve a matching asset before workflow launch and pass thos
 On workflow launch, after collecting survey/catalog fields:
 
 1. Call ITSM MCP `list_assets` with `external_only=true`
-2. Match **Apache Application** asset by `vm_name`/`target_host` and `app_repo`
+2. Match **Generic Application** asset by `vm_name`/`target_host` and `app_repo`
 3. Map asset custom fields to AAP extra vars:
 
 | ITSM field | AAP extra var |

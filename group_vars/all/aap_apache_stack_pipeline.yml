@@ -4,13 +4,13 @@ aap_apache_stack_pipeline_validate_certs: false
 aap_apache_stack_pipeline_controller_api_prefix: /api/controller/
 
 aap_apache_stack_pipeline_inventory: AIOps Localhost
-aap_apache_stack_pipeline_workflow: Deploy Apache Application Stack
+aap_apache_stack_pipeline_workflow: Deploy Generic Application Stack
 
 aap_apache_stack_pipeline_workflow_survey_spec:
-  name: Deploy Apache Application Stack
+  name: Deploy Generic Application Stack
   description: >-
-    Service-request-driven Apache Application stack (Provision VM then Deploy Apache App).
-    Submit ITSM request template Apache Application Stack first, then pass the created change ref.
+    Service-request-driven Generic Application stack (Provision VM then Deploy Generic App).
+    Submit ITSM request template Generic Application Stack first, then pass the created change ref.
   spec:
     - question_name: itsm_change_ref
       question_description: ITSM change ref from submitted service request (e.g. CHG-1)
@@ -49,3 +49,27 @@ aap_apache_stack_pipeline_workflow_survey_spec:
       type: text
       variable: app_branch
       default: main
+    - question_name: apache_app_rpm_packages
+      question_description: Comma-separated RPM packages (from ITSM RPM packages field; default httpd,git)
+      required: false
+      type: text
+      variable: apache_app_rpm_packages
+      default: httpd,git
+    - question_name: apache_app_docroot
+      question_description: Repository clone path on the VM (from ITSM Repository clone path field)
+      required: false
+      type: text
+      variable: apache_app_docroot
+      default: /var/www/html
+    - question_name: apache_app_enabled_services
+      question_description: Comma-separated systemd services to enable (from ITSM Service to enable field)
+      required: false
+      type: text
+      variable: apache_app_enabled_services
+      default: httpd
+    - question_name: apache_exposure_service_port
+      question_description: TCP port to expose via OpenShift Route (from ITSM Port to expose field)
+      required: false
+      type: text
+      variable: apache_exposure_service_port
+      default: "80"

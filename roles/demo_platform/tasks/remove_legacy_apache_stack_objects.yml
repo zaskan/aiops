@@ -1,0 +1,423 @@
+---
+- name: Load demo platform facts artifact for legacy cleanup
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+
+- name: Map itsm-app API connection from artifact
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+  no_log: true
+
+- name: Set AAP controller connection facts from artifact
+  ansible.builtin.set_fact:
+    legacy_apache_stack_controller_host: "{{ demo_platform.aap.gateway_url }}"
+    legacy_apache_stack_controller_username: "{{ demo_platform.aap.username }}"
+    legacy_apache_stack_controller_password: "{{ demo_platform.aap.password }}"
+  no_log: true
+
+- name: Obtain AAP gateway OAuth token for legacy cleanup
+  ansible.builtin.uri:
+    url: "{{ legacy_apache_stack_controller_host }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ legacy_apache_stack_controller_username }}"
+    password: "{{ legacy_apache_stack_controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ legacy_apache_stack_validate_certs | default(false) }}"
+    body_format: json
+    body:
+      description: aiops legacy apache stack cleanup
+      scope: write
+    status_code: 201
+    return_content: true
+  register: legacy_apache_stack_controller_token
+  no_log: true
+
+- name: Set AAP controller OAuth token fact for legacy cleanup
+  ansible.builtin.set_fact:
+    legacy_apache_stack_controller_oauthtoken: "{{ legacy_apache_stack_controller_token.json.token }}"
+  no_log: true
+
+- name: Remove legacy Apache stack workflow job templates from AAP
+  awx.awx.workflow_job_template:
+    name: "{{ item }}"
+    organization: "{{ legacy_apache_stack_aap_organization }}"
+    state: absent
+    controller_host: "{{ legacy_apache_stack_controller_host }}"
+    controller_oauthtoken: "{{ legacy_apache_stack_controller_oauthtoken }}"
+    validate_certs: "{{ legacy_apache_stack_validate_certs | default(false) }}"
+  loop: "{{ legacy_apache_stack_aap_workflows }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ legacy_apache_stack_controller_api_prefix | default('/api/controller/') }}"
+
+- name: Remove legacy Apache stack job templates from AAP
+  awx.awx.job_template:
+    name: "{{ item }}"
+    organization: "{{ legacy_apache_stack_aap_organization }}"
+    state: absent
+    controller_host: "{{ legacy_apache_stack_controller_host }}"
+    controller_oauthtoken: "{{ legacy_apache_stack_controller_oauthtoken }}"
+    validate_certs: "{{ legacy_apache_stack_validate_certs | default(false) }}"
+  loop: "{{ legacy_apache_stack_aap_job_templates }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ legacy_apache_stack_controller_api_prefix | default('/api/controller/') }}"
+
+- name: GET ITSM change templates for legacy cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_change_templates_list
+
+- name: Resolve legacy change template id
+  ansible.builtin.set_fact:
+    legacy_apache_stack_change_template_id: >-
+      {{
+        (
+          legacy_apache_stack_change_templates_list.json
+          | default([])
+          | selectattr('name', 'equalto', legacy_apache_stack_itsm_change_template)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Resolve Generic Application Stack change template id for unlinking legacy request
+  ansible.builtin.set_fact:
+    legacy_apache_stack_generic_change_template_id: >-
+      {{
+        (
+          legacy_apache_stack_change_templates_list.json
+          | default([])
+          | selectattr('name', 'equalto', legacy_apache_stack_itsm_generic_change_template)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: GET ITSM request templates for legacy cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_request_templates_list
+
+- name: Resolve legacy request template id
+  ansible.builtin.set_fact:
+    legacy_apache_stack_request_template_id: >-
+      {{
+        (
+          legacy_apache_stack_request_templates_list.json
+          | default([])
+          | selectattr('name', 'in', [legacy_apache_stack_itsm_request_template, legacy_apache_stack_itsm_request_template_retired_name])
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: Unlink legacy request template from Apache change template before change delete
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates/{{
+      legacy_apache_stack_request_template_id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    body_format: json
+    body:
+      change_template_id: "{{ legacy_apache_stack_generic_change_template_id | int }}"
+    status_code: [200]
+  when:
+    - legacy_apache_stack_request_template_id is not none
+    - legacy_apache_stack_generic_change_template_id is not none
+
+- name: GET ITSM task templates for legacy change template unlink
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/task-templates"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_task_templates_list
+
+- name: Build shared VM task template ids for legacy change template cleanup
+  ansible.builtin.set_fact:
+    legacy_apache_stack_shared_task_template_ids: >-
+      {{
+        legacy_apache_stack_task_templates_list.json
+        | default([])
+        | selectattr('title', 'in', legacy_apache_stack_itsm_shared_task_template_titles)
+        | map(attribute='id')
+        | list
+      }}
+
+- name: Trim legacy change template task references to shared VM CTASKs only
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates/{{
+      legacy_apache_stack_change_template_id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    body_format: json
+    body:
+      task_template_ids: "{{ legacy_apache_stack_shared_task_template_ids }}"
+    status_code: [200]
+  when:
+    - legacy_apache_stack_change_template_id is not none
+    - legacy_apache_stack_shared_task_template_ids | default([]) | length > 0
+
+- name: DELETE legacy Apache Application Stack change template from ITSM
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates/{{
+      legacy_apache_stack_change_template_id }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_change_template_delete
+  failed_when: false
+  when: legacy_apache_stack_change_template_id is not none
+
+- name: DELETE legacy Apache Application Stack request template from ITSM
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates/{{
+      legacy_apache_stack_request_template_id }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_request_template_delete
+  failed_when: false
+  when: legacy_apache_stack_request_template_id is not none
+
+- name: Retire legacy request template when delete is blocked by historical service requests
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/request-templates/{{
+      legacy_apache_stack_request_template_id }}
+    method: PATCH
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    body_format: json
+    body:
+      name: "{{ legacy_apache_stack_itsm_request_template_retired_name }}"
+      description: "{{ legacy_apache_stack_itsm_request_template_retired_description }}"
+    status_code: [200]
+  when:
+    - legacy_apache_stack_request_template_id is not none
+    - legacy_apache_stack_request_template_delete.status | default(0) | int not in [200, 204, 404]
+
+- name: Build legacy task template ids to delete
+  ansible.builtin.set_fact:
+    legacy_apache_stack_task_template_ids: >-
+      {{
+        legacy_apache_stack_task_templates_list.json
+        | default([])
+        | selectattr('title', 'in', legacy_apache_stack_itsm_task_templates)
+        | map(attribute='id')
+        | list
+      }}
+
+- name: DELETE legacy Apache stack task templates from ITSM
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/task-templates/{{ item }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_task_template_delete
+  failed_when: false
+  loop: "{{ legacy_apache_stack_task_template_ids | default([]) }}"
+  when: legacy_apache_stack_task_template_ids | default([]) | length > 0
+
+- name: GET ITSM assets for legacy Apache Application cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_assets_list
+
+- name: Build legacy Apache Application asset ids to delete
+  ansible.builtin.set_fact:
+    legacy_apache_stack_asset_ids: >-
+      {{
+        legacy_apache_stack_assets_list.json
+        | default([])
+        | selectattr('asset_type_name', 'equalto', legacy_apache_stack_itsm_asset_type)
+        | map(attribute='id')
+        | list
+      }}
+
+- name: DELETE legacy Apache Application assets from ITSM
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{ item }}"
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_asset_delete
+  failed_when: false
+  loop: "{{ legacy_apache_stack_asset_ids | default([]) }}"
+  when: legacy_apache_stack_asset_ids | default([]) | length > 0
+
+- name: GET ITSM asset types for legacy cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/asset-types"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_asset_types_list
+
+- name: Resolve legacy Apache Application asset type id
+  ansible.builtin.set_fact:
+    legacy_apache_stack_asset_type_id: >-
+      {{
+        (
+          legacy_apache_stack_asset_types_list.json
+          | default([])
+          | selectattr('name', 'equalto', legacy_apache_stack_itsm_asset_type)
+          | list
+          | first
+          | default({})
+        ).id | default(none)
+      }}
+
+- name: DELETE legacy Apache Application asset type from ITSM
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/asset-types/{{
+      legacy_apache_stack_asset_type_id }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_asset_type_delete
+  failed_when: false
+  when: legacy_apache_stack_asset_type_id is not none
+
+- name: GET ITSM KB articles for legacy cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: legacy_apache_stack_kb_list
+
+- name: Build legacy KB article ids to delete
+  ansible.builtin.set_fact:
+    legacy_apache_stack_kb_article_ids: >-
+      {{
+        legacy_apache_stack_kb_list.json
+        | default([])
+        | selectattr('title', 'in', legacy_apache_stack_itsm_kb_titles)
+        | map(attribute='id')
+        | list
+      }}
+
+- name: DELETE legacy Apache stack KB articles from ITSM
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles/{{ item }}"
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409, 500]
+  register: legacy_apache_stack_kb_article_delete
+  failed_when: false
+  loop: "{{ legacy_apache_stack_kb_article_ids | default([]) }}"
+  when: legacy_apache_stack_kb_article_ids | default([]) | length > 0
+
+- name: Display legacy Apache stack cleanup summary
+  ansible.builtin.debug:
+    msg:
+      - "AAP workflows removed: {{ legacy_apache_stack_aap_workflows | join(', ') }}"
+      - "AAP job templates removed: {{ legacy_apache_stack_aap_job_templates | join(', ') }}"
+      - >-
+        ITSM request template:
+        {{
+          'deleted'
+          if legacy_apache_stack_request_template_delete.status | default(0) | int in [200, 204, 404]
+          else legacy_apache_stack_itsm_request_template_retired_name ~ ' (retired; historical requests block delete)'
+        }}
+      - >-
+        ITSM change template delete status:
+        {{ legacy_apache_stack_change_template_delete.status | default('skipped') }}
+      - >-
+        ITSM task templates removed:
+        {{ legacy_apache_stack_itsm_task_templates | join(', ') }}
+        (ids {{ legacy_apache_stack_task_template_ids | default([]) | join(', ') }})
+      - >-
+        ITSM {{ legacy_apache_stack_itsm_asset_type }} assets removed:
+        {{ legacy_apache_stack_asset_ids | default([]) | length }}
+      - >-
+        ITSM asset type removed:
+        {{ legacy_apache_stack_itsm_asset_type }}
+        (id {{ legacy_apache_stack_asset_type_id | default('n/a') }})
+      - >-
+        ITSM KB articles removed:
+        {{ legacy_apache_stack_itsm_kb_titles | join(', ') }}
+        (ids {{ legacy_apache_stack_kb_article_ids | default([]) | join(', ') }})

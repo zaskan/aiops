@@ -1,0 +1,176 @@
+---
+- name: Lookup Generic Application assets for target VM
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets?asset_type={{
+      itsm_apache_app_asset_type_name | default('Generic Application') | urlencode
+      }}
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: apache_troubleshoot_asset_lookup
+
+- name: Select Generic Application asset for target VM
+  ansible.builtin.set_fact:
+    apache_troubleshoot_app_asset: >-
+      {{
+        (
+          apache_troubleshoot_asset_lookup.json
+          | default([])
+          | selectattr('asset_type_name', 'equalto', itsm_apache_app_asset_type_name | default('Generic Application'))
+          | selectattr('custom_fields', 'defined')
+          | selectattr('custom_fields.vm_hostname', 'equalto', vm_name | string | trim)
+          | list
+          | first
+          | default({}, true)
+        )
+      }}
+
+- name: Fail when no Generic Application asset exists for VM
+  ansible.builtin.fail:
+    msg: >-
+      No ITSM Generic Application asset found for vm_hostname={{ vm_name | string | trim }}.
+      Deploy the application stack first or register the asset in itsm-app.
+  when: apache_troubleshoot_app_asset.id is not defined
+
+- name: Map ITSM Generic Application asset custom fields to itsm_apache_app_* facts
+  ansible.builtin.set_fact:
+    itsm_apache_app_repo: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.app_repo
+        | default('', true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_branch: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.app_branch
+        | default(apache_app_default_branch | default('main', true), true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_docroot: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.app_clone_path
+        | default('/var/www/html', true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_rpm_packages: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.rpm_packages
+        | default(itsm_apache_app_default_rpm_packages | default('httpd,git', true), true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_enabled_services: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.enabled_services
+        | default(itsm_apache_app_default_enabled_services | default('httpd', true), true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_exposed_port: >-
+      {{
+        apache_troubleshoot_app_asset.custom_fields.exposed_port
+        | default(itsm_apache_app_default_exposed_port | default('80', true), true)
+        | string
+        | trim
+      }}
+
+- name: Publish effective Apache application config coalescing ITSM asset over empty extra vars
+  ansible.builtin.set_fact:
+    apache_troubleshoot_effective_app_repo: >-
+      {{
+        app_repo | default(itsm_apache_app_repo, true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_effective_app_branch: >-
+      {{
+        app_branch | default(itsm_apache_app_branch, true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_effective_apache_app_docroot: >-
+      {{
+        apache_app_docroot | default(itsm_apache_app_docroot, true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_effective_apache_app_rpm_packages: >-
+      {{
+        apache_app_rpm_packages | default(itsm_apache_app_rpm_packages, true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_effective_apache_app_enabled_services: >-
+      {{
+        apache_app_enabled_services | default(itsm_apache_app_enabled_services, true)
+        | string
+        | trim
+      }}
+    apache_troubleshoot_effective_apache_exposure_service_port: >-
+      {{
+        apache_exposure_service_port | default(itsm_apache_app_exposed_port, true)
+        | string
+        | trim
+      }}
+
+- name: Derive legacy single-value Apache application vars from effective lists
+  ansible.builtin.set_fact:
+    apache_troubleshoot_effective_apache_app_rpm_package_list: >-
+      {{
+        (
+          apache_troubleshoot_effective_apache_app_rpm_packages
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+    apache_troubleshoot_effective_apache_app_enabled_service_list: >-
+      {{
+        (
+          apache_troubleshoot_effective_apache_app_enabled_services
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+
+- name: Set legacy apache_app_package and apache_app_service from effective lists
+  ansible.builtin.set_fact:
+    apache_troubleshoot_effective_apache_app_package: >-
+      {{
+        apache_troubleshoot_effective_apache_app_rpm_package_list
+        | first
+        | default('httpd', true)
+      }}
+    apache_troubleshoot_effective_apache_app_git_package: >-
+      {{
+        'git'
+        if 'git' in apache_troubleshoot_effective_apache_app_rpm_package_list
+        else 'git'
+      }}
+    apache_troubleshoot_effective_apache_app_service: >-
+      {{
+        apache_troubleshoot_effective_apache_app_enabled_service_list
+        | first
+        | default('httpd', true)
+      }}
+
+- name: Fail when effective app_repo is missing after ITSM asset resolution
+  ansible.builtin.fail:
+    msg: >-
+      ITSM asset {{ apache_troubleshoot_app_asset.name | default('unknown') }} has no app_repo
+      and no non-empty app_repo extra var was provided. Redeploy the application stack or
+      update the asset custom fields.
+  when: apache_troubleshoot_effective_app_repo | default('') | string | trim | length == 0

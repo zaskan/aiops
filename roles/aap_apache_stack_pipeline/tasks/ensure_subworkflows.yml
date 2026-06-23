@@ -17,12 +17,12 @@
     controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
 
-- name: Load Deploy Apache App workflow survey spec from httpd pipeline defaults
+- name: Load Deploy Generic App workflow survey spec from httpd pipeline defaults
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../aap_httpd_pipeline/defaults/main.yml"
   when: aap_httpd_pipeline_workflow_survey_spec is not defined
 
-- name: Ensure Deploy Apache App sub-workflow accepts ITSM and survey passthrough from master workflow
+- name: Ensure Deploy Generic App sub-workflow accepts ITSM and survey passthrough from master workflow
   awx.awx.workflow_job_template:
     name: "{{ aap_apache_stack_pipeline_httpd_subworkflow }}"
     organization: "{{ aap_apache_stack_pipeline_organization }}"

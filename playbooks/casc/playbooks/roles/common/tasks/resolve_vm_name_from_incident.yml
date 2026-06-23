@@ -1,0 +1,116 @@
+---
+- name: Skip incident lookup when vm_name is already set
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_name_resolved: "{{ vm_name | string | trim }}"
+  when: vm_name is defined and vm_name | string | trim | length > 0
+
+- name: GET ITSM incident for vm_name resolution
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      itsm_incident_ref | string | trim | urlencode }}
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: apache_troubleshoot_incident_lookup
+  when: apache_troubleshoot_vm_name_resolved | default('') | string | trim | length == 0
+
+- name: Parse vm_name from incident description
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_name_resolved: >-
+      {{
+        (
+          apache_troubleshoot_incident_lookup.json.description | default('')
+          | regex_search('(?m)^vm_name:\s*(\S+)', '\1')
+          | default([], true)
+          | flatten
+          | first
+          | default('', true)
+        )
+        | string
+        | trim
+      }}
+  when:
+    - apache_troubleshoot_vm_name_resolved | default('') | string | trim | length == 0
+    - apache_troubleshoot_incident_lookup is defined
+    - not (apache_troubleshoot_incident_lookup.skipped | default(false))
+
+- name: Parse vm_name from incident title when description has no vm_name line
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_name_resolved: >-
+      {{
+        (
+          apache_troubleshoot_incident_lookup.json.title | default('')
+          | regex_search('—\s*(\S+)\s*$', '\1')
+          | default([], true)
+          | flatten
+          | first
+          | default('', true)
+        )
+        | string
+        | trim
+      }}
+  when:
+    - apache_troubleshoot_vm_name_resolved | default('') | string | trim | length == 0
+    - apache_troubleshoot_incident_lookup is defined
+    - not (apache_troubleshoot_incident_lookup.skipped | default(false))
+
+- name: GET linked ITSM asset when vm_name still unresolved
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/assets/{{
+      apache_troubleshoot_incident_lookup.json.inventory_asset_id | urlencode }}
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs | default(false) }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: apache_troubleshoot_linked_asset_lookup
+  when:
+    - apache_troubleshoot_vm_name_resolved | default('') | string | trim | length == 0
+    - apache_troubleshoot_incident_lookup is defined
+    - not (apache_troubleshoot_incident_lookup.skipped | default(false))
+    - apache_troubleshoot_incident_lookup.json.inventory_asset_id is defined
+    - apache_troubleshoot_incident_lookup.json.inventory_asset_id | string | trim | length > 0
+
+- name: Resolve vm_name from linked ITSM asset custom fields
+  ansible.builtin.set_fact:
+    apache_troubleshoot_vm_name_resolved: >-
+      {{
+        (
+          apache_troubleshoot_linked_asset_lookup.json.custom_fields.vm_hostname
+          | default(
+              apache_troubleshoot_linked_asset_lookup.json.custom_fields.hostname | default('', true),
+              true
+            )
+        )
+        | string
+        | trim
+      }}
+  when:
+    - apache_troubleshoot_vm_name_resolved | default('') | string | trim | length == 0
+    - apache_troubleshoot_linked_asset_lookup is defined
+    - not (apache_troubleshoot_linked_asset_lookup.skipped | default(false))
+
+- name: Publish resolved vm_name for downstream tasks
+  ansible.builtin.set_fact:
+    vm_name: "{{ apache_troubleshoot_vm_name_resolved | string | trim }}"
+  when: apache_troubleshoot_vm_name_resolved | default('') | string | trim | length > 0
+
+- name: Fail when vm_name could not be resolved from incident or extra vars
+  ansible.builtin.fail:
+    msg: >-
+      vm_name is required. Pass it as an extra var or ensure the ITSM incident
+      {{ itsm_incident_ref | string | trim }} description contains a vm_name: line,
+      title includes the hostname, or inventory_asset_id links to an asset with vm_hostname.
+  when: vm_name | default('') | string | trim | length == 0

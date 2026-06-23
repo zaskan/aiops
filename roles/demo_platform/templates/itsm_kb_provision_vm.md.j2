@@ -4,7 +4,7 @@
 
 ## Step 1 — Open ITSM service request
 
-Open catalog **{{ itsm_apache_stack_request_template_name }}** in itsm-app. Ask the user for `vm_name`, `cpus`, `mem`, `app_repo`; optional `app_branch`. On submit, itsm-app returns `itsm_service_request_ref` (REQ-*) and `itsm_change_ref` (CHG-*). **User does not provide these refs** — take them from ITSM after submit.
+Open catalog **{{ itsm_apache_stack_request_template_name }}** in itsm-app. Ask the user for `vm_name`, `cpus`, `mem`, `app_repo`; optional `app_branch`, `rpm_packages`, `app_clone_path`, `enabled_services`, `exposed_port`. On submit, itsm-app returns `itsm_service_request_ref` (REQ-*) and `itsm_change_ref` (CHG-*). **User does not provide these refs** — take them from ITSM after submit.
 
 ## Step 2 — Launch AAP workflow
 
@@ -19,14 +19,28 @@ Launch **{{ aap_apache_stack_pipeline_workflow }}** (org **{{ aap_apache_stack_p
 | `mem` | yes | User |
 | `app_repo` | yes | User |
 | `app_branch` | no | User, optional |
+| `apache_app_rpm_packages` | no | ITSM **RPM packages** field (or playbook default `httpd,git`) |
+| `apache_app_docroot` | no | ITSM **Repository clone path** field (or playbook default `/var/www/html`) |
+| `apache_app_enabled_services` | no | ITSM **Service to enable** field (or playbook default `httpd`) |
+| `apache_exposure_service_port` | no | ITSM **Port to expose** field (or playbook default `80`) |
 
-When an **Apache Application** ITSM asset exists for the VM and repository, the bot also passes these extra vars from the asset (overriding playbook defaults when set):
+Map ITSM service-request specification keys to AAP extra vars when launching from catalog data:
+
+| ITSM request field | AAP extra var |
+|--------------------|---------------|
+| RPM packages (`rpm_packages`) | `apache_app_rpm_packages` |
+| Repository clone path (`app_clone_path`) | `apache_app_docroot` |
+| Service to enable (`enabled_services`) | `apache_app_enabled_services` |
+| Port to expose (`exposed_port`) | `apache_exposure_service_port` |
+
+When a **Generic Application** ITSM asset exists for the VM and repository, the bot also passes the same extra vars from the asset (overriding playbook defaults when set):
 
 | ITSM asset field | AAP extra var |
 |------------------|---------------|
 | RPM packages | `apache_app_rpm_packages` |
-| Services to enable | `apache_app_enabled_services` |
+| Service to enable | `apache_app_enabled_services` |
 | Repository clone path | `apache_app_docroot` |
+| Port to expose | `apache_exposure_service_port` |
 
 `apache_app_rpm_packages` replaces `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` replaces `apache_app_service`.
 
@@ -39,6 +53,10 @@ cpus: 2
 mem: 4
 app_repo: AIOps_App
 app_branch: main
+apache_app_rpm_packages: httpd,git
+apache_app_docroot: /var/www/html
+apache_app_enabled_services: httpd
+apache_exposure_service_port: 80
 ```
 
 AAP: {{ demo_platform.aap.gateway_url }}

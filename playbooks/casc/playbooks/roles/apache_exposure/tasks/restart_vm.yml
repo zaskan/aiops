@@ -13,9 +13,9 @@
     namespace: "{{ vm_namespace }}"
   register: apache_exposure_vmi_lookup
 
-- name: Determine whether VMI exposes masquerade port 80
+- name: Determine whether VMI exposes the configured service port
   ansible.builtin.set_fact:
-    apache_exposure_vmi_has_port_80: >-
+    apache_exposure_vmi_has_service_port: >-
       {{
         (
           apache_exposure_vmi_lookup.resources | default([])
@@ -31,10 +31,10 @@
         | length > 0
       }}
 
-- name: Restart VM when masquerade port 80 is not active on the running VMI
-  when: not apache_exposure_vmi_has_port_80 | bool
+- name: Restart VM when configured service port is not active on the running VMI
+  when: not apache_exposure_vmi_has_service_port | bool
   block:
-    - name: Restart VM to apply masquerade port 80 from GitOps manifest
+    - name: Restart VM to apply masquerade service port from GitOps manifest
       ansible.builtin.include_role:
         name: common
         tasks_from: restart_vm.yml
@@ -42,7 +42,7 @@
         vm_restart_name: "{{ apache_exposure_vm_name }}"
         vm_restart_namespace: "{{ vm_namespace }}"
 
-    - name: Wait for VMI to run with masquerade port 80 after restart
+    - name: Wait for VMI to run with configured service port after restart
       kubernetes.core.k8s_info:
         host: "{{ openshift_credential_host | default(omit) }}"
         api_key: "{{ openshift_credential_token | default(omit) }}"
@@ -66,6 +66,6 @@
       retries: 36
       delay: 10
 
-    - name: Record that VM was restarted for Apache masquerade port 80
+    - name: Record that VM was restarted for application masquerade port
       ansible.builtin.set_fact:
         apache_exposure_vm_restarted: true

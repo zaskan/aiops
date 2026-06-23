@@ -16,28 +16,48 @@
       Ansible MCP server deployment was not found in namespace {{ aap_namespace }}.
       Check AnsibleMCPServer {{ aap_instance_name }}-mcp reconciliation.
 
-- name: Probe Ansible MCP job_management toolset endpoint
+- name: Probe Ansible MCP token with initialize request
   ansible.builtin.uri:
-    url: "{{ aap_mcp_toolset_urls.job_management | default(aap_mcp_url ~ '/job_management/mcp') }}"
-    method: GET
+    url: "{{ aap_mcp_url }}/mcp/"
+    method: POST
     headers:
       Authorization: "Bearer {{ aap_mcp_token }}"
-      Accept: application/json
+      Content-Type: application/json
+      Accept: application/json, text/event-stream
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 1
+      method: initialize
+      params:
+        protocolVersion: "2024-11-05"
+        capabilities: {}
+        clientInfo:
+          name: aiops-demo
+          version: "1"
+    status_code: [200, 401]
     validate_certs: "{{ validate_certs }}"
-    status_code: [200, 401, 403, 405, 406]
   register: aap_mcp_probe
   retries: 12
   delay: 10
-  until: aap_mcp_probe.status in [200, 401, 403, 405, 406]
+  until: aap_mcp_probe.status in [200, 401]
   failed_when: false
   no_log: true
 
 - name: Fail when Ansible MCP server endpoint is unreachable
   ansible.builtin.fail:
     msg: >-
-      Ansible MCP server endpoint {{ aap_mcp_url }}/job_management/mcp is unreachable
+      Ansible MCP server endpoint {{ aap_mcp_url }}/mcp/ is unreachable
       (status={{ aap_mcp_probe.status | default('none') }},
       msg={{ aap_mcp_probe.msg | default('connection failed') }}). Verify Route
       {{ aap_instance_name }}-mcp,
       deployment {{ aap_mcp_deployment_name }}, and OAuth token scope.
   when: aap_mcp_probe.status is not defined or aap_mcp_probe.status == -1
+
+- name: Fail when Ansible MCP server rejects the OAuth token
+  ansible.builtin.fail:
+    msg: >-
+      Ansible MCP server rejected the OAuth token (HTTP 401). Ensure the
+      AnsibleMCPServer CR has IGNORE_CERTIFICATE_ERRORS=true when the gateway
+      uses a self-signed certificate, then rerun configure_aap_mcp.yml.
+  when: aap_mcp_probe.status | default(0) == 401

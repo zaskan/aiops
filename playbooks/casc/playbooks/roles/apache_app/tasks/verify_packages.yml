@@ -1,0 +1,31 @@
+---
+- name: Build RPM package list from comma-separated packages field
+  ansible.builtin.set_fact:
+    apache_app_rpm_package_list: >-
+      {{
+        (
+          apache_troubleshoot_runtime_apache_app_rpm_packages
+          | default(apache_app_rpm_packages | default(apache_app_package ~ ',' ~ apache_app_git_package, true), true)
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+
+- name: Query installed RPM packages
+  ansible.builtin.command: rpm -q {{ item }}
+  loop: "{{ apache_app_rpm_package_list }}"
+  register: apache_app_rpm_query
+  changed_when: false
+  failed_when: false
+
+- name: Record missing RPM packages from ITSM asset
+  ansible.builtin.set_fact:
+    apache_app_packages_missing: >-
+      {{
+        apache_app_rpm_query.results
+        | rejectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}

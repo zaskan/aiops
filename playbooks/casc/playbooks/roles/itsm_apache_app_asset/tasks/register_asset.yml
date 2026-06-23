@@ -13,26 +13,24 @@
       Accept: application/json
   register: itsm_apache_app_asset_types_list
 
-- name: Resolve Apache Application asset type id
+- name: Resolve Generic Application asset type id
   ansible.builtin.set_fact:
     itsm_apache_app_asset_type_id: >-
       {{
-        (
-          itsm_apache_app_asset_types_list.json
-          | default([])
-          | selectattr('name', 'equalto', itsm_apache_app_asset_type_name)
-          | list
-          | first
-          | default({})
-        ).id | default(none)
+        itsm_apache_app_asset_types_list.json
+        | default([])
+        | selectattr('name', 'equalto', itsm_apache_app_asset_type_name)
+        | map(attribute='id')
+        | first
+        | default(none, true)
       }}
 
-- name: Fail when Apache Application asset type is missing in ITSM
+- name: Fail when Generic Application asset type is missing in ITSM
   ansible.builtin.fail:
     msg: >-
       ITSM asset type '{{ itsm_apache_app_asset_type_name }}' was not found. Run playbooks/install.yml
       or playbooks/casc/configure_itsm_asset_types.yml to create asset types.
-  when: itsm_apache_app_asset_type_id is none
+  when: itsm_apache_app_asset_type_id is none or (itsm_apache_app_asset_type_id | int) < 1
 
 - name: GET existing ITSM assets
   ansible.builtin.uri:
@@ -48,7 +46,7 @@
       Accept: application/json
   register: itsm_apache_app_asset_existing_list
 
-- name: Determine whether Apache Application asset already exists in ITSM
+- name: Determine whether Generic Application asset already exists in ITSM
   ansible.builtin.set_fact:
     itsm_apache_app_asset_existing: >-
       {{
@@ -72,7 +70,7 @@
         ) > 0
       }}
 
-- name: Build Apache Application asset custom fields payload
+- name: Build Generic Application asset custom fields payload
   ansible.builtin.set_fact:
     itsm_apache_app_asset_custom_fields:
       hostname: "{{ itsm_apache_app_hostname }}"
@@ -85,8 +83,9 @@
       route_url: "{{ itsm_apache_app_route_url | default('') }}"
       rpm_packages: "{{ itsm_apache_app_rpm_packages_record }}"
       enabled_services: "{{ itsm_apache_app_enabled_services_record }}"
+      exposed_port: "{{ itsm_apache_app_exposed_port_record }}"
 
-- name: Create Apache Application asset in ITSM
+- name: Create Generic Application asset in ITSM
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url }}/api/v1/assets"
     method: POST
@@ -97,7 +96,7 @@
     body_format: json
     body:
       name: "{{ itsm_apache_app_asset_name }}"
-      description: "Apache app on {{ itsm_apache_app_target_host }} ({{ itsm_apache_app_vm_ip }})"
+      description: "Generic app on {{ itsm_apache_app_target_host }} ({{ itsm_apache_app_vm_ip }})"
       external_inventory: true
       asset_type_id: "{{ itsm_apache_app_asset_type_id | int }}"
       parent_asset_id: "{{ itsm_apache_app_vm_asset_id | int }}"
@@ -110,7 +109,7 @@
   register: itsm_apache_app_asset_create
   when: not itsm_apache_app_asset_already_exists | bool
 
-- name: Update existing Apache Application asset custom fields in ITSM
+- name: Update existing Generic Application asset custom fields in ITSM
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url }}/api/v1/assets/{{ itsm_apache_app_asset_existing.id }}"
     method: PATCH
@@ -120,7 +119,7 @@
     validate_certs: "{{ itsm_validate_certs | default(false) }}"
     body_format: json
     body:
-      description: "Apache app on {{ itsm_apache_app_target_host }} ({{ itsm_apache_app_vm_ip }})"
+      description: "Generic app on {{ itsm_apache_app_target_host }} ({{ itsm_apache_app_vm_ip }})"
       parent_asset_id: "{{ itsm_apache_app_vm_asset_id | int }}"
       custom_fields: "{{ itsm_apache_app_asset_custom_fields }}"
     status_code: [200]
@@ -131,13 +130,13 @@
   register: itsm_apache_app_asset_update
   when: itsm_apache_app_asset_already_exists | bool
 
-- name: Display ITSM Apache Application asset registration result
+- name: Display ITSM Generic Application asset registration result
   ansible.builtin.debug:
     msg: >-
       {{
-        'Created ITSM Apache Application asset ' ~ itsm_apache_app_asset_name
+        'Created ITSM Generic Application asset ' ~ itsm_apache_app_asset_name
         ~ ' (parent VM: ' ~ itsm_apache_app_target_host ~ ')'
         if not itsm_apache_app_asset_already_exists | bool
-        else 'Updated ITSM Apache Application asset ' ~ itsm_apache_app_asset_name
+        else 'Updated ITSM Generic Application asset ' ~ itsm_apache_app_asset_name
         ~ ' (parent VM: ' ~ itsm_apache_app_target_host ~ ')'
       }}

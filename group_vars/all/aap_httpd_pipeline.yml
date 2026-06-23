@@ -6,12 +6,12 @@ aap_httpd_pipeline_controller_api_prefix: /api/controller/
 aap_httpd_pipeline_inventory: AIOps Infrastructure
 aap_httpd_pipeline_project: AIOps Playbooks
 
-aap_httpd_pipeline_jt_install: Install httpd
-aap_httpd_pipeline_jt_deploy: Deploy Apache App Repo
-aap_httpd_pipeline_jt_expose: Expose Apache
-aap_httpd_pipeline_jt_register_itsm: Register ITSM Apache Application Asset
-aap_httpd_pipeline_jt_start: Start httpd
-aap_httpd_pipeline_workflow: Deploy Apache App
+aap_httpd_pipeline_jt_install: Install application packages
+aap_httpd_pipeline_jt_deploy: Deploy application repository
+aap_httpd_pipeline_jt_expose: Expose application
+aap_httpd_pipeline_jt_register_itsm: Register ITSM Generic Application Asset
+aap_httpd_pipeline_jt_start: Start application services
+aap_httpd_pipeline_workflow: Deploy Generic App
 
 aap_httpd_pipeline_playbook_install: install_httpd.yml
 aap_httpd_pipeline_playbook_deploy: deploy_apache_app.yml

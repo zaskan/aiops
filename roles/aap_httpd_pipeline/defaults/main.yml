@@ -6,12 +6,12 @@ aap_httpd_pipeline_controller_api_prefix: /api/controller/
 aap_httpd_pipeline_inventory: AIOps Infrastructure
 aap_httpd_pipeline_project: AIOps Playbooks
 
-aap_httpd_pipeline_jt_install: Install httpd
-aap_httpd_pipeline_jt_deploy: Deploy Apache App Repo
-aap_httpd_pipeline_jt_expose: Expose Apache
-aap_httpd_pipeline_jt_register_itsm: Register ITSM Apache Application Asset
-aap_httpd_pipeline_jt_start: Start httpd
-aap_httpd_pipeline_workflow: Deploy Apache App
+aap_httpd_pipeline_jt_install: Install application packages
+aap_httpd_pipeline_jt_deploy: Deploy application repository
+aap_httpd_pipeline_jt_expose: Expose application
+aap_httpd_pipeline_jt_register_itsm: Register ITSM Generic Application Asset
+aap_httpd_pipeline_jt_start: Start application services
+aap_httpd_pipeline_workflow: Deploy Generic App
 
 aap_httpd_pipeline_playbook_install: install_httpd.yml
 aap_httpd_pipeline_playbook_deploy: deploy_apache_app.yml
@@ -20,8 +20,8 @@ aap_httpd_pipeline_playbook_register_itsm: register_itsm_apache_app_asset.yml
 aap_httpd_pipeline_playbook_start: start_httpd.yml
 
 aap_httpd_pipeline_workflow_survey_spec:
-  name: Deploy Apache App
-  description: Target RHEL server and Gitea application repository
+  name: Deploy Generic App
+  description: Target RHEL server, Gitea application repository, and application deploy settings
   spec:
     - question_name: target_host
       question_description: Hostname in AIOps Infrastructure (ITSM VM asset name)
@@ -40,6 +40,30 @@ aap_httpd_pipeline_workflow_survey_spec:
       type: text
       variable: app_branch
       default: main
+    - question_name: apache_app_rpm_packages
+      question_description: Comma-separated RPM packages (from ITSM RPM packages field; default httpd,git)
+      required: false
+      type: text
+      variable: apache_app_rpm_packages
+      default: httpd,git
+    - question_name: apache_app_docroot
+      question_description: Repository clone path on the VM (from ITSM Repository clone path field)
+      required: false
+      type: text
+      variable: apache_app_docroot
+      default: /var/www/html
+    - question_name: apache_app_enabled_services
+      question_description: Comma-separated systemd services to enable (from ITSM Service to enable field)
+      required: false
+      type: text
+      variable: apache_app_enabled_services
+      default: httpd
+    - question_name: apache_exposure_service_port
+      question_description: TCP port to expose via OpenShift Route (from ITSM Port to expose field)
+      required: false
+      type: text
+      variable: apache_exposure_service_port
+      default: "80"
 
 aap_httpd_pipeline_credential_vms: Virtual Machines
 aap_httpd_pipeline_credential_gitea: Gitea

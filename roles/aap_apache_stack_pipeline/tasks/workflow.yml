@@ -2,7 +2,7 @@
 - name: Ensure sub-workflows allow ITSM variables from master workflow nodes
   ansible.builtin.include_tasks: ensure_subworkflows.yml
 
-- name: Ensure Deploy Apache Application Stack master workflow exists in AAP
+- name: Ensure Deploy Generic Application Stack master workflow exists in AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_apache_stack_pipeline_workflow }}"
     organization: "{{ aap_apache_stack_pipeline_organization }}"
@@ -14,7 +14,7 @@
     controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
 
-- name: Ensure Deploy Apache App sub-workflow node exists
+- name: Ensure Deploy Generic App sub-workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: deploy_apache_app_stack
     workflow_job_template: "{{ aap_apache_stack_pipeline_workflow }}"
@@ -27,6 +27,10 @@
       vm_name: "{{ '{{ vm_name }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_apache_stack_pipeline_controller_host }}"
@@ -48,7 +52,7 @@
     controller_oauthtoken: "{{ aap_apache_stack_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_stack_pipeline_validate_certs }}"
 
-- name: Ensure Provision VM sub-workflow node links to Deploy Apache App
+- name: Ensure Provision VM sub-workflow node links to Deploy Generic App
   awx.awx.workflow_job_template_node:
     identifier: provision_vm_stack
     workflow_job_template: "{{ aap_apache_stack_pipeline_workflow }}"

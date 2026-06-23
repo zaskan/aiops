@@ -81,6 +81,9 @@
     or aap_mcp_cr_allow_write | bool != aap_mcp_allow_write_operations | bool
     or aap_mcp_cr_ignore_cert_errors | bool != aap_mcp_ignore_certificate_errors | bool
 
+- name: Ensure AnsibleMCPServer CR and deployment match demo MCP settings
+  ansible.builtin.include_tasks: ensure_ansible_mcp_server.yml
+
 - name: Wait for AnsibleMCPServer custom resource to be created
   kubernetes.core.k8s_info:
     api_version: "{{ aap_mcp_server_api_version }}"
@@ -200,6 +203,10 @@
       ansible.builtin.set_fact:
         aap_mcp_token: "{{ aap_mcp_token_create.json.token }}"
       no_log: true
+
+- name: Refresh Ansible MCP OAuth token when current token is invalid
+  ansible.builtin.include_tasks: refresh_aap_mcp_token.yml
+  when: aap_mcp_token | default('') | string | trim | length > 0
 
 - name: Verify Ansible MCP server health
   ansible.builtin.include_tasks: check_aap_mcp.yml

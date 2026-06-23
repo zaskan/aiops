@@ -1,0 +1,54 @@
+---
+- name: Build enabled services list from comma-separated services field
+  ansible.builtin.set_fact:
+    apache_app_enabled_service_list: >-
+      {{
+        (
+          apache_troubleshoot_runtime_apache_app_enabled_services
+          | default(apache_app_enabled_services | default(apache_app_service, true), true)
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+
+- name: Query RPM package for each enabled service unit
+  ansible.builtin.command: rpm -q {{ item }}
+  loop: "{{ apache_app_enabled_service_list }}"
+  register: apache_app_service_rpm_query
+  changed_when: false
+  failed_when: false
+
+- name: Check systemd state for each enabled service
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+  loop: "{{ apache_app_enabled_service_list }}"
+  register: apache_app_service_state
+  failed_when: false
+
+- name: Record enabled services that are down or missing packages
+  ansible.builtin.set_fact:
+    apache_app_services_down: >-
+      {{
+        (
+          apache_app_service_state.results
+          | selectattr('status.ActiveState', 'defined')
+          | rejectattr('status.ActiveState', 'equalto', 'active')
+          | map(attribute='item')
+          | list
+        )
+        + (
+          apache_app_service_state.results
+          | selectattr('status.ActiveState', 'undefined')
+          | map(attribute='item')
+          | list
+        )
+        + (
+          apache_app_service_rpm_query.results
+          | rejectattr('rc', 'equalto', 0)
+          | map(attribute='item')
+          | list
+        )
+        | unique
+      }}

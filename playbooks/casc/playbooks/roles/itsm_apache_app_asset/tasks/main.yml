@@ -29,21 +29,28 @@
     itsm_apache_app_rpm_packages_record: >-
       {{
         apache_app_rpm_packages
-        | default(itsm_apache_app_default_rpm_packages | default('httpd,git'))
+        | default(itsm_apache_app_default_rpm_packages | default('httpd,git'), true)
         | string
         | trim
       }}
     itsm_apache_app_enabled_services_record: >-
       {{
         apache_app_enabled_services
-        | default(itsm_apache_app_default_enabled_services | default('httpd'))
+        | default(itsm_apache_app_default_enabled_services | default('httpd'), true)
         | string
         | trim
       }}
     itsm_apache_app_clone_path_record: >-
       {{
         apache_app_docroot
-        | default(itsm_apache_app_default_clone_path | default('/var/www/html'))
+        | default(itsm_apache_app_default_clone_path | default('/var/www/html'), true)
+        | string
+        | trim
+      }}
+    itsm_apache_app_exposed_port_record: >-
+      {{
+        apache_exposure_service_port
+        | default(exposed_port | default(itsm_apache_app_default_exposed_port | default('80')), true)
         | string
         | trim
       }}

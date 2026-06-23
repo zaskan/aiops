@@ -1,0 +1,37 @@
+---
+legacy_apache_stack_aap_organization: "{{ aap_apache_stack_pipeline_organization | default('AIOps') }}"
+
+legacy_apache_stack_aap_workflows:
+  - Deploy Apache Application Stack
+  - Deploy Apache App
+
+legacy_apache_stack_aap_job_templates:
+  - Install httpd
+  - Deploy Apache App Repo
+  - Expose Apache
+  - Register ITSM Apache Application Asset
+  - Start httpd
+
+legacy_apache_stack_itsm_request_template: Apache Application Stack
+
+legacy_apache_stack_itsm_generic_change_template: Generic Application Stack — Standard Change
+legacy_apache_stack_itsm_request_template_retired_name: LEGACY — Apache Application Stack (retired)
+legacy_apache_stack_itsm_request_template_retired_description: >-
+  Retired catalog item. Use Generic Application Stack for new deployments.
+legacy_apache_stack_itsm_shared_task_template_titles:
+  - AAP — Push VM Manifest
+  - AAP — Sync Infrastructure VMs
+  - AAP — Register ITSM VM Asset
+legacy_apache_stack_itsm_change_template: Apache Application Stack — Standard Change
+
+legacy_apache_stack_itsm_task_templates:
+  - AAP — Install httpd
+  - AAP — Deploy Apache App Repo
+  - AAP — Expose Apache
+  - AAP — Start httpd
+
+legacy_apache_stack_itsm_asset_type: Apache Application
+
+legacy_apache_stack_itsm_kb_titles:
+  - Deploy Apache Application Stack (ITSM service request + AIOps)
+  - Deploy Apache Application Stack (AIOps service request)

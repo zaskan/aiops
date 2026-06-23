@@ -1,16 +1,16 @@
 ---
-itsm_apache_stack_kb_article_title: Deploy Apache Application Stack (AIOps service request)
+itsm_apache_stack_kb_article_title: Deploy Generic Application Stack (AIOps service request)
 
 itsm_apache_stack_task_template_push_vm: AAP — Push VM Manifest
 itsm_apache_stack_task_template_sync_vms: AAP — Sync Infrastructure VMs
 itsm_apache_stack_task_template_register_itsm: AAP — Register ITSM VM Asset
-itsm_apache_stack_task_template_install_httpd: AAP — Install httpd
-itsm_apache_stack_task_template_deploy_app: AAP — Deploy Apache App Repo
-itsm_apache_stack_task_template_expose_apache: AAP — Expose Apache
-itsm_apache_stack_task_template_start_httpd: AAP — Start httpd
+itsm_apache_stack_task_template_install_httpd: AAP — Install application packages
+itsm_apache_stack_task_template_deploy_app: AAP — Deploy application repository
+itsm_apache_stack_task_template_expose_apache: AAP — Expose application
+itsm_apache_stack_task_template_start_httpd: AAP — Start application services
 
-itsm_apache_stack_change_template_name: Apache Application Stack — Standard Change
-itsm_apache_stack_request_template_name: Apache Application Stack
+itsm_apache_stack_change_template_name: Generic Application Stack — Standard Change
+itsm_apache_stack_request_template_name: Generic Application Stack
 
 # Declared on AAP job/workflow templates so workflow node extra_data may pass ITSM vars.
 aap_itsm_job_template_extra_vars:
@@ -36,6 +36,11 @@ aap_httpd_survey_job_extra_vars:
   vm_name: ""
   app_repo: ""
   app_branch: ""
+  apache_app_rpm_packages: ""
+  apache_app_docroot: ""
+  apache_app_enabled_services: ""
+  itsm_apache_app_asset_type_name: Generic Application
+  apache_exposure_service_port: ""
 
 aap_vm_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_vm_survey_job_extra_vars) }}"
 aap_httpd_pipeline_job_extra_vars: "{{ aap_itsm_job_template_extra_vars | combine(aap_httpd_survey_job_extra_vars) }}"
@@ -55,20 +60,20 @@ itsm_task_templates:
     kb_article_title: "{{ itsm_kb_vm_provisioning_title }}"
   - name: "{{ itsm_apache_stack_task_template_install_httpd }}"
     title: "{{ itsm_apache_stack_task_template_install_httpd }}"
-    description: Install httpd and git on the provisioned VM.
+    description: Install RPM packages on the provisioned VM (from ITSM RPM packages field or playbook defaults).
   - name: "{{ itsm_apache_stack_task_template_deploy_app }}"
     title: "{{ itsm_apache_stack_task_template_deploy_app }}"
-    description: Clone Gitea application repository into Apache docroot.
+    description: Clone Gitea application repository into the configured repository clone path.
   - name: "{{ itsm_apache_stack_task_template_expose_apache }}"
     title: "{{ itsm_apache_stack_task_template_expose_apache }}"
-    description: Inject Apache Service and Route into VM GitOps manifest and sync Argo CD.
+    description: Inject application Service and Route into VM GitOps manifest and sync Argo CD.
   - name: "{{ itsm_apache_stack_task_template_start_httpd }}"
     title: "{{ itsm_apache_stack_task_template_start_httpd }}"
-    description: Enable and start httpd on the provisioned VM.
+    description: Enable and start application services (from ITSM Service to enable field or playbook defaults).
 
 itsm_change_templates:
   - name: "{{ itsm_apache_stack_change_template_name }}"
-    description: Standard change for Apache Application stack (VM provision + httpd deploy).
+    description: Standard change for Generic Application stack (VM provision + application deploy).
     change_type: standard
     task_template_names:
       - "{{ itsm_apache_stack_task_template_push_vm }}"
@@ -81,7 +86,7 @@ itsm_change_templates:
 
 itsm_request_templates:
   - name: "{{ itsm_apache_stack_request_template_name }}"
-    description: Request Apache Application stack (KubeVirt VM + httpd application deployment).
+    description: Request Generic Application stack (KubeVirt VM + application deployment).
     change_template_name: "{{ itsm_apache_stack_change_template_name }}"
     require_standard_change: false
     fields:
@@ -90,3 +95,7 @@ itsm_request_templates:
       - { field_key: mem, label: Memory GiB, field_type: number, required: true }
       - { field_key: app_repo, label: Gitea app repository, field_type: text, required: true }
       - { field_key: app_branch, label: Git branch, field_type: text, required: false }
+      - { field_key: rpm_packages, label: RPM packages, field_type: text, required: false }
+      - { field_key: app_clone_path, label: Repository clone path, field_type: text, required: false }
+      - { field_key: enabled_services, label: Service to enable, field_type: text, required: false }
+      - { field_key: exposed_port, label: Port to expose, field_type: number, required: false }

@@ -15,3 +15,9 @@ itsm_agent_llm_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_MODEL', 
 itsm_agent_llm_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_EMBEDDING_MODEL', default='') }}"
 itsm_agent_aap_tls_verify: "false"
 itsm_agent_apache_asset_extra_vars_patch: true
+itsm_agent_lightspeed_remediation_patch: true
+itsm_agent_lightspeed_api_url: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_API_URL', default='') }}"
+itsm_agent_lightspeed_api_token: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_API_TOKEN', default='') }}"
+itsm_agent_lightspeed_api_tls_verify: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_TLS_VERIFY', default='false') }}"
+itsm_agent_lightspeed_discover_namespace: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_DISCOVER_NAMESPACE', default='aap') }}"
+itsm_agent_lightspeed_allow_litellm_fallback: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_ALLOW_LITELLM_FALLBACK', default='true') }}"

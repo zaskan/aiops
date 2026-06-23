@@ -13,13 +13,16 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_gitea_repos.yml`     | Create Gitea repos for AIOps demo              |
 | `playbooks/casc/configure_infrastructure_gitops.yml` | Argo CD Application for Infrastructure/vms |
 | `playbooks/casc/configure_aap_vm_workflow.yml` | AAP project, job templates, Provision VM workflow |
-| `playbooks/casc/configure_itsm_asset_types.yml` | Create/update ITSM **Virtual Machine** and **Apache Application** asset types |
-| `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Apache Application stack (RAG) |
+| `playbooks/casc/configure_itsm_asset_types.yml` | Create/update ITSM **Virtual Machine** and **Generic Application** asset types |
+| `playbooks/casc/configure_itsm_kb_vm_provisioning.yml` | Publish/update ITSM KB article for Generic Application stack (RAG) |
 | `playbooks/casc/configure_itsm_app_rag.yml` | Enable ITSM KB semantic search (embedding API on itsm-app) |
-| `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Apache App workflow (inventory not created) |
-| `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Apache Application stack |
-| `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Apache Application Stack |
-| `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Apache Application Stack service request |
+| `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Generic App workflow (inventory not created) |
+| `playbooks/casc/configure_aap_apache_troubleshoot_pipeline.yml` | AAP job templates for Apache alert incident and remediation |
+| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Alertmanager event stream, and **Apache Alert Incident Activation** |
+| `playbooks/casc/configure_aap_lightspeed_remediation_pipeline.yml` | AAP Lightspeed Remediation workflow |
+| `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
+| `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
+| `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Generic Application Stack service request |
 | `playbooks/casc/playbooks/install_httpd.yml` | Install httpd and git on a RHEL host |
 | `playbooks/casc/playbooks/deploy_apache_app.yml` | Clone Gitea app repo into Apache docroot |
 | `playbooks/casc/playbooks/start_httpd.yml` | Enable and start httpd |
@@ -107,7 +110,11 @@ The playbook will:
 12. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
 13. Enable ITSM KB semantic search (embedding secret; may rebuild/restart itsm-app — SQLite is on `emptyDir`)
 14. Seed ITSM database after last pod restart: asset types, itsm-app webhooks, KB articles, and service catalog templates (must run after step 13 so data is not wiped by pod restart)
-15. Create Apache httpd job templates and **Deploy Apache App** workflow (uses **AIOps Infrastructure** inventory)
+15. Create application deployment job templates and **Deploy Generic App** workflow (uses **AIOps Infrastructure** inventory)
+16. Create Apache alert remediation job templates (**Create Apache Alert Incident**, **Troubleshoot apache application**)
+17. Configure EDA **AIOps Rulebooks** project, Alertmanager event stream, and enable **Apache Alert Incident Activation** rulebook activation
+18. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → EDA webhook)
+19. Create **Deploy Generic Application Stack** master workflow and VM modification workflows
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -424,24 +431,24 @@ ansible-playbook playbooks/casc/configure_aap_httpd_workflow.yml
 
 Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache Route is created in GitOps, `httpd` is active, and content is served from `/var/www/html/`.
 
-## Apache Application stack (service request driven)
+## Generic Application stack (service request driven)
 
-End-to-end delivery: ITSM **service request** → **standard change** with seven CTASKs → master AAP workflow **Deploy Apache Application Stack** (Provision VM → Deploy Apache App). Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
+End-to-end delivery: ITSM **service request** → **standard change** with seven CTASKs → master AAP workflow **Deploy Generic Application Stack** (Provision VM → Deploy Generic App). Each playbook starts and completes its mapped CTASK with AAP job links (and git commits where applicable). The last CTASK auto-completes the change and fulfills the request.
 
 ### ITSM catalog
 
 | Template | Name |
 | -------- | ---- |
-| Request | **Apache Application Stack** |
-| Change | **Apache Application Stack — Standard Change** |
-| Task templates (7) | AAP — Push VM Manifest, Sync Infrastructure VMs, Register ITSM VM Asset, Install httpd, Deploy Apache App Repo, Expose Apache, Start httpd |
+| Request | **Generic Application Stack** |
+| Change | **Generic Application Stack — Standard Change** |
+| Task templates (7) | AAP — Push VM Manifest, Sync Infrastructure VMs, Register ITSM VM Asset, Install application packages, Deploy application repository, Expose application, Start application services |
 
 Install creates these via `configure_itsm_apache_stack_templates.yml` (included in `playbooks/install.yml`).
 
 ### Operator flow
 
-1. ITSM **Service Catalog** → **Apache Application Stack** → fill `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
-2. AAP → **Deploy Apache Application Stack** → survey: `itsm_change_ref` (required), matching stack parameters.
+1. ITSM **Service Catalog** → **Generic Application Stack** → fill `vm_name`, `cpus`, `mem`, `app_repo`; optional `app_branch`, `rpm_packages`, `app_clone_path`, `enabled_services` → **Submit**. Note **`REQ-*`** and **`CHG-*`**.
+2. AAP → **Deploy Generic Application Stack** → survey: `itsm_change_ref` (required), matching stack parameters and `apache_app_*` deploy settings.
 3. Verify all seven CTASKs complete with comments; change **completed**; request **fulfilled**.
 
 Demo API submit (no UI):
@@ -457,15 +464,15 @@ ansible-playbook playbooks/casc/submit_apache_stack_service_request.yml \
 
 | Resource | Name |
 | -------- | ---- |
-| Master workflow | **Deploy Apache Application Stack** |
+| Master workflow | **Deploy Generic Application Stack** |
 | Sub-workflow 1 | **Provision VM** |
-| Sub-workflow 2 | **Deploy Apache App** |
+| Sub-workflow 2 | **Deploy Generic App** |
 
-Master workflow survey: `itsm_change_ref`, `itsm_service_request_ref` (optional), `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch`.
+Master workflow survey: `itsm_change_ref`, `itsm_service_request_ref` (optional), `vm_name`, `cpus`, `mem`, `app_repo`, `app_branch`, `apache_app_rpm_packages`, `apache_app_docroot`, `apache_app_enabled_services`, `apache_exposure_service_port`.
 
-Standalone **Provision VM** and **Deploy Apache App** workflows remain usable without `itsm_change_ref` (ITSM CTASK integration is skipped).
+Standalone **Provision VM** and **Deploy Generic App** workflows remain usable without `itsm_change_ref` (ITSM CTASK integration is skipped).
 
-Install also upserts KB article **Deploy Apache Application Stack (ITSM service request + AIOps)** for RAG. Semantic search is enabled automatically during install (`configure_itsm_app_rag.yml` runs before the KB upsert). Re-run after editing the template:
+Install also upserts KB article **Deploy Generic Application Stack (ITSM service request + AIOps)** for RAG. Semantic search is enabled automatically during install (`configure_itsm_app_rag.yml` runs before the KB upsert). Re-run after editing the template:
 
 ```bash
 ansible-playbook playbooks/casc/configure_itsm_app_rag.yml
@@ -474,7 +481,7 @@ ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 
 ## VM resource modification (service request driven)
 
-End-to-end CPU and memory resize flows mirror the Apache Application Stack pattern: ITSM **service request** → **standard change** with four CTASKs → AAP workflow (patch manifest → sync → restart → register asset). Manifest patches preserve the existing VM password and cloud-init configuration.
+End-to-end CPU and memory resize flows mirror the Generic Application Stack pattern: ITSM **service request** → **standard change** with four CTASKs → AAP workflow (patch manifest → sync → restart → register asset). Manifest patches preserve the existing VM password and cloud-init configuration.
 
 ### ITSM catalog
 
@@ -661,16 +668,42 @@ ansible-playbook playbooks/casc/configure_itsm_kb_vm_provisioning.yml
 Re-run bot install or refresh secrets without a full install:
 
 ```bash
+export AAP_LIGHTSPEED_API_TOKEN=your-lightspeed-bearer-token
 ansible-playbook playbooks/casc/configure_itsm_agent.yml
 ```
 
-When launching Apache-related AAP workflows, the bot looks up a matching **Apache Application** ITSM asset (by `vm_name` / `target_host` and `app_repo`) and merges these asset custom fields into workflow `extra_vars` (overriding playbook defaults when set):
+### Ansible Lightspeed playbook generation
 
-| ITSM asset field | AAP extra var |
+For incidents without a dedicated KB runbook, the bot drafts remediation playbooks via the **Ansible Lightspeed (Ansible AI Connect) API** — not LiteLLM. On `configure_itsm_agent.yml`, the playbook discovers the direct Lightspeed route and probes API versions in order (`/api/v2/me`, `/api/v1/me/`, `/api/v0/me/`), falling back to the AAP gateway (`/api/lightspeed/v1/...`).
+
+**Required for Lightspeed remediation:**
+
+```bash
+export AAP_LIGHTSPEED_API_TOKEN=your-lightspeed-bearer-token
+```
+
+Create the token in the Lightspeed admin portal (`https://<lightspeed-route>/admin` → Django OAuth toolkit → Access tokens → app **Ansible Lightspeed for VS Code**, scope `read write`).
+
+**Optional overrides:**
+
+| Variable | Purpose |
+| -------- | ------- |
+| `AAP_LIGHTSPEED_API_URL` | Full playbook generation URL (default: discovered `.../api/lightspeed/v1/ai/generations/playbook/` via AAP gateway) |
+| `AAP_LIGHTSPEED_TLS_VERIFY` | TLS verification for Lightspeed API calls (default: `false`) |
+| `AAP_LIGHTSPEED_ALLOW_LITELLM_FALLBACK` | Fall back to LiteLLM if Lightspeed API fails (default: `true`) |
+
+Flow: incident posted → bot calls Lightspeed API → shows YAML in chat → user confirms → **Lightspeed Remediation** AAP workflow uploads and runs the playbook.
+
+**Troubleshooting:** If `POST .../ai/generations/playbook/` returns HTTP 404 with `feature_not_available`, Watsonx/WCA playbook generation is not configured on Lightspeed. By default the itsm-agent falls back to LiteLLM for drafting. Set `AAP_LIGHTSPEED_ALLOW_LITELLM_FALLBACK=false` to require Lightspeed-sourced playbooks only.
+
+When launching application-stack AAP workflows, the bot maps ITSM request fields (`rpm_packages`, `app_clone_path`, `enabled_services`) and looks up a matching **Generic Application** ITSM asset (by `vm_name` / `target_host` and `app_repo`), merging values into workflow `extra_vars` (overriding playbook defaults when set):
+
+| ITSM field | AAP extra var |
 | ---------------- | ------------- |
 | RPM packages | `apache_app_rpm_packages` |
-| Services to enable | `apache_app_enabled_services` |
+| Service to enable | `apache_app_enabled_services` |
 | Repository clone path | `apache_app_docroot` |
+| Port to expose | `apache_exposure_service_port` |
 
 `apache_app_rpm_packages` also derives `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` derives `apache_app_service`. Implemented via patched `bot/apache_assets.py` at itsm-agent image build (`itsm_agent_apache_asset_extra_vars_patch`).
 
@@ -754,8 +787,12 @@ Defaults live in `[group_vars/all/demo_platform.yml](group_vars/all/demo_platfor
 | `CHAT_SEED_ADMIN_USERNAME` / `CHAT_SEED_ADMIN_PASSWORD`       | chat-app admin                           |
 | `CHAT_AIOPS_PASSWORD`                                         | aiops user password (configure playbook) |
 | `ITSM_AIOPS_PASSWORD`                                         | itsm aiops user password                 |
-| `ITSM_AGENT_LLM_BASE_URL` / `ITSM_AGENT_LLM_API_KEY`          | LiteLLM endpoint for itsm-agent (required on install) |
+| `ITSM_AGENT_LLM_BASE_URL` / `ITSM_AGENT_LLM_API_KEY`          | LiteLLM endpoint for itsm-agent LLM assess (required on install) |
 | `ITSM_AGENT_LLM_MODEL`                                        | LiteLLM chat model (default: llama-scout-17b) |
+| `AAP_LIGHTSPEED_API_TOKEN`                                    | Ansible Lightspeed API Bearer token (required for remediation playbook generation) |
+| `AAP_LIGHTSPEED_API_URL`                                      | Optional override for Lightspeed playbook API URL |
+| `AAP_LIGHTSPEED_TLS_VERIFY`                                   | TLS verify for Lightspeed API (default: false) |
+| `AAP_LIGHTSPEED_ALLOW_LITELLM_FALLBACK`                       | Use LiteLLM if Lightspeed API unavailable (default: true) |
 | `ITSM_EMBEDDING_MODEL` / `ITSM_AGENT_EMBEDDING_MODEL`           | Embedding model id for itsm-app KB RAG (required on install) |
 | `ITSM_EMBEDDING_BASE_URL` / `ITSM_EMBEDDING_API_KEY`            | Optional overrides for itsm-app embeddings (default: same LiteLLM URL/key as agent; `/v1` suffix stripped) |
 | `GITEA_ADMIN_USER` / `GITEA_ADMIN_PASSWORD`                   | gitea admin                              |

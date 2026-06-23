@@ -1,5 +1,5 @@
 ---
-- name: Ensure Deploy Apache App workflow job template exists in AAP
+- name: Ensure Deploy Generic App workflow job template exists in AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_httpd_pipeline_workflow }}"
     organization: "{{ aap_httpd_pipeline_organization }}"
@@ -13,7 +13,7 @@
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Ensure Start httpd workflow node exists
+- name: Ensure Start application services workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: start_httpd
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -27,13 +27,17 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Ensure Register ITSM Apache Application Asset workflow node exists
+- name: Ensure Register ITSM Generic Application Asset workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: register_itsm_apache_app_asset
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -44,6 +48,10 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes:
       - start_httpd
     state: present
@@ -51,7 +59,7 @@
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Ensure Expose Apache workflow node exists
+- name: Ensure Expose application workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: expose_apache
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -65,6 +73,10 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes:
       - register_itsm_apache_app_asset
     state: present
@@ -72,7 +84,7 @@
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Clear Deploy Apache App workflow node edges before re-linking
+- name: Clear Deploy application repository workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: deploy_apache_app
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -86,13 +98,17 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Clear Install httpd workflow node edges before re-linking
+- name: Clear Install application packages workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: install_httpd
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -106,13 +122,17 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes: []
     state: present
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Ensure Deploy Apache App workflow node links to Expose Apache
+- name: Ensure Deploy application repository workflow node links to Expose application
   awx.awx.workflow_job_template_node:
     identifier: deploy_apache_app
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -126,6 +146,10 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes:
       - expose_apache
     state: present
@@ -133,7 +157,7 @@
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
 
-- name: Ensure Install httpd workflow node links to Deploy Apache App
+- name: Ensure Install application packages workflow node links to Deploy application repository
   awx.awx.workflow_job_template_node:
     identifier: install_httpd
     workflow_job_template: "{{ aap_httpd_pipeline_workflow }}"
@@ -147,6 +171,10 @@
       vm_name: "{{ '{{ vm_name | default(target_host) }}' }}"
       app_repo: "{{ '{{ app_repo }}' }}"
       app_branch: "{{ '{{ app_branch | default(\"main\") }}' }}"
+      apache_app_rpm_packages: "{{ '{{ apache_app_rpm_packages | default(\"httpd,git\") }}' }}"
+      apache_app_docroot: "{{ '{{ apache_app_docroot | default(\"/var/www/html\") }}' }}"
+      apache_app_enabled_services: "{{ '{{ apache_app_enabled_services | default(\"httpd\") }}' }}"
+      apache_exposure_service_port: "{{ '{{ apache_exposure_service_port | default(\"80\") }}' }}"
     success_nodes:
       - deploy_apache_app
     state: present

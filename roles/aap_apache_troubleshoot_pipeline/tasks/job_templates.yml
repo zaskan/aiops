@@ -39,6 +39,7 @@
       - "{{ aap_apache_troubleshoot_pipeline_credential_itsm }}"
       - "{{ aap_apache_troubleshoot_pipeline_credential_chat }}"
       - "{{ aap_apache_troubleshoot_pipeline_credential_aap }}"
+      - "{{ aap_apache_troubleshoot_pipeline_credential_gitea }}"
     controller_host: "{{ aap_apache_troubleshoot_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_apache_troubleshoot_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_troubleshoot_pipeline_validate_certs }}"

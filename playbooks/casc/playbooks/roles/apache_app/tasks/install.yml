@@ -4,7 +4,8 @@
     apache_app_rpm_package_list: >-
       {{
         (
-          apache_app_rpm_packages | default(apache_app_package ~ ',' ~ apache_app_git_package)
+          apache_troubleshoot_runtime_apache_app_rpm_packages
+          | default(apache_app_rpm_packages | default(apache_app_package ~ ',' ~ apache_app_git_package, true), true)
           | split(',')
           | map('trim')
           | reject('equalto', '')

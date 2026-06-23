@@ -1,0 +1,15 @@
+---
+- name: Load effective Apache application configuration from troubleshoot preflight
+  ansible.builtin.set_fact:
+    apache_troubleshoot_runtime_app_repo: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_app_repo | default('') | string | trim }}
+    apache_troubleshoot_runtime_app_branch: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_app_branch | default('main') | string | trim }}
+    apache_troubleshoot_runtime_apache_app_docroot: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_apache_app_docroot | default('/var/www/html') | string | trim }}
+    apache_troubleshoot_runtime_apache_app_rpm_packages: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_apache_app_rpm_packages | default('httpd,git') | string | trim }}
+    apache_troubleshoot_runtime_apache_app_enabled_services: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_apache_app_enabled_services | default('httpd') | string | trim }}
+    apache_troubleshoot_runtime_apache_exposure_service_port: >-
+      {{ hostvars['localhost'].apache_troubleshoot_effective_apache_exposure_service_port | default('80') | string | trim }}

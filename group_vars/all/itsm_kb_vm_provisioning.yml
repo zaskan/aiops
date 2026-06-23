@@ -1,6 +1,8 @@
 ---
-itsm_kb_vm_provisioning_title: Deploy Apache Application Stack (ITSM service request + AIOps)
+itsm_kb_vm_provisioning_title: Deploy Generic Application Stack (ITSM service request + AIOps)
 itsm_kb_vm_provisioning_tags: >-
-  Keywords: deploy apache stack, Deploy Apache Application Stack, service catalog,
+  Keywords: deploy generic stack, Deploy Generic Application Stack, service catalog,
   service request, AAP workflow, extra vars, CHG, REQ, itsm_change_ref,
-  itsm_service_request_ref, vm_name, cpus, mem, app_repo, app_branch
+  itsm_service_request_ref, vm_name, cpus, mem, app_repo, app_branch,
+  rpm_packages, app_clone_path, enabled_services, exposed_port, apache_app_rpm_packages,
+  apache_app_docroot, apache_app_enabled_services, apache_exposure_service_port

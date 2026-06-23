@@ -1,9 +1,9 @@
 ---
 itsm_vm_asset_type_name: Virtual Machine
-itsm_apache_app_asset_type_name: Apache Application
+itsm_apache_app_asset_type_name: Generic Application
 itsm_apache_app_default_rpm_packages: "httpd,git"
 itsm_apache_app_default_enabled_services: httpd
-itsm_apache_app_default_clone_path: /var/www/html
+itsm_apache_app_default_exposed_port: "80"
 
 itsm_asset_types:
   - name: "{{ itsm_vm_asset_type_name }}"
@@ -15,7 +15,7 @@ itsm_asset_types:
       - { field_key: cpus, label: CPUs, field_type: number }
       - { field_key: memory, label: Memory GiB, field_type: number }
   - name: "{{ itsm_apache_app_asset_type_name }}"
-    description: Apache httpd application deployed on a provisioned VM
+    description: Application deployed on a provisioned VM (packages, clone path, and services from ITSM)
     fields:
       - { field_key: hostname, label: Hostname, field_type: text }
       - { field_key: vm_hostname, label: VM hostname, field_type: text }
@@ -26,7 +26,8 @@ itsm_asset_types:
       - { field_key: git_commit, label: Deployed git commit, field_type: text }
       - { field_key: route_url, label: Route URL, field_type: text }
       - { field_key: rpm_packages, label: RPM packages, field_type: text }
-      - { field_key: enabled_services, label: Services to enable, field_type: text }
+      - { field_key: enabled_services, label: Service to enable, field_type: text }
+      - { field_key: exposed_port, label: Port to expose, field_type: number }
 
 itsm_ansible_role_check_connection: true
 itsm_ansible_role_admin_settings: false

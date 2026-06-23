@@ -15,10 +15,17 @@
 
 - name: Add Apache Application asset extra-vars module to itsm-agent
   ansible.builtin.copy:
-    src: itsm_agent/bot/apache_assets.py
+    src: "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent/bot/apache_assets.py"
     dest: "{{ itsm_agent_build_dir.path }}/itsm-agent/bot/apache_assets.py"
     mode: "0644"
   when: itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+
+- name: Add Lightspeed remediation fallback module to itsm-agent
+  ansible.builtin.copy:
+    src: "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent/bot/lightspeed_remediation.py"
+    dest: "{{ itsm_agent_build_dir.path }}/itsm-agent/bot/lightspeed_remediation.py"
+    mode: "0644"
+  when: itsm_agent_lightspeed_remediation_patch | default(true) | bool
 
 - name: Patch itsm-agent runner to enrich AAP extra vars from Apache assets
   ansible.builtin.command:
@@ -27,11 +34,37 @@
       - git
       - apply
       - --whitespace=nowarn
-      - "{{ role_path }}/files/itsm_agent_runner_apache_assets.patch"
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent_runner_apache_assets.patch"
   register: itsm_agent_apache_assets_patch_apply
   changed_when: itsm_agent_apache_assets_patch_apply.rc == 0
   failed_when: itsm_agent_apache_assets_patch_apply.rc != 0
   when: itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
+
+- name: Patch itsm-agent knowledge parser for incident vm_name extraction
+  ansible.builtin.command:
+    chdir: "{{ itsm_agent_build_dir.path }}/itsm-agent"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent_knowledge_incident.patch"
+  register: itsm_agent_knowledge_incident_patch_apply
+  changed_when: itsm_agent_knowledge_incident_patch_apply.rc == 0
+  failed_when: itsm_agent_knowledge_incident_patch_apply.rc != 0
+  when: itsm_agent_lightspeed_remediation_patch | default(true) | bool
+
+- name: Patch itsm-agent runner for Lightspeed incident remediation fallback
+  ansible.builtin.command:
+    chdir: "{{ itsm_agent_build_dir.path }}/itsm-agent"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent_runner_lightspeed.patch"
+  register: itsm_agent_lightspeed_patch_apply
+  changed_when: itsm_agent_lightspeed_patch_apply.rc == 0
+  failed_when: itsm_agent_lightspeed_patch_apply.rc != 0
+  when: itsm_agent_lightspeed_remediation_patch | default(true) | bool
 
 - name: Build itsm-agent image from patched source directory
   ansible.builtin.command:

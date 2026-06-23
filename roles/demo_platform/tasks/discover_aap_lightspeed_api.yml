@@ -1,0 +1,290 @@
+---
+- name: List AnsibleAIConnect custom resources for Lightspeed discovery
+  when: itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - ansibleaiconnect
+      - -A
+      - -o
+      - json
+  register: itsm_agent_lightspeed_aiconnect_list
+  changed_when: false
+  failed_when: false
+
+- name: Select AnsibleAIConnect instance for Lightspeed route lookup
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - itsm_agent_lightspeed_aiconnect_list.rc == 0
+    - (itsm_agent_lightspeed_aiconnect_list.stdout | from_json).get('items', []) | length > 0
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_cr_namespace: "{{ (itsm_agent_lightspeed_aiconnect_list.stdout | from_json).get('items', [])[0].metadata.namespace }}"
+    itsm_agent_lightspeed_cr_name: "{{ (itsm_agent_lightspeed_aiconnect_list.stdout | from_json).get('items', [])[0].metadata.name }}"
+
+- name: Read AnsibleAIConnect route host
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - itsm_agent_lightspeed_cr_name | default('') | string | trim | length > 0
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - "-n"
+      - "{{ itsm_agent_lightspeed_cr_namespace }}"
+      - "{{ itsm_agent_lightspeed_cr_name }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: itsm_agent_lightspeed_route_host
+  changed_when: false
+  failed_when: false
+
+- name: Record direct Lightspeed route base URL from AnsibleAIConnect route
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - itsm_agent_lightspeed_route_host is defined
+    - not (itsm_agent_lightspeed_route_host.skipped | default(false))
+    - itsm_agent_lightspeed_route_host.rc | default(1) == 0
+    - itsm_agent_lightspeed_route_host.stdout | default('') | string | trim | length > 0
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_direct_base_url: "https://{{ itsm_agent_lightspeed_route_host.stdout | trim }}"
+
+- name: List routes in AAP namespace for Lightspeed fallback discovery
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - itsm_agent_lightspeed_direct_base_url | default('') | string | trim | length == 0
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - routes
+      - "-n"
+      - "{{ itsm_agent_lightspeed_discover_namespace }}"
+      - -o
+      - json
+  register: itsm_agent_lightspeed_route_list
+  changed_when: false
+  failed_when: false
+
+- name: Select direct Lightspeed route base URL from AAP namespace
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_direct_base_url: "https://{{ item.spec.host | trim }}"
+  loop: "{{ (itsm_agent_lightspeed_route_list.stdout | from_json).get('items', []) }}"
+  when: >-
+    (itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0)
+    and (itsm_agent_lightspeed_direct_base_url | default('') | string | trim | length == 0)
+    and (itsm_agent_lightspeed_route_list.rc | default(1) == 0)
+    and (
+      'aiconnect' in (item.metadata.name | lower)
+      or 'lightspeed' in (item.metadata.name | lower)
+      or 'wisdom' in (item.metadata.name | lower)
+      or 'aiconnect' in (item.spec.host | default('') | lower)
+      or 'lightspeed' in (item.spec.host | default('') | lower)
+      or 'wisdom' in (item.spec.host | default('') | lower)
+    )
+  loop_control:
+    label: "{{ item.metadata.name }}"
+
+- name: Assert Ansible Lightspeed API token is configured
+  ansible.builtin.assert:
+    that:
+      - itsm_agent_lightspeed_api_token | default('') | string | trim | length > 0
+    fail_msg: >-
+      AAP_LIGHTSPEED_API_TOKEN is required. Create a token in the Lightspeed admin portal
+      (Django OAuth → Access tokens, app "Ansible Lightspeed for VS Code", scope read write).
+
+- name: Probe direct Lightspeed API versions for me endpoint
+  ansible.builtin.uri:
+    url: "{{ itsm_agent_lightspeed_direct_base_url }}{{ item.path }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_agent_lightspeed_api_token }}"
+    validate_certs: "{{ itsm_agent_lightspeed_api_tls_verify | bool }}"
+    status_code: [200, 401, 403, 404]
+    timeout: 30
+  register: itsm_agent_lightspeed_version_probe
+  loop:
+    - { version: 'v2', path: '/api/v2/me', playbook_suffix: '/api/v2/ai/generations/playbook/' }
+    - { version: 'v2', path: '/api/v2/me/', playbook_suffix: '/api/v2/ai/generations/playbook/' }
+    - { version: 'v1', path: '/api/v1/me/', playbook_suffix: '/api/v1/ai/generations/playbook/' }
+    - { version: 'v0', path: '/api/v0/me/', playbook_suffix: '/api/v0/ai/generations/playbook' }
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - itsm_agent_lightspeed_direct_base_url | default('') | string | trim | length > 0
+  no_log: true
+
+- name: Select direct Lightspeed API version from successful me probe
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_api_url: >-
+      {{ itsm_agent_lightspeed_direct_base_url }}{{
+        (
+          itsm_agent_lightspeed_version_probe.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 401, 403])
+          | map(attribute='item')
+          | first
+        ).playbook_suffix
+      }}
+    itsm_agent_lightspeed_api_me_path: >-
+      {{
+        (
+          itsm_agent_lightspeed_version_probe.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 401, 403])
+          | map(attribute='item')
+          | first
+        ).path
+      }}
+    itsm_agent_lightspeed_api_version: >-
+      {{
+        (
+          itsm_agent_lightspeed_version_probe.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 401, 403])
+          | map(attribute='item')
+          | first
+        ).version
+      }}
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - >-
+      (
+        itsm_agent_lightspeed_version_probe.results
+        | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'in', [200, 401, 403])
+        | list
+        | length
+      ) > 0
+
+- name: Build Ansible Lightspeed API URL from AAP gateway
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_api_url: >-
+      {{
+        (
+          demo_platform.aap.gateway_url
+          | default(demo_platform.aap.controller_url | default(''))
+        )
+        | regex_replace('/$', '')
+      }}/api/lightspeed/v1/ai/generations/playbook/
+    itsm_agent_lightspeed_api_me_path: /api/lightspeed/v1/me/
+    itsm_agent_lightspeed_api_version: gateway-v1
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - (
+        demo_platform.aap.gateway_url | default('')
+        or demo_platform.aap.controller_url | default('')
+      ) | string | trim | length > 0
+
+- name: Use cached Ansible Lightspeed API URL from demo platform artifact when not overridden
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_api_url: "{{ demo_platform.aap.lightspeed.url | default('') }}"
+    itsm_agent_lightspeed_api_me_path: "{{ demo_platform.aap.lightspeed.me_path | default('') }}"
+    itsm_agent_lightspeed_api_version: "{{ demo_platform.aap.lightspeed.api_version | default('') }}"
+  when:
+    - itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+    - demo_platform.aap.lightspeed.url | default('') | string | trim | length > 0
+
+- name: Fail when Ansible Lightspeed API URL could not be discovered or configured
+  ansible.builtin.fail:
+    msg: >-
+      Ansible Lightspeed API URL is required. Set AAP_LIGHTSPEED_API_URL, ensure a Lightspeed
+      Route exists in namespace {{ itsm_agent_lightspeed_discover_namespace }}, or re-run install.
+  when: itsm_agent_lightspeed_api_url | default('') | string | trim | length == 0
+
+- name: Derive Ansible Lightspeed API base URL for health probe
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_api_base_url: >-
+      {{
+        itsm_agent_lightspeed_api_url
+        | regex_replace('/api/lightspeed/v1/ai/generations/playbook/?$', '')
+        | regex_replace('/api/v2/ai/generations/playbook/?$', '')
+        | regex_replace('/api/v1/ai/generations/playbook/?$', '')
+        | regex_replace('/api/v0/ai/generations/playbook/?$', '')
+        | regex_replace('/$', '')
+      }}
+
+- name: Select Ansible Lightspeed API health probe path from discovered URL
+  ansible.builtin.set_fact:
+    itsm_agent_lightspeed_api_me_path: >-
+      {{
+        itsm_agent_lightspeed_api_me_path | default(
+          '/api/lightspeed/v1/me/'
+          if '/api/lightspeed/v1/' in itsm_agent_lightspeed_api_url
+          else (
+            '/api/v2/me'
+            if '/api/v2/' in itsm_agent_lightspeed_api_url
+            else (
+              '/api/v0/me/'
+              if '/api/v0/' in itsm_agent_lightspeed_api_url
+              else '/api/v1/me/'
+            )
+          )
+        )
+      }}
+
+- name: Probe Ansible Lightspeed API with me endpoint
+  ansible.builtin.uri:
+    url: "{{ itsm_agent_lightspeed_api_base_url }}{{ itsm_agent_lightspeed_api_me_path }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_agent_lightspeed_api_token }}"
+    validate_certs: "{{ itsm_agent_lightspeed_api_tls_verify | bool }}"
+    status_code: [200, 401, 403]
+    timeout: 30
+  register: itsm_agent_lightspeed_api_probe
+  no_log: true
+
+- name: Fail when Ansible Lightspeed API is unreachable
+  ansible.builtin.fail:
+    msg: >-
+      Ansible Lightspeed API at {{ itsm_agent_lightspeed_api_base_url }}{{ itsm_agent_lightspeed_api_me_path }}
+      is unreachable. Verify the Lightspeed route and TLS settings (AAP_LIGHTSPEED_TLS_VERIFY).
+  when: itsm_agent_lightspeed_api_probe.failed | default(false)
+
+- name: Warn when Ansible Lightspeed API token is rejected
+  ansible.builtin.debug:
+    msg: >-
+      Lightspeed API returned HTTP {{ itsm_agent_lightspeed_api_probe.status }} for
+      {{ itsm_agent_lightspeed_api_me_path }}. Remediation playbook generation will fail
+      until AAP_LIGHTSPEED_API_TOKEN is valid.
+  when: itsm_agent_lightspeed_api_probe.status | default(0) != 200
+
+- name: Merge Ansible Lightspeed facts into demo platform artifact
+  ansible.builtin.set_fact:
+    demo_platform: >-
+      {{
+        demo_platform
+        | combine(
+            {
+              'aap': (
+                demo_platform.aap | default({})
+                | combine(
+                    {
+                      'lightspeed': {
+                        'url': itsm_agent_lightspeed_api_url,
+                        'base_url': itsm_agent_lightspeed_api_base_url,
+                        'me_path': itsm_agent_lightspeed_api_me_path,
+                        'api_version': itsm_agent_lightspeed_api_version | default(''),
+                      }
+                    },
+                    recursive=True
+                  )
+              )
+            },
+            recursive=True
+          )
+      }}
+
+- name: Write Ansible Lightspeed URL to demo platform facts artifact
+  ansible.builtin.copy:
+    dest: "{{ demo_platform_artifacts_file }}"
+    mode: "0600"
+    content: |
+      ---
+      demo_platform:
+      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}

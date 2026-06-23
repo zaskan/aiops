@@ -9,6 +9,17 @@ aap_uninstall_organization: "{{ aap_casc_organization | default('AIOps') }}"
 
 aap_uninstall_legacy_jt_deploy_apache_app: Deploy Apache App
 
+aap_uninstall_legacy_apache_stack_workflows:
+  - Deploy Apache Application Stack
+  - Deploy Apache App
+
+aap_uninstall_legacy_apache_stack_job_templates:
+  - Install httpd
+  - Deploy Apache App Repo
+  - Expose Apache
+  - Register ITSM Apache Application Asset
+  - Start httpd
+
 aap_uninstall_credential_type_chat: Chat App
 aap_uninstall_credential_type_gitea: Gitea
 aap_uninstall_credential_type_gitops: Openshift Gitops

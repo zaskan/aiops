@@ -80,66 +80,86 @@
 
 - name: Parse VM manifest documents from GitOps file
   ansible.builtin.set_fact:
-    apache_exposure_manifest_docs: "{{ apache_exposure_manifest_content | from_yaml_all | list }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        apache_exposure_manifest_content
+        | from_yaml_all
+        | list
+        | select('mapping')
+        | list
+      }}
 
-- name: Determine whether VirtualMachine manifest exposes masquerade port 80
+- name: Resolve VirtualMachine document from parsed manifest
   ansible.builtin.set_fact:
-    apache_exposure_vm_has_port_80: >-
+    apache_exposure_vm_doc: >-
+      {{
+        apache_exposure_manifest_docs
+        | selectattr('kind', 'equalto', 'VirtualMachine')
+        | list
+        | first
+        | default({}, true)
+      }}
+
+- name: Determine whether VirtualMachine manifest exposes the configured service port
+  ansible.builtin.set_fact:
+    apache_exposure_vm_has_service_port: >-
       {{
         (
-          apache_exposure_manifest_docs
-          | selectattr('kind', 'equalto', 'VirtualMachine')
-          | list
-          | length
-        ) > 0
-        and (
-          (
-            apache_exposure_manifest_docs
-            | selectattr('kind', 'equalto', 'VirtualMachine')
-            | list
-            | first
-          ).spec.template.spec.domain.devices.interfaces | default([])
+          apache_exposure_vm_doc.spec.template.spec.domain.devices.interfaces
+          | default([])
           | first
           | default({})
-        ).ports | default([])
+        ).ports
+        | default([])
         | selectattr('port', 'equalto', apache_exposure_service_port | int)
         | list
         | length > 0
       }}
 
-- name: Repair malformed masquerade port 80 indentation in VM manifest
+- name: Repair malformed masquerade port indentation in VM manifest
   ansible.builtin.replace:
     path: "{{ apache_exposure_manifest_path }}"
     regexp: |-
       (              ports:
                 - port: 22
                   protocol: TCP)
-          - port: 80
+          - port: {{ apache_exposure_service_port | int }}
             protocol: TCP
-    replace: '\1\n                - port: 80\n                  protocol: TCP'
-  when: "{{ '          - port: 80' in apache_exposure_manifest_content }}"
+    replace: '\1\n                - port: {{ apache_exposure_service_port | int }}\n                  protocol: TCP'
+  when: apache_exposure_malformed_port_line in apache_exposure_manifest_content
 
-- name: Ensure masquerade port 80 is present on VirtualMachine manifest
+- name: Ensure configured masquerade port is present on VirtualMachine manifest
   ansible.builtin.replace:
     path: "{{ apache_exposure_manifest_path }}"
     regexp: |-
       (              ports:
                 - port: 22
                   protocol: TCP)
-    replace: '\1\n                - port: 80\n                  protocol: TCP'
-  when: not apache_exposure_vm_has_port_80 | bool
+    replace: '\1\n                - port: {{ apache_exposure_service_port | int }}\n                  protocol: TCP'
+  when: not apache_exposure_vm_has_service_port | bool
 
 - name: Re-read VM manifest after port patching
   ansible.builtin.slurp:
     src: "{{ apache_exposure_manifest_path }}"
   register: apache_exposure_manifest_slurp
-  when: "{{ not apache_exposure_vm_has_port_80 | bool or ('          - port: 80' in apache_exposure_manifest_content) }}"
+  when: >-
+    not apache_exposure_vm_has_service_port | bool
+    or apache_exposure_malformed_port_line in apache_exposure_manifest_content
 
 - name: Refresh VM manifest content fact after port patching
   ansible.builtin.set_fact:
     apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
-    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
-  when: "{{ not apache_exposure_vm_has_port_80 | bool or ('          - port: 80' in apache_exposure_manifest_content) }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        (apache_exposure_manifest_slurp.content | b64decode)
+        | from_yaml_all
+        | list
+        | select('mapping')
+        | list
+      }}
+  when: >-
+    not apache_exposure_vm_has_service_port | bool
+    or apache_exposure_malformed_port_line in apache_exposure_manifest_content
 
 - name: Repair incorrect KubeVirt Service selector in existing Apache exposure manifest
   ansible.builtin.replace:
@@ -157,7 +177,14 @@
 - name: Refresh VM manifest content fact after Service selector repair
   ansible.builtin.set_fact:
     apache_exposure_manifest_content: "{{ apache_exposure_manifest_slurp.content | b64decode }}"
-    apache_exposure_manifest_docs: "{{ (apache_exposure_manifest_slurp.content | b64decode) | from_yaml_all | list }}"
+    apache_exposure_manifest_docs: >-
+      {{
+        (apache_exposure_manifest_slurp.content | b64decode)
+        | from_yaml_all
+        | list
+        | select('mapping')
+        | list
+      }}
   when: "{{ 'kubevirt.io/domain:' in apache_exposure_manifest_content }}"
 
 - name: Detect whether Probe manifest is already present in VM manifest file

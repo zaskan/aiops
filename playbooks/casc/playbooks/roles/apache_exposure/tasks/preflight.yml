@@ -79,6 +79,21 @@
       openshift_cluster_domain is required to build the Apache Route host. Ensure
       artifacts/demo_platform_facts.yml defines demo_platform.openshift.cluster_domain.
 
+- name: Normalize Apache exposure service port from ITSM or playbook defaults
+  ansible.builtin.set_fact:
+    apache_exposure_service_port: >-
+      {{
+        (
+          apache_exposure_service_port
+          | default(exposed_port | default(itsm_apache_app_default_exposed_port | default(80)), true)
+        )
+        | int
+      }}
+
+- name: Set malformed masquerade port marker for VM manifest repair
+  ansible.builtin.set_fact:
+    apache_exposure_malformed_port_line: "          - port: {{ apache_exposure_service_port }}"
+
 - name: Derive Apache exposure Service and Route naming
   ansible.builtin.set_fact:
     apache_exposure_service_name: "{{ apache_exposure_vm_name }}-http"

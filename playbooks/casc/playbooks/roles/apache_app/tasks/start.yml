@@ -4,7 +4,8 @@
     apache_app_enabled_service_list: >-
       {{
         (
-          apache_app_enabled_services | default(apache_app_service)
+          apache_troubleshoot_runtime_apache_app_enabled_services
+          | default(apache_app_enabled_services | default(apache_app_service, true), true)
           | split(',')
           | map('trim')
           | reject('equalto', '')
@@ -19,7 +20,7 @@
     state: started
   loop: "{{ apache_app_enabled_service_list }}"
 
-- name: Wait for httpd to respond on localhost port 80
+- name: Wait for http service on localhost when httpd is an enabled service
   ansible.builtin.uri:
     url: http://127.0.0.1/
     status_code: [200, 403, 301, 302]
@@ -27,3 +28,4 @@
   until: apache_app_http_check.status in [200, 403, 301, 302]
   retries: 12
   delay: 5
+  when: "'httpd' in apache_app_enabled_service_list"

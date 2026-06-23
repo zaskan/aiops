@@ -1,5 +1,5 @@
 ---
-- name: Submit Apache Application Stack ITSM service request (demo helper)
+- name: Submit Generic Application Stack ITSM service request (demo helper)
   hosts: localhost
   gather_facts: false
   vars_files:
@@ -46,7 +46,7 @@
           Accept: application/json
       register: apache_stack_sr_request_templates
 
-    - name: Resolve Apache Application Stack request template id
+    - name: Resolve Generic Application Stack request template id
       ansible.builtin.set_fact:
         apache_stack_sr_request_template_id: >-
           {{
@@ -67,7 +67,7 @@
           Run playbooks/install.yml or playbooks/casc/configure_itsm_apache_stack_templates.yml.
       when: apache_stack_sr_request_template_id is none
 
-    - name: Create draft Apache Application Stack service request
+    - name: Create draft Generic Application Stack service request
       ansible.builtin.uri:
         url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
         method: POST
@@ -77,7 +77,7 @@
         validate_certs: "{{ apache_stack_sr_validate_certs }}"
         body_format: json
         body:
-          name: "Apache Application Stack — {{ vm_name }}"
+          name: "Generic Application Stack — {{ vm_name }}"
           description: >-
             Demo service request for VM {{ vm_name }} ({{ cpus }} CPU, {{ mem }} GiB)
             and app {{ app_repo }}/{{ app_branch | default('main') }}.
@@ -88,6 +88,10 @@
             mem: "{{ mem | int }}"
             app_repo: "{{ app_repo }}"
             app_branch: "{{ app_branch | default('main') }}"
+            rpm_packages: "{{ rpm_packages | default('') }}"
+            app_clone_path: "{{ app_clone_path | default('') }}"
+            enabled_services: "{{ enabled_services | default('') }}"
+            exposed_port: "{{ exposed_port | default('') }}"
         status_code: [201]
         return_content: true
         headers:
@@ -128,5 +132,6 @@
               | join(', ')
             }}
           - >-
-            Next: launch AAP workflow '{{ aap_apache_stack_pipeline_workflow | default('Deploy Apache Application Stack') }}'
-            with itsm_change_ref set to the change ref above and matching vm_name/cpus/mem/app_repo/app_branch.
+            Next: launch AAP workflow '{{ aap_apache_stack_pipeline_workflow | default('Deploy Generic Application Stack') }}'
+            with itsm_change_ref set to the change ref above and matching vm_name/cpus/mem/app_repo/app_branch
+            (and optional rpm_packages, app_clone_path, enabled_services mapped to apache_app_* extra vars).

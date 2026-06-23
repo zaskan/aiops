@@ -4,7 +4,13 @@
 
 - name: Capture raw application repository input from workflow survey
   ansible.builtin.set_fact:
-    app_repo_raw: "{{ app_repo | default('') | trim }}"
+    app_repo_raw: >-
+      {{
+        apache_troubleshoot_runtime_app_repo
+        | default(app_repo | default('', true), true)
+        | string
+        | trim
+      }}
 
 - name: Strip URL scheme and .git suffix from repository input
   ansible.builtin.set_fact:
@@ -16,7 +22,12 @@
 
 - name: Set application branch from survey or default
   ansible.builtin.set_fact:
-    apache_app_branch: "{{ app_branch | default(apache_app_default_branch) | trim }}"
+    apache_app_branch: >-
+      {{
+        apache_troubleshoot_runtime_app_branch
+        | default(app_branch | default(apache_app_default_branch), true)
+        | trim
+      }}
 
 - name: Fail when required deploy variables are missing or invalid
   ansible.builtin.assert:
@@ -44,13 +55,21 @@
   block:
     - name: Remove existing docroot before fresh clone
       ansible.builtin.file:
-        path: "{{ apache_app_docroot }}"
+        path: >-
+          {{
+            apache_troubleshoot_runtime_apache_app_docroot
+            | default(apache_app_docroot | default('/var/www/html', true), true)
+          }}
         state: absent
 
     - name: Clone application repository into docroot
       ansible.builtin.git:
         repo: "{{ apache_app_repo_clone_url }}"
-        dest: "{{ apache_app_docroot }}"
+        dest: >-
+          {{
+            apache_troubleshoot_runtime_apache_app_docroot
+            | default(apache_app_docroot | default('/var/www/html', true), true)
+          }}
         version: "{{ apache_app_branch }}"
         single_branch: true
         force: true
@@ -60,7 +79,11 @@
       register: apache_app_git_clone
 
     - name: Capture application repository git commit after clone
-      ansible.builtin.command: git -C {{ apache_app_docroot }} rev-parse HEAD
+      ansible.builtin.command: >-
+        git -C {{
+          apache_troubleshoot_runtime_apache_app_docroot
+          | default(apache_app_docroot | default('/var/www/html', true), true)
+        }} rev-parse HEAD
       register: apache_app_git_head
       changed_when: false
 

@@ -69,9 +69,10 @@
 
 - name: Remove legacy Deploy Apache App job template from AAP if present
   awx.awx.job_template:
-    name: "{{ aap_uninstall_legacy_jt_deploy_apache_app }}"
+    name: "{{ item }}"
     organization: "{{ aap_uninstall_organization }}"
     state: absent
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
+  loop: "{{ [aap_uninstall_legacy_jt_deploy_apache_app] + (aap_uninstall_legacy_apache_stack_job_templates | default([])) | unique }}"

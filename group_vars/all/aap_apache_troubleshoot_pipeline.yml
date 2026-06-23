@@ -30,3 +30,4 @@ aap_apache_troubleshoot_pipeline_credential_openshift: OpenShift Cluster
 aap_apache_troubleshoot_pipeline_credential_itsm: ITSM App
 aap_apache_troubleshoot_pipeline_credential_chat: Chat App
 aap_apache_troubleshoot_pipeline_credential_aap: AAP Gateway
+aap_apache_troubleshoot_pipeline_credential_gitea: Gitea

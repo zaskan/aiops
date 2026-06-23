@@ -1,0 +1,92 @@
+---
+- name: Look up AnsibleMCPServer custom resource in AAP namespace
+  kubernetes.core.k8s_info:
+    api_version: "{{ aap_mcp_server_api_version }}"
+    kind: AnsibleMCPServer
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_server_cr_lookup
+
+- name: Derive deployed AnsibleMCPServer settings
+  ansible.builtin.set_fact:
+    aap_mcp_server_cr_exists: "{{ aap_mcp_server_cr_lookup.resources | default([]) | length > 0 }}"
+    aap_mcp_server_cr_allow_write: >-
+      {{
+        (
+          aap_mcp_server_cr_lookup.resources | default([])
+          | first
+          | default({})
+        ).spec.allow_write_operations | default(false) | bool
+      }}
+    aap_mcp_server_cr_ignore_cert_errors: >-
+      {{
+        (
+          (
+            aap_mcp_server_cr_lookup.resources | default([])
+            | first
+            | default({})
+          ).spec.extra_settings | default([])
+          | selectattr('setting', 'equalto', 'IGNORE_CERTIFICATE_ERRORS')
+          | map(attribute='value')
+          | list
+          | first
+          | default(false)
+        ) | bool
+      }}
+
+- name: Determine whether AnsibleMCPServer CR must be recreated
+  ansible.builtin.set_fact:
+    aap_mcp_server_needs_recreate: >-
+      {{
+        not (aap_mcp_server_cr_exists | bool)
+        or (aap_mcp_server_cr_allow_write | bool != aap_mcp_allow_write_operations | bool)
+        or (aap_mcp_server_cr_ignore_cert_errors | bool != aap_mcp_ignore_certificate_errors | bool)
+      }}
+
+- name: Remove stale AnsibleMCPServer custom resource before recreation
+  kubernetes.core.k8s:
+    state: absent
+    api_version: "{{ aap_mcp_server_api_version }}"
+    kind: AnsibleMCPServer
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+    wait: true
+    wait_timeout: 300
+  when: aap_mcp_server_needs_recreate | bool
+
+- name: Ensure AnsibleMCPServer custom resource matches demo MCP settings
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: "{{ aap_mcp_server_api_version }}"
+      kind: AnsibleMCPServer
+      metadata:
+        name: "{{ aap_instance_name }}-mcp"
+        namespace: "{{ aap_namespace }}"
+      spec:
+        allow_write_operations: "{{ aap_mcp_allow_write_operations | bool }}"
+        disabled: false
+        extra_settings:
+          - setting: IGNORE_CERTIFICATE_ERRORS
+            value: "{{ aap_mcp_ignore_certificate_errors | bool }}"
+        no_log: true
+        public_base_url: "{{ aap_gateway_url }}"
+  register: aap_mcp_server_cr_ensure
+  when: aap_mcp_server_needs_recreate | bool
+
+- name: Wait for Ansible MCP server deployment to become available after CR ensure
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ aap_instance_name }}-mcp"
+    namespace: "{{ aap_namespace }}"
+  register: aap_mcp_deployment_ensure_wait
+  until: >
+    (
+      aap_mcp_deployment_ensure_wait.resources | default([])
+      | first
+      | default({})
+    ).status.availableReplicas | default(0) | int > 0
+  retries: "{{ aap_mcp_wait_retries }}"
+  delay: "{{ aap_mcp_wait_delay }}"
+  when: aap_mcp_server_needs_recreate | bool

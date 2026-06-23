@@ -1,4 +1,4 @@
-"""Map ITSM Apache Application asset custom fields to AAP workflow extra vars."""
+"""Map ITSM Generic Application asset custom fields to AAP workflow extra vars."""
 
 from __future__ import annotations
 
@@ -11,13 +11,16 @@ from bot.itsm_mcp import itsm_call
 
 log = logging.getLogger("itsm-agent-bot")
 
-_APACHE_APP_ASSET_TYPE = "Apache Application"
+_APACHE_APP_ASSET_TYPE = "Generic Application"
 
 # ITSM asset custom field key -> AAP extra var name
 _ASSET_FIELD_TO_EXTRA_VAR = {
     "rpm_packages": "apache_app_rpm_packages",
     "enabled_services": "apache_app_enabled_services",
     "app_clone_path": "apache_app_docroot",
+    "exposed_port": "apache_exposure_service_port",
+    "app_repo": "app_repo",
+    "app_branch": "app_branch",
 }
 
 
@@ -38,7 +41,7 @@ def _apply_legacy_apache_vars(collected: dict[str, str]) -> None:
     """Derive apache_app_package / apache_app_git_package / apache_app_service from list extra vars.
 
     When apache_app_rpm_packages or apache_app_enabled_services are set (e.g. from an ITSM
-    Apache Application asset), they override playbook defaults; legacy single-value vars are
+    Generic Application asset), they override playbook defaults; legacy single-value vars are
     derived from the comma-separated lists for older playbooks and surveys.
     """
     rpm = str(collected.get("apache_app_rpm_packages") or "").strip()
@@ -111,13 +114,26 @@ def _merge_asset_fields(collected: dict[str, str], asset: dict[str, Any]) -> dic
     return out
 
 
+def _apply_itsm_field_aliases(collected: dict[str, str]) -> None:
+    """Map ITSM catalog/asset field keys to AAP apache_app_* extra vars when not already set."""
+    for itsm_key, extra_key in _ASSET_FIELD_TO_EXTRA_VAR.items():
+        if str(collected.get(extra_key) or "").strip():
+            continue
+        value = collected.get(itsm_key)
+        if value is not None and str(value).strip():
+            collected[extra_key] = str(value).strip()
+    _apply_legacy_apache_vars(collected)
+
+
 async def enrich_collected_from_apache_asset(
     client: httpx.AsyncClient,
     mcp_url_str: str,
     mcp_token: str | None,
     collected: dict[str, str],
 ) -> dict[str, str]:
-    """Add apache_app_* extra vars from a matching ITSM Apache Application asset."""
+    """Add apache_app_* extra vars from ITSM request fields and matching Generic Application assets."""
+    _apply_itsm_field_aliases(collected)
+
     vm = (collected.get("vm_name") or collected.get("target_host") or "").strip()
     app_repo = str(collected.get("app_repo") or "").strip()
     if not vm and not app_repo:
@@ -137,12 +153,12 @@ async def enrich_collected_from_apache_asset(
     asset = _pick_asset(collected, data)
     if asset is None:
         log.info(
-            "No Apache Application asset match for vm=%s app_repo=%s",
+            "No Generic Application asset match for vm=%s app_repo=%s",
             vm or "?",
             app_repo or "?",
         )
         return collected
 
     merged = _merge_asset_fields(collected, asset)
-    log.info("Enriched AAP extra vars from Apache Application asset %s", asset.get("name"))
+    log.info("Enriched AAP extra vars from Generic Application asset %s", asset.get("name"))
     return merged

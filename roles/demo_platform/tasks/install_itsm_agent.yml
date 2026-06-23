@@ -97,6 +97,13 @@
         AAP_MCP_TOKEN: "{{ aap_mcp_token | default('') }}"
         AAP_CONTROLLER_UI_URL: "{{ aap_gateway_url | default('') }}"
         AAP_TLS_VERIFY: "{{ itsm_agent_aap_tls_verify }}"
+        AAP_LIGHTSPEED_WORKFLOW: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
+        AAP_LIGHTSPEED_API_URL: "{{ itsm_agent_lightspeed_api_url }}"
+        AAP_LIGHTSPEED_API_TOKEN: "{{ itsm_agent_lightspeed_api_token }}"
+        AAP_LIGHTSPEED_TLS_VERIFY: "{{ itsm_agent_lightspeed_api_tls_verify }}"
+        AAP_LIGHTSPEED_ALLOW_LITELLM_FALLBACK: "{{ itsm_agent_lightspeed_allow_litellm_fallback }}"
+        AAP_APACHE_TROUBLESHOOT_JT: "{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}"
+        ITSM_KB_APACHE_TROUBLESHOOT_TITLE: "{{ itsm_kb_apache_troubleshoot_title }}"
   register: demo_itsm_agent_secret_apply
   no_log: true
 

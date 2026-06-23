@@ -1,0 +1,45 @@
+---
+- name: Check application docroot path exists
+  ansible.builtin.stat:
+    path: >-
+      {{
+        apache_troubleshoot_runtime_apache_app_docroot
+        | default(apache_app_docroot | default('/var/www/html', true), true)
+      }}
+  register: apache_app_docroot_stat
+
+- name: Check application docroot is a git checkout
+  ansible.builtin.stat:
+    path: >-
+      {{
+        apache_troubleshoot_runtime_apache_app_docroot
+        | default(apache_app_docroot | default('/var/www/html', true), true)
+      }}/.git
+  register: apache_app_docroot_git_stat
+  when: apache_app_docroot_stat.stat.exists | default(false)
+
+- name: Initialize deploy missing flag from docroot and git metadata
+  ansible.builtin.set_fact:
+    apache_app_deploy_missing: >-
+      {{
+        not (apache_app_docroot_stat.stat.exists | default(false))
+        or not (apache_app_docroot_git_stat.stat.exists | default(false))
+      }}
+
+- name: Verify git repository HEAD at application docroot
+  ansible.builtin.command: >-
+    git -C {{
+      apache_troubleshoot_runtime_apache_app_docroot
+      | default(apache_app_docroot | default('/var/www/html', true), true)
+    }} rev-parse HEAD
+  register: apache_app_docroot_git_head
+  changed_when: false
+  failed_when: false
+  when: not (apache_app_deploy_missing | default(true) | bool)
+
+- name: Mark deploy missing when git HEAD cannot be resolved
+  ansible.builtin.set_fact:
+    apache_app_deploy_missing: true
+  when:
+    - not (apache_app_deploy_missing | default(true) | bool)
+    - apache_app_docroot_git_head.rc | default(1) != 0

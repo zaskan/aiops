@@ -1,36 +1,15 @@
 ---
-- name: Recreate activation when Rulebooks project changed
+- name: Remove Apache alert rulebook activation when Rulebooks project changed
+  ansible.eda.rulebook_activation:
+    name: "{{ aap_eda_pipeline_activation_name }}"
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    state: absent
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
   when: aap_eda_pipeline_project_result is changed
-  block:
-    - name: Remove Apache alert rulebook activation before remapping event streams
-      ansible.eda.rulebook_activation:
-        name: "{{ aap_eda_pipeline_activation_name }}"
-        organization_name: "{{ aap_eda_pipeline_organization }}"
-        state: absent
-        controller_host: "{{ aap_eda_pipeline_controller_host }}"
-        controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
-        validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
 
-    - name: Ensure Apache alert rulebook activation exists in EDA
-      ansible.eda.rulebook_activation:
-        name: "{{ aap_eda_pipeline_activation_name }}"
-        description: Open ITSM incidents when Apache HTTP probes fail
-        organization_name: "{{ aap_eda_pipeline_organization }}"
-        project_name: "{{ aap_eda_pipeline_project }}"
-        rulebook_name: "{{ aap_eda_pipeline_rulebook }}"
-        decision_environment_name: "{{ aap_eda_pipeline_decision_environment }}"
-        eda_credentials:
-          - "{{ aap_eda_pipeline_controller_credential }}"
-        state: enabled
-        event_streams:
-          - event_stream: "{{ aap_eda_pipeline_event_stream_name }}"
-            source_name: "{{ aap_eda_pipeline_rulebook_source_name }}"
-        controller_host: "{{ aap_eda_pipeline_controller_host }}"
-        controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
-        validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
-      register: aap_eda_pipeline_activation_recreate_result
-
-- name: Ensure Apache alert rulebook activation exists in EDA
+- name: Ensure Apache Alert Incident rulebook activation is enabled in EDA
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
     description: Open ITSM incidents when Apache HTTP probes fail
@@ -48,9 +27,8 @@
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
   register: aap_eda_pipeline_activation_result
-  when: not (aap_eda_pipeline_project_result is changed)
 
-- name: Restart Apache alert rulebook activation after updates
+- name: Restart Apache alert rulebook activation after create or update
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
     organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -58,6 +36,4 @@
     controller_host: "{{ aap_eda_pipeline_controller_host }}"
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
-  when:
-    - aap_eda_pipeline_activation_result is changed
-    - not (aap_eda_pipeline_project_result is changed)
+  when: aap_eda_pipeline_activation_result is changed

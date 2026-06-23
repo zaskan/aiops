@@ -11,7 +11,7 @@
 - name: Sync Infrastructure VMs via Argo CD
   ansible.builtin.include_tasks: sync.yml
 
-- name: Restart VM when masquerade port 80 is not active on running VMI
+- name: Restart VM when configured service port is not active on running VMI
   ansible.builtin.include_tasks: restart_vm.yml
 
 - name: Refresh Virtual Machine ITSM asset IP after VM restart

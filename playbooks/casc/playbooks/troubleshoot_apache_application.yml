@@ -15,16 +15,24 @@
         name: common
         tasks_from: load_chat_credential.yml
 
-    - name: Validate required extra vars for troubleshooting
+    - name: Validate required ITSM incident reference
       ansible.builtin.assert:
         that:
-          - vm_name is defined
-          - vm_name | string | trim | length > 0
           - itsm_incident_ref is defined
           - itsm_incident_ref | string | trim | length > 0
         fail_msg: >-
-          vm_name and itsm_incident_ref are required. Launch via AAP MCP after user confirms
+          itsm_incident_ref is required. Launch via AAP MCP after user confirms
           remediation in chat.
+
+    - name: Resolve vm_name from ITSM incident when not provided
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_vm_name_from_incident.yml
+
+    - name: Load Generic Application asset fields from ITSM
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: resolve_apache_app_asset_from_itsm.yml
 
     - name: Resolve chat webhook URL for remediation summary
       ansible.builtin.set_fact:
@@ -61,9 +69,12 @@
     - name: Initialize troubleshooting summary facts
       ansible.builtin.set_fact:
         apache_troubleshoot_summary_lines:
-          - "Troubleshooting Apache on {{ vm_name | string | trim }} (incident {{ itsm_incident_ref | string | trim }})."
+          - >-
+            Troubleshooting Apache on {{ vm_name | string | trim }}
+            (incident {{ itsm_incident_ref | string | trim }}) using ITSM asset
+            {{ apache_troubleshoot_app_asset.name | default('unknown') }}.
 
-- name: Check VM connectivity and httpd service
+- name: Verify and remediate Apache application stack on target VM
   hosts: apache_app_targets
   gather_facts: true
   become: true
@@ -73,48 +84,125 @@
     - name: Verify SSH connectivity to target VM
       ansible.builtin.ping:
 
-    - name: Check httpd service state
-      ansible.builtin.systemd:
-        name: "{{ apache_app_service }}"
-      register: apache_troubleshoot_httpd_state
+    - name: Load effective Apache application configuration from ITSM asset
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: load_troubleshoot_effective_config
 
-    - name: Record httpd service status in summary
+    - name: Verify RPM packages from ITSM asset are installed
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: verify_packages
+
+    - name: Record RPM verification in summary
       ansible.builtin.set_fact:
-        apache_troubleshoot_httpd_was_active: "{{ apache_troubleshoot_httpd_state.status.ActiveState == 'active' }}"
+        apache_troubleshoot_summary_lines: >-
+          {{
+            hostvars['localhost'].apache_troubleshoot_summary_lines
+            + [
+              'All required RPM packages installed (' ~ (apache_app_rpm_package_list | join(', ')) ~ ').'
+              if (apache_app_packages_missing | default([]) | length) == 0
+              else 'Missing RPM packages: ' ~ (apache_app_packages_missing | join(', ')) ~ '.'
+            ]
+          }}
       delegate_to: localhost
       delegate_facts: true
 
-    - name: Start httpd when service is not active
+    - name: Install missing RPM packages from ITSM asset
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: install
+      when: apache_app_packages_missing | default([]) | length > 0
+
+    - name: Record RPM installation remediation in summary
+      ansible.builtin.set_fact:
+        apache_troubleshoot_summary_lines: >-
+          {{
+            hostvars['localhost'].apache_troubleshoot_summary_lines
+            + ['Installed missing RPM packages: ' ~ (apache_app_packages_missing | join(', ')) ~ '.']
+          }}
+      delegate_to: localhost
+      delegate_facts: true
+      when: apache_app_packages_missing | default([]) | length > 0
+
+    - name: Verify application repository is deployed at docroot
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: verify_deploy
+
+    - name: Record deploy verification in summary
+      ansible.builtin.set_fact:
+        apache_troubleshoot_summary_lines: >-
+          {{
+            hostvars['localhost'].apache_troubleshoot_summary_lines
+            + [
+              'Application repository present at ' ~ apache_troubleshoot_runtime_apache_app_docroot ~ '.'
+              if not (apache_app_deploy_missing | default(true) | bool)
+              else 'Application repository missing or invalid at ' ~ apache_troubleshoot_runtime_apache_app_docroot ~ '.'
+            ]
+          }}
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Deploy application repository when docroot is missing
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: deploy
+      when: apache_app_deploy_missing | default(true) | bool
+
+    - name: Record deploy remediation in summary
+      ansible.builtin.set_fact:
+        apache_troubleshoot_summary_lines: >-
+          {{
+            hostvars['localhost'].apache_troubleshoot_summary_lines
+            + ['Redeployed application repository ' ~ apache_troubleshoot_runtime_app_repo ~ ' to ' ~ apache_troubleshoot_runtime_apache_app_docroot ~ '.']
+          }}
+      delegate_to: localhost
+      delegate_facts: true
+      when: apache_app_deploy_missing | default(true) | bool
+
+    - name: Verify enabled services from ITSM asset are running
+      ansible.builtin.include_role:
+        name: apache_app
+        tasks_from: verify_services
+
+    - name: Record service verification in summary
+      ansible.builtin.set_fact:
+        apache_troubleshoot_summary_lines: >-
+          {{
+            hostvars['localhost'].apache_troubleshoot_summary_lines
+            + [
+              'All enabled services active (' ~ (apache_app_enabled_service_list | join(', ')) ~ ').'
+              if (apache_app_services_down | default([]) | length) == 0
+              else 'Services down or missing packages: ' ~ (apache_app_services_down | join(', ')) ~ '.'
+            ]
+          }}
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Start enabled services when down
       ansible.builtin.include_role:
         name: apache_app
         tasks_from: start
-      when: apache_troubleshoot_httpd_state.status.ActiveState != 'active'
+      when: apache_app_services_down | default([]) | length > 0
 
-    - name: Record httpd restart in summary
+    - name: Record service start remediation in summary
       ansible.builtin.set_fact:
         apache_troubleshoot_summary_lines: >-
           {{
             hostvars['localhost'].apache_troubleshoot_summary_lines
-            + ['httpd was down; service restarted.']
+            + ['Started services: ' ~ (apache_app_services_down | join(', ')) ~ '.']
           }}
       delegate_to: localhost
       delegate_facts: true
-      when: apache_troubleshoot_httpd_state.status.ActiveState != 'active'
+      when: apache_app_services_down | default([]) | length > 0
 
-    - name: Record httpd already running in summary
-      ansible.builtin.set_fact:
-        apache_troubleshoot_summary_lines: >-
-          {{
-            hostvars['localhost'].apache_troubleshoot_summary_lines
-            + ['httpd was already active.']
-          }}
-      delegate_to: localhost
-      delegate_facts: true
-      when: apache_troubleshoot_httpd_state.status.ActiveState == 'active'
-
-    - name: Verify Apache responds on localhost port 80
+    - name: Verify Apache responds on localhost service port
       ansible.builtin.uri:
-        url: http://127.0.0.1/
+        url: >-
+          http://127.0.0.1:{{
+            apache_troubleshoot_runtime_apache_exposure_service_port | default('80') | string | trim
+          }}/
         status_code: [200, 403, 301, 302]
       register: apache_troubleshoot_local_http
       until: apache_troubleshoot_local_http.status in [200, 403, 301, 302]
@@ -126,7 +214,13 @@
         apache_troubleshoot_summary_lines: >-
           {{
             hostvars['localhost'].apache_troubleshoot_summary_lines
-            + ['Local HTTP check on VM returned status ' ~ (apache_troubleshoot_local_http.status | string) ~ '.']
+            + [
+              'Local HTTP check on port '
+              ~ (apache_troubleshoot_runtime_apache_exposure_service_port | default('80') | string | trim)
+              ~ ' returned status '
+              ~ (apache_troubleshoot_local_http.status | string)
+              ~ '.'
+            ]
           }}
       delegate_to: localhost
       delegate_facts: true
