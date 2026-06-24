@@ -1,0 +1,36 @@
+---
+- name: Remove ITSM App Webhook event stream from EDA
+  ansible.eda.event_stream:
+    name: ITSM App Webhook
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove Apache Alertmanager event stream from EDA
+  ansible.eda.event_stream:
+    name: Apache Alertmanager
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove ITSM webhook Basic Auth credential from EDA
+  ansible.eda.credential:
+    name: ITSM App Webhook Basic Auth
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+
+- name: Remove Alertmanager Basic Auth credential from EDA
+  ansible.eda.credential:
+    name: Apache Alertmanager Basic Auth
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_token: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true

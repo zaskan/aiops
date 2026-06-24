@@ -29,6 +29,8 @@
   ansible.builtin.set_fact:
     demo_platform_existing_eda_facts: >-
       {{ (demo_platform_existing_artifact_slurp.content | b64decode | from_yaml).demo_platform.eda | default({}) }}
+    demo_platform_existing_observability_facts: >-
+      {{ (demo_platform_existing_artifact_slurp.content | b64decode | from_yaml).demo_platform.observability | default({}) }}
   when:
     - demo_platform_write_artifacts | bool
     - demo_platform_existing_artifact_stat.stat.exists | default(false)
@@ -96,6 +98,15 @@
     - demo_platform_write_artifacts | bool
     - demo_platform_existing_eda_facts is defined
     - demo_platform_existing_eda_facts | default({}) | length > 0
+  no_log: true
+
+- name: Preserve observability facts from existing artifact across early publish
+  ansible.builtin.set_fact:
+    demo_platform: "{{ demo_platform | combine({'observability': demo_platform_existing_observability_facts}, recursive=True) }}"
+  when:
+    - demo_platform_write_artifacts | bool
+    - demo_platform_existing_observability_facts is defined
+    - demo_platform_existing_observability_facts | default({}) | length > 0
   no_log: true
 
 - name: Write demo platform facts artifact for downstream playbooks

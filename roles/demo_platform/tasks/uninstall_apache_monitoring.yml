@@ -22,6 +22,6 @@
     state: absent
     api_version: v1
     kind: Secret
-    name: "{{ openshift_apache_monitoring_eda_webhook_secret_name }}"
+    name: "{{ openshift_apache_monitoring_collector_webhook_secret_name }}"
     namespace: "{{ openshift_apache_monitoring_namespace }}"
   ignore_errors: true

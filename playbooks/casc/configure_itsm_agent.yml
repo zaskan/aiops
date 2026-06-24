@@ -61,8 +61,16 @@
         - aap_mcp_enabled | default(true) | bool
         - aap_mcp_token_refreshed | default(false) | bool
 
+    - name: Note Ansible Lightspeed API token is not configured
+      ansible.builtin.debug:
+        msg: >-
+          AAP_LIGHTSPEED_API_TOKEN is not set. Skipping Lightspeed API discovery;
+          itsm-agent will draft remediation playbooks via LiteLLM when needed.
+      when: not (itsm_agent_lightspeed_enabled | default(false) | bool)
+
     - name: Discover Ansible Lightspeed API URL and validate token
       ansible.builtin.include_tasks: ../../roles/demo_platform/tasks/discover_aap_lightspeed_api.yml
+      when: itsm_agent_lightspeed_enabled | default(false) | bool
 
     - name: Ensure itsm-agent bot is installed and configured
       ansible.builtin.include_tasks: ../../roles/demo_platform/tasks/install_itsm_agent.yml

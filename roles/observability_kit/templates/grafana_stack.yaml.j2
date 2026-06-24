@@ -1,0 +1,184 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ observability_kit_grafana_name }}-admin
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+type: Opaque
+stringData:
+  admin-user: "{{ observability_kit_grafana_admin_user }}"
+  admin-password: "{{ observability_kit_grafana_admin_password }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ observability_kit_grafana_name }}-datasources
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+data:
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: {{ observability_kit_loki_internal_url }}
+        isDefault: true
+        editable: false
+        jsonData:
+          maxLines: 1000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ observability_kit_grafana_name }}-dashboards-provider
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+data:
+  aiops.yaml: |
+    apiVersion: 1
+    providers:
+      - name: AIOps
+        orgId: 1
+        folder: {{ observability_kit_grafana_dashboard_folder }}
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards/aiops
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ observability_kit_grafana_name }}-dashboards-aiops
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+data:
+{% for dashboard_name, dashboard_content in observability_kit_grafana_dashboards_data.items() %}
+  {{ dashboard_name }}: |
+{{ dashboard_content | indent(4, first=True) }}
+{% endfor %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ observability_kit_grafana_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    spec:
+      containers:
+        - name: grafana
+          image: {{ observability_kit_grafana_image }}
+          ports:
+            - name: http
+              containerPort: {{ observability_kit_grafana_port }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ observability_kit_grafana_name }}-admin
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ observability_kit_grafana_name }}-admin
+                  key: admin-password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s/"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards-aiops
+              mountPath: /etc/grafana/provisioning/dashboards/aiops
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: datasources
+          configMap:
+            name: {{ observability_kit_grafana_name }}-datasources
+        - name: dashboards-provider
+          configMap:
+            name: {{ observability_kit_grafana_name }}-dashboards-provider
+        - name: dashboards-aiops
+          configMap:
+            name: {{ observability_kit_grafana_name }}-dashboards-aiops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ observability_kit_grafana_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  selector:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+  ports:
+    - name: http
+      port: {{ observability_kit_grafana_port }}
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ observability_kit_grafana_route_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_grafana_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  to:
+    kind: Service
+    name: {{ observability_kit_grafana_name }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

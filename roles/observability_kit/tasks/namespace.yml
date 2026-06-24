@@ -1,0 +1,11 @@
+---
+- name: Ensure aiops-observability namespace exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ observability_kit_namespace }}"
+        labels:
+          app.kubernetes.io/part-of: aiops-observability

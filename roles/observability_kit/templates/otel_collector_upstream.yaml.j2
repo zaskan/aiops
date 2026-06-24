@@ -1,0 +1,184 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ observability_kit_collector_upstream_name }}-config
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+    app.kubernetes.io/part-of: aiops-observability
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      basicauth/alertmanager:
+        htpasswd:
+          inline: |
+            {{ observability_kit_alertmanager_htpasswd }}
+      basicauth/itsm:
+        htpasswd:
+          inline: |
+            {{ observability_kit_itsm_htpasswd }}
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:{{ observability_kit_collector_otlp_grpc_port }}
+          http:
+            endpoint: 0.0.0.0:{{ observability_kit_collector_otlp_http_port }}
+
+      webhookevent/alertmanager:
+        endpoint: 0.0.0.0:{{ observability_kit_collector_alertmanager_port }}
+        path: {{ observability_kit_collector_alertmanager_path }}
+        health_path: /health/alertmanager
+
+      webhookevent/itsm:
+        endpoint: 0.0.0.0:{{ observability_kit_collector_itsm_port }}
+        path: {{ observability_kit_collector_itsm_path }}
+        health_path: /health/itsm
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 256
+
+      transform/alertmanager_kafka:
+        log_statements:
+          - context: log
+            statements:
+              - set(body, ParseJSON(body)) where IsString(body)
+
+      transform/itsm_kafka:
+        log_statements:
+          - context: log
+            statements:
+              - set(body, ParseJSON(body)) where IsString(body)
+
+    exporters:
+      kafka/alertmanager:
+        brokers:
+          - {{ observability_kit_kafka_internal_bootstrap }}
+        topic: {{ observability_kit_kafka_topic_alertmanager }}
+        encoding: raw
+        protocol_version: 2.0.0
+
+      kafka/itsm:
+        brokers:
+          - {{ observability_kit_kafka_internal_bootstrap }}
+        topic: {{ observability_kit_kafka_topic_itsm }}
+        encoding: raw
+        protocol_version: 2.0.0
+
+      kafka/aap:
+        brokers:
+          - {{ observability_kit_kafka_internal_bootstrap }}
+        topic: {{ observability_kit_kafka_topic_aap_logs }}
+        encoding: otlp_proto
+        protocol_version: 2.0.0
+
+    service:
+      extensions: [health_check, basicauth/alertmanager, basicauth/itsm]
+      pipelines:
+        logs/alertmanager:
+          receivers: [webhookevent/alertmanager]
+          processors: [transform/alertmanager_kafka, batch]
+          exporters: [kafka/alertmanager]
+        logs/itsm:
+          receivers: [webhookevent/itsm]
+          processors: [transform/itsm_kafka, batch]
+          exporters: [kafka/itsm]
+        logs/aap:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [kafka/aap]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ observability_kit_collector_upstream_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ observability_kit_otel_collector_image }}
+          args:
+            - --config=/etc/otel/config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ observability_kit_collector_otlp_grpc_port }}
+            - name: otlp-http
+              containerPort: {{ observability_kit_collector_otlp_http_port }}
+            - name: alertmanager
+              containerPort: {{ observability_kit_collector_alertmanager_port }}
+            - name: itsm
+              containerPort: {{ observability_kit_collector_itsm_port }}
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: {{ observability_kit_collector_upstream_name }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ observability_kit_collector_upstream_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  selector:
+    app.kubernetes.io/name: {{ observability_kit_collector_upstream_name }}
+  ports:
+    - name: otlp-grpc
+      port: {{ observability_kit_collector_otlp_grpc_port }}
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: {{ observability_kit_collector_otlp_http_port }}
+      targetPort: otlp-http
+    - name: alertmanager
+      port: {{ observability_kit_collector_alertmanager_port }}
+      targetPort: alertmanager
+    - name: itsm
+      port: {{ observability_kit_collector_itsm_port }}
+      targetPort: itsm
+    - name: health
+      port: 13133
+      targetPort: health

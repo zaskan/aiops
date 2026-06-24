@@ -27,6 +27,19 @@
     mode: "0644"
   when: itsm_agent_lightspeed_remediation_patch | default(true) | bool
 
+- name: Patch itsm-agent AAP launch to keep text survey extra vars as strings
+  ansible.builtin.command:
+    chdir: "{{ itsm_agent_build_dir.path }}/itsm-agent"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_agent_aap_survey_extra_vars.patch"
+  register: itsm_agent_aap_survey_extra_vars_patch_apply
+  changed_when: itsm_agent_aap_survey_extra_vars_patch_apply.rc == 0
+  failed_when: itsm_agent_aap_survey_extra_vars_patch_apply.rc != 0
+  when: itsm_agent_aap_survey_extra_vars_patch | default(true) | bool
+
 - name: Patch itsm-agent runner to enrich AAP extra vars from Apache assets
   ansible.builtin.command:
     chdir: "{{ itsm_agent_build_dir.path }}/itsm-agent"

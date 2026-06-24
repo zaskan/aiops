@@ -1,0 +1,18 @@
+---
+- name: Build basic auth htpasswd entries for upstream collector
+  ansible.builtin.set_fact:
+    observability_kit_alertmanager_htpasswd: >-
+      {{ observability_kit_alertmanager_webhook_username }}:{{
+        observability_kit_alertmanager_webhook_password | password_hash('bcrypt')
+      }}
+    observability_kit_itsm_htpasswd: >-
+      {{ observability_kit_itsm_webhook_username }}:{{
+        observability_kit_itsm_webhook_password | password_hash('bcrypt')
+      }}
+  no_log: true
+
+- name: Deploy upstream OTel Collector ConfigMap, Deployment, and Service
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ lookup('template', 'otel_collector_upstream.yaml.j2') | from_yaml_all | list }}"

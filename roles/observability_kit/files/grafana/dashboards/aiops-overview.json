@@ -1,0 +1,91 @@
+{
+  "uid": "aiops-overview",
+  "title": "AIOps Overview",
+  "tags": ["aiops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Observability pipeline",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "## AIOps event and log pipeline\n\n```\nAlertmanager / ITSM / AAP logs\n        |\n  OTel Collector (upstream)\n        |\n     Kafka topics\n   /    |     \\\n EDA   |    OTel Collector (downstream)\n       |           |\n       |        Grafana Loki\n       |           |\n       +----> Grafana dashboards\n```\n\nChild dashboards: **AAP Platform Logs**, **Alertmanager Events**, **ITSM Activity**."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Log rate by source",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum by (aiops_source) (count_over_time({aiops_source=~\".+\"}[5m]))",
+          "legendFormat": "{{aiops_source}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "logs" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "AAP log lines (1h)",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({aiops_source=\"aap\"}[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Alert events (1h)",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({aiops_source=\"alertmanager\"}[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "ITSM events (1h)",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({aiops_source=\"itsm\"}[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Recent pipeline events",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{aiops_source=~\"aap|alertmanager|itsm\"}",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    }
+  ],
+  "templating": { "list": [] }
+}

@@ -1,0 +1,20 @@
+---
+- name: Wait for Kafka cluster to report Ready
+  kubernetes.core.k8s_info:
+    api_version: kafka.strimzi.io/v1
+    kind: Kafka
+    namespace: "{{ observability_kit_namespace }}"
+    name: "{{ observability_kit_kafka_cluster_name }}"
+  register: observability_kit_kafka_status
+  until: >-
+    observability_kit_kafka_status.resources | default([]) | length > 0
+    and (
+      observability_kit_kafka_status.resources[0].status.conditions | default([])
+      | selectattr('type', 'equalto', 'Ready')
+      | map(attribute='status')
+      | list
+      | first
+      | default('False')
+    ) == 'True'
+  retries: "{{ observability_kit_kafka_ready_retries }}"
+  delay: "{{ observability_kit_kafka_ready_delay }}"

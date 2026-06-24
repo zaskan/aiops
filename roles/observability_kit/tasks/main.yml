@@ -1,0 +1,42 @@
+---
+- name: Run observability kit preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure observability namespace exists
+  ansible.builtin.include_tasks: namespace.yml
+
+- name: Deploy Kafka cluster and topics
+  ansible.builtin.include_tasks: kafka_cluster.yml
+
+- name: Deploy Grafana Loki with OTLP ingestion
+  ansible.builtin.include_tasks: loki.yml
+
+- name: Deploy Grafana UI with Loki datasource and AIOps dashboards
+  ansible.builtin.include_tasks: grafana.yml
+
+- name: Deploy upstream OTel Collector (producer)
+  ansible.builtin.include_tasks: collector_upstream.yml
+
+- name: Deploy downstream OTel Collector (Kafka consumer to Loki)
+  ansible.builtin.include_tasks: collector_downstream.yml
+
+- name: Wait for observability stack readiness
+  ansible.builtin.include_tasks: wait_ready.yml
+
+- name: Publish observability facts to demo platform artifact
+  ansible.builtin.include_tasks: update_artifact.yml
+
+- name: Verify observability stack health endpoints
+  ansible.builtin.include_tasks: verify_e2e.yml
+
+- name: Display observability kit summary
+  ansible.builtin.debug:
+    msg:
+      - "Namespace: {{ observability_kit_namespace }}"
+      - "Kafka bootstrap: {{ observability_kit_kafka_internal_bootstrap }}"
+      - "Topics: {{ observability_kit_kafka_topic_alertmanager }}, {{ observability_kit_kafka_topic_itsm }}, {{ observability_kit_kafka_topic_aap_logs }}"
+      - "Upstream collector (Alertmanager): http://{{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_alertmanager_port }}{{ observability_kit_collector_alertmanager_path }}"
+      - "Upstream collector (ITSM): http://{{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_itsm_port }}{{ observability_kit_collector_itsm_path }}"
+      - "Upstream collector (OTLP): {{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_otlp_grpc_port }}"
+      - "Loki OTLP: {{ observability_kit_loki_internal_url }}{{ observability_kit_loki_otlp_path }}"
+      - "Grafana: {{ observability_kit_grafana_url | default('pending route') }}"

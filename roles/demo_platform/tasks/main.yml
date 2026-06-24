@@ -18,6 +18,11 @@
 - name: Verify OVN UserDefinedNetwork support for VM fixed IPs
   ansible.builtin.include_tasks: check_vm_fixed_ip_network.yml
 
+- name: Verify Red Hat Streams for Apache Kafka operator is installed
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: check_streams_operator.yml
+
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
@@ -102,6 +107,12 @@
   vars:
     aap_apache_troubleshoot_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
+- name: Deploy observability kit (Kafka, Loki, OTel Collectors)
+  ansible.builtin.include_role:
+    name: observability_kit
+  vars:
+    observability_kit_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
 - name: Configure AAP Lightspeed Remediation workflow
   ansible.builtin.include_role:
     name: aap_lightspeed_remediation_pipeline
@@ -131,6 +142,13 @@
 
 - name: Configure OpenShift monitoring alerts for Apache HTTP probes
   ansible.builtin.include_tasks: configure_apache_monitoring.yml
+
+- name: Export AAP platform logs to observability pipeline
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: configure_aap_log_export.yml
+  vars:
+    observability_kit_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
 - name: Configure AAP Deploy Apache Application Stack master workflow
   ansible.builtin.include_role:

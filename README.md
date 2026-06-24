@@ -18,7 +18,8 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_itsm_app_rag.yml` | Enable ITSM KB semantic search (embedding API on itsm-app) |
 | `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Generic App workflow (inventory not created) |
 | `playbooks/casc/configure_aap_apache_troubleshoot_pipeline.yml` | AAP job templates for Apache alert incident and remediation |
-| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Alertmanager event stream, and **Apache Alert Incident Activation** |
+| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Kafka activations, and **Apache Alert Incident Activation** |
+| `playbooks/casc/configure_observability_kit.yml` | Kafka cluster/topics, Loki, Grafana, OTel Collectors, AIOps dashboards |
 | `playbooks/casc/configure_aap_lightspeed_remediation_pipeline.yml` | AAP Lightspeed Remediation workflow |
 | `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
 | `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
@@ -42,6 +43,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 - Ansible Automation Platform 2.7 (auto-discovered), with MCP server enabled during install (Technology Preview)
 - OpenShift GitOps (Argo CD)
 - OpenShift Virtualization (HyperConverged Available in `openshift-cnv`)
+- **Red Hat Streams for Apache Kafka** (OperatorHub; provides `kafka.strimzi.io` CRDs and cluster operator)
 - **OVN-Kubernetes** as default CNI (`networkType: OVNKubernetes`)
 - **UserDefinedNetwork** API (`userdefinednetworks.k8s.ovn.org`) for VM fixed IPs (OpenShift **4.17+** recommended; validated on **4.21**)
 
@@ -66,6 +68,7 @@ AAP, OpenShift GitOps, and the OpenShift cluster itself are **not** installed by
   - Ansible Automation Platform 2.7 operator + instance
   - OpenShift GitOps operator
   - OpenShift Virtualization operator (HyperConverged)
+  - **Red Hat Streams for Apache Kafka** operator (install from OperatorHub before observability kit)
   - **OVN-Kubernetes** default network (not legacy OpenShift SDN)
   - **UserDefinedNetwork** CRD (`userdefinednetworks.k8s.ovn.org`) — OpenShift **4.17+** (tested on **4.21**)
 - Permission to create/delete namespaces and deploy workloads
@@ -112,9 +115,11 @@ The playbook will:
 14. Seed ITSM database after last pod restart: asset types, itsm-app webhooks, KB articles, and service catalog templates (must run after step 13 so data is not wiped by pod restart)
 15. Create application deployment job templates and **Deploy Generic App** workflow (uses **AIOps Infrastructure** inventory)
 16. Create Apache alert remediation job templates (**Create Apache Alert Incident**, **Troubleshoot apache application**)
-17. Configure EDA **AIOps Rulebooks** project, Alertmanager event stream, and enable **Apache Alert Incident Activation** rulebook activation
-18. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → EDA webhook)
-19. Create **Deploy Generic Application Stack** master workflow and VM modification workflows
+17. Deploy **observability kit** in `aiops-observability`: Kafka cluster/topics (via Streams operator), Grafana Loki, **Grafana UI** (AIOps dashboards), upstream/downstream OTel Collectors
+18. Configure EDA **AIOps Rulebooks** project with Kafka rulebook activations (**Apache Alert Incident Activation**, **ITSM App Chat Activation**)
+19. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → OTel Collector webhook)
+20. Export AAP platform logs via OTLP to the observability pipeline
+21. Create **Deploy Generic Application Stack** master workflow and VM modification workflows
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -433,11 +438,63 @@ Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache 
 
 ### Apache HTTP monitoring
 
-Install (`playbooks/install.yml` step 18) deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter, `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the EDA event stream.
+Install deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter, `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the **upstream OTel Collector** (not directly to EDA).
 
 Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps manifest. **Expose application** applies each `{vm_name}-http-probe` directly to the cluster via the OpenShift API after Argo CD sync creates the in-cluster Service. GitOps owns only the VirtualMachine, Service, and Route documents.
 
 Re-run **Expose application** on existing VMs to strip any legacy Probe documents from GitOps manifests and apply the direct Probe.
+
+### Observability kit
+
+Install **Red Hat Streams for Apache Kafka** from OperatorHub before running the observability playbooks. The automation deploys Kafka custom resources (`Kafka`, `KafkaNodePool`, `KafkaTopic`) but does not install the operator.
+
+Event-driven automation and log storage share a Kafka-backed observability pipeline in namespace **`aiops-observability`**:
+
+```
+[ Alertmanager / ITSM / AAP logs ] ──► [ OTel Collector upstream ] ──► [ Kafka topics ]
+         │                                    │              │              │
+         │                                    │              ├──► EDA activations
+         │                                    │              │
+         └────────────────────────────────────┴──────────────┴──► [ OTel Collector downstream ]
+                                                                              │
+                                                                       [ Grafana Loki ]
+                                                                              │
+                                                                        [ Grafana UI ]
+```
+
+| Component | Purpose |
+| --------- | ------- |
+| **Upstream OTel Collector** | Receives Alertmanager + ITSM webhooks and OTLP logs; publishes canonical JSON to Kafka |
+| **Kafka topics** | `aiops.alertmanager`, `aiops.itsm`, `aiops.aap.logs` |
+| **EDA activations** | `ansible.eda.kafka` rulebooks consume alert and ITSM topics |
+| **Downstream OTel Collector** | Consumes all three Kafka topics; forwards to Loki via OTLP HTTP |
+| **Loki** | Stores AAP logs, Alertmanager events, and ITSM activity |
+| **Grafana** | Queries Loki; provisioned **AIOps** dashboards |
+
+**Provisioned dashboards** (folder **AIOps**):
+
+| Dashboard | UID |
+| --------- | --- |
+| AIOps Overview | `aiops-overview` |
+| AAP Platform Logs | `aiops-aap-logs` |
+| Alertmanager Events | `aiops-alertmanager` |
+| ITSM Activity | `aiops-itsm` |
+
+Configure standalone:
+
+```bash
+ansible-playbook playbooks/casc/configure_observability_kit.yml
+```
+
+Login URL and credentials are in `artifacts/demo_platform_facts.yml`:
+
+```yaml
+demo_platform.observability.grafana_url
+demo_platform.observability.grafana_username   # admin
+demo_platform.observability.grafana_password
+```
+
+Override the Grafana admin password with `OBSERVABILITY_GRAFANA_ADMIN_PASSWORD` before install.
 
 **Troubleshoot apache application** restores a deleted VM/stack before SSH remediation: it syncs Argo CD when the manifest still exists in Gitea **Infrastructure**, or recreates the manifest from the ITSM **Virtual Machine** asset when it does not, then re-exposes the application if the in-cluster Service is missing. It also discovers the live pod-network `ansible_host`, updates the ITSM **Virtual Machine** asset when the IP changed, and syncs the **AIOps Infrastructure** inventory before connecting over SSH.
 
@@ -610,7 +667,7 @@ export ITSM_AIOPS_PASSWORD=your-secret
 ansible-playbook playbooks/casc/configure_itsm_aiops.yml
 ```
 
-### ITSM outbound webhooks via EDA
+### ITSM outbound webhooks via observability pipeline
 
 itsm-app outbound webhooks POST structured JSON:
 
@@ -624,15 +681,16 @@ chat-app inbound webhooks expect:
 {"body":"message text"}
 ```
 
-AIOps routes itsm-app webhooks to an **EDA event stream** instead of posting directly to chat-app. The rulebook `itsm_app_chat_notifications.yml` launches AAP job template **Publish ITSM Chat Notification**, which formats the message and POSTs to the chat **operations** anonymous webhook.
+AIOps routes itsm-app webhooks to the **upstream OTel Collector**, which buffers events in Kafka topic **`aiops.itsm`**. EDA rulebook `itsm_app_chat_notifications.yml` consumes that topic and launches AAP job template **Publish ITSM Chat Notification**, which formats the message and POSTs to the chat **operations** anonymous webhook.
 
 ```
-itsm-app  →  EDA (ITSM App Webhook)  →  AAP Publish ITSM Chat Notification  →  chat-app
+itsm-app  →  OTel Collector  →  Kafka (aiops.itsm)  →  EDA  →  AAP Publish ITSM Chat Notification  →  chat-app
 ```
 
 **Configure (after `playbooks/install.yml` or when updating):**
 
 ```bash
+ansible-playbook playbooks/casc/configure_observability_kit.yml
 ansible-playbook playbooks/casc/configure_gitea_repos.yml          # sync rulebook to Gitea
 ansible-playbook playbooks/casc/configure_aap_eda_itsm_webhook_pipeline.yml
 ansible-playbook playbooks/casc/configure_aap_itsm_chat_pipeline.yml
@@ -644,10 +702,10 @@ ansible-playbook playbooks/casc/configure_itsm_eda_webhook.yml    # register its
 | Resource | Value |
 | -------- | ----- |
 | itsm user | `aiops` (non-admin) |
-| EDA event stream | `ITSM App Webhook` |
+| Kafka topic | `aiops.itsm` |
 | EDA activation | `ITSM App Chat Activation` |
 | AAP job template | `Publish ITSM Chat Notification` |
-| itsm webhook | EDA event stream POST URL (basic auth embedded in URL for itsm-app) |
+| itsm webhook | OTel Collector ITSM endpoint (basic auth embedded in URL for itsm-app) |
 
 **Manual test** (after configuration):
 
@@ -849,6 +907,7 @@ aiops/
 │       └── configure_itsm_agent.yml     # itsm-agent bot deploy + secrets
 ├── roles/
 │   ├── aap_casc/                    # AAP CASC provisioning
+│   ├── observability_kit/           # Kafka, Loki, Grafana, OTel Collectors, dashboards
 │   ├── gitea_repos/                 # Gitea repository provisioning
 │   ├── demo_platform/
 │   │   └── tasks/
@@ -874,7 +933,11 @@ aiops/
 | OpenShift Virtualization not ready  | Confirm `openshift-cnv` namespace, HyperConverged Available, and `virt-api` deployment  |
 | itsm/chat build fails on base image | Cluster needs registry access; playbook imports `python:3.12-slim-bookworm` automatically |
 | Wrong app URLs after install        | Re-run install playbook to refresh facts                                                  |
-| ITSM AIOps chat message not received | Check EDA activation `ITSM App Chat Activation` and AAP job `Publish ITSM Chat Notification` |
+| ITSM AIOps chat message not received | Check Kafka topic `aiops.itsm`, EDA activation `ITSM App Chat Activation`, upstream OTel Collector, and AAP job `Publish ITSM Chat Notification` |
+| Apache alert does not open ITSM incident | Check AlertmanagerConfig → OTel Collector, Kafka topic `aiops.alertmanager`, EDA activation `Apache Alert Incident Activation` |
+| AAP logs not in Loki | Check OTLP forwarder in `aap` namespace, all Kafka topics, downstream OTel Collector transforms, and Loki `/ready` |
+| Grafana dashboards empty | Confirm downstream collector labels (`aiops_source`, `alertname`, `itsm_event`); run probe in `verify_e2e.yml` |
+| Cannot open Grafana | Check Route `grafana` in `aiops-observability`; credentials in `demo_platform.observability` |
 | ITSM AIOps preflight fails           | Run `playbooks/casc/configure_chat_aiops.yml` first (operations channel + anonymous webhook required)   |
 
 

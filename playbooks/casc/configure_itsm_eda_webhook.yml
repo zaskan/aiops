@@ -6,6 +6,7 @@
     - ../../group_vars/all/itsm_aiops.yml
     - ../../group_vars/all/chat_aiops.yml
     - ../../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
+    - ../../group_vars/all/observability_kit.yml
   vars:
     demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
   tasks:
@@ -20,5 +21,5 @@
           artifacts/demo_platform_facts.yml not found. Run playbooks/install.yml first.
       when: not demo_platform_artifacts_stat.stat.exists
 
-    - name: Point itsm-app webhook to EDA and verify chat notification
+    - name: Point itsm-app webhook to OTel Collector and verify chat notification
       ansible.builtin.import_tasks: ../../roles/demo_platform/tasks/configure_itsm_eda_webhook.yml

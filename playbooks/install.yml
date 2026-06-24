@@ -25,6 +25,7 @@
     - ../group_vars/all/aap_eda_pipeline.yml
     - ../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
     - ../group_vars/all/aap_itsm_chat_pipeline.yml
+    - ../group_vars/all/observability_kit.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
     - ../group_vars/all/itsm_kb_apache_troubleshoot.yml
     - ../group_vars/all/vm_network.yml

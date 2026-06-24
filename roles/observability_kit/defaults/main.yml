@@ -1,0 +1,4 @@
+---
+observability_kit_namespace: aiops-observability
+observability_kit_validate_certs: false
+observability_kit_artifact_file: "{{ demo_platform_artifacts_dir | default(playbook_dir ~ '/../artifacts') }}/demo_platform_facts.yml"

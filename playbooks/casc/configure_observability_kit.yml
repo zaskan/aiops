@@ -1,0 +1,14 @@
+---
+- name: Configure AIOps observability kit (Kafka, Loki, OTel Collectors)
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/demo_platform.yml
+    - ../../group_vars/all/observability_kit.yml
+  pre_tasks:
+    - name: Resolve observability artifact path for casc playbooks
+      ansible.builtin.set_fact:
+        demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+        observability_kit_artifact_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+  roles:
+    - role: observability_kit

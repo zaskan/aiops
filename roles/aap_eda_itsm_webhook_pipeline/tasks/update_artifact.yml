@@ -1,25 +1,23 @@
 ---
-- name: Reload demo platform facts artifact before merging ITSM webhook EDA block
+- name: Reload demo platform facts artifact before merging ITSM Kafka EDA block
   ansible.builtin.include_vars:
     file: "{{ aap_eda_itsm_webhook_pipeline_artifact_file }}"
   no_log: true
 
-- name: Merge ITSM webhook EDA facts into demo platform artifact
+- name: Merge ITSM Kafka EDA facts into demo platform artifact
   ansible.builtin.set_fact:
     demo_platform: >-
       {{
         demo_platform | combine({
           'eda': demo_platform.eda | default({}) | combine({
-            'itsm_webhook_event_stream_post_url': aap_eda_itsm_webhook_pipeline_event_stream_post_url,
-            'itsm_webhook_event_stream_username': aap_eda_itsm_webhook_pipeline_event_stream_username,
-            'itsm_webhook_event_stream_password': aap_eda_itsm_webhook_pipeline_event_stream_password,
-            'itsm_webhook_activation_name': aap_eda_itsm_webhook_pipeline_activation_name
+            'itsm_webhook_activation_name': aap_eda_itsm_webhook_pipeline_activation_name,
+            'kafka_topic_itsm': aap_eda_itsm_webhook_pipeline_kafka_topic_itsm,
           })
         }, recursive=True)
       }}
   no_log: true
 
-- name: Update demo platform facts artifact with ITSM webhook EDA details
+- name: Update demo platform facts artifact with ITSM Kafka EDA details
   ansible.builtin.copy:
     dest: "{{ aap_eda_itsm_webhook_pipeline_artifact_file }}"
     mode: "0600"

@@ -1,0 +1,36 @@
+diff --git a/bot/aap_mcp.py b/bot/aap_mcp.py
+index 1f7e6b9..cecfadf 100644
+--- a/bot/aap_mcp.py
++++ b/bot/aap_mcp.py
+@@ -199,6 +199,10 @@ async def resolve_template(client: httpx.AsyncClient, candidate: str) -> Resolve
+     )
+ 
+ 
++# AAP survey vars declared as type integer (all others must stay strings).
++_INTEGER_EXTRA_VARS = frozenset({"cpus", "mem"})
++
++
+ def _coerce_value(raw: str) -> Any:
+     s = raw.strip()
+     if s.isdigit():
+@@ -208,13 +212,19 @@ def _coerce_value(raw: str) -> Any:
+     return s
+ 
+ 
++def _coerce_extra_var_value(key: str, raw: str) -> Any:
++    if key not in _INTEGER_EXTRA_VARS:
++        return str(raw).strip()
++    return _coerce_value(str(raw))
++
++
+ def _extra_vars(collected: dict[str, str]) -> dict[str, Any] | str:
+     if not collected:
+         return {}
+     if len(collected) == 1 and "user_input" in collected:
+         return collected["user_input"]
+     skip = frozenset({"user_input"})
+-    return {k: _coerce_value(v) for k, v in collected.items() if k not in skip}
++    return {k: _coerce_extra_var_value(k, v) for k, v in collected.items() if k not in skip}
+ 
+ 
+ async def launch_template(

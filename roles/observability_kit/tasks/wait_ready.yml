@@ -1,0 +1,64 @@
+---
+- name: Wait for Loki Deployment to become available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ observability_kit_namespace }}"
+    name: "{{ observability_kit_loki_name }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  register: observability_kit_loki_wait
+  retries: "{{ observability_kit_loki_ready_retries }}"
+  delay: "{{ observability_kit_loki_ready_delay }}"
+  until: observability_kit_loki_wait is succeeded
+
+- name: Wait for upstream OTel Collector Deployment to become available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ observability_kit_namespace }}"
+    name: "{{ observability_kit_collector_upstream_name }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  register: observability_kit_upstream_wait
+  retries: "{{ observability_kit_collector_ready_retries }}"
+  delay: "{{ observability_kit_collector_ready_delay }}"
+  until: observability_kit_upstream_wait is succeeded
+
+- name: Wait for downstream OTel Collector Deployment to become available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ observability_kit_namespace }}"
+    name: "{{ observability_kit_collector_downstream_name }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  register: observability_kit_downstream_wait
+  retries: "{{ observability_kit_collector_ready_retries }}"
+  delay: "{{ observability_kit_collector_ready_delay }}"
+  until: observability_kit_downstream_wait is succeeded
+
+- name: Wait for Grafana Deployment to become available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ observability_kit_namespace }}"
+    name: "{{ observability_kit_grafana_name }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  register: observability_kit_grafana_wait
+  retries: "{{ observability_kit_grafana_ready_retries }}"
+  delay: "{{ observability_kit_grafana_ready_delay }}"
+  until: observability_kit_grafana_wait is succeeded

@@ -1,0 +1,21 @@
+---
+- name: Verify OpenShift CLI access
+  ansible.builtin.command:
+    argv:
+      - oc
+      - whoami
+  changed_when: false
+
+- name: Verify kubernetes.core collection is installed
+  ansible.builtin.command:
+    argv:
+      - ansible-galaxy
+      - collection
+      - list
+      - kubernetes.core
+  register: observability_kit_kubernetes_core_check
+  changed_when: false
+  failed_when: observability_kit_kubernetes_core_check.rc != 0
+
+- name: Verify Red Hat Streams for Apache Kafka operator is installed
+  ansible.builtin.include_tasks: check_streams_operator.yml

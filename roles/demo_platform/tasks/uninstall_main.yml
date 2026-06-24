@@ -61,6 +61,12 @@
   ansible.builtin.include_tasks: uninstall_apache_monitoring.yml
   when: uninstall_remove_aap | bool
 
+- name: Remove observability kit (Kafka, Loki, OTel Collectors)
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: uninstall.yml
+  when: uninstall_remove_aap | bool
+
 - name: Remove OpenShift ServiceAccount and token created for AAP
   ansible.builtin.include_tasks: uninstall_openshift_aap_sa.yml
   when: uninstall_remove_openshift_sa | bool

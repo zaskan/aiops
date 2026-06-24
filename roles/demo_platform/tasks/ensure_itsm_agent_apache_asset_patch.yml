@@ -10,9 +10,10 @@
       - --
       - grep
       - -E
-      - enrich_collected_from_apache_asset|apache_app_rpm_packages|lightspeed_incident_reply|ensure_lightspeed_playbook_in_collected|apache_troubleshoot_path_applies|refresh_incident_session_template|lightspeed_playbook_review_reply|_present_lightspeed_playbook|lightspeed_api_url|status in \(401, 404, 503\)
+      - enrich_collected_from_apache_asset|apache_app_rpm_packages|_INTEGER_EXTRA_VARS|lightspeed_incident_reply|ensure_lightspeed_playbook_in_collected|apache_troubleshoot_path_applies|refresh_incident_session_template|lightspeed_playbook_review_reply|_present_lightspeed_playbook|lightspeed_api_url|status in \(401, 404, 503\)
       - /app/bot/runner.py
       - /app/bot/apache_assets.py
+      - /app/bot/aap_mcp.py
       - /app/bot/lightspeed_remediation.py
   register: itsm_agent_patch_check
   changed_when: false
@@ -23,6 +24,9 @@
   when: >-
     (itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none)
+    or
+    (itsm_agent_aap_survey_extra_vars_patch | default(true) | bool
+    and (itsm_agent_patch_check.stdout | default('') | regex_search('_INTEGER_EXTRA_VARS')) is none)
     or
     (itsm_agent_lightspeed_remediation_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('status in \\(401, 404, 503\\)')) is none)
@@ -39,6 +43,9 @@
   when: >-
     (itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none)
+    or
+    (itsm_agent_aap_survey_extra_vars_patch | default(true) | bool
+    and (itsm_agent_patch_check.stdout | default('') | regex_search('_INTEGER_EXTRA_VARS')) is none)
     or
     (itsm_agent_lightspeed_remediation_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('status in \\(401, 404, 503\\)')) is none)
@@ -58,6 +65,9 @@
   when: >-
     (itsm_agent_apache_asset_extra_vars_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('enrich_collected_from_apache_asset')) is none)
+    or
+    (itsm_agent_aap_survey_extra_vars_patch | default(true) | bool
+    and (itsm_agent_patch_check.stdout | default('') | regex_search('_INTEGER_EXTRA_VARS')) is none)
     or
     (itsm_agent_lightspeed_remediation_patch | default(true) | bool
     and (itsm_agent_patch_check.stdout | default('') | regex_search('status in \\(401, 404, 503\\)')) is none)

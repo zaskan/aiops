@@ -8,13 +8,7 @@ aap_eda_pipeline_scm_branch: main
 aap_eda_pipeline_gitea_scm_use_internal: true
 aap_eda_pipeline_gitea_scm_internal_host: gitea-http.gitea.svc.cluster.local:3000
 
-aap_eda_pipeline_event_stream_name: Apache Alertmanager
-aap_eda_pipeline_event_stream_credential: Apache Alertmanager Basic Auth
-aap_eda_pipeline_event_stream_username: aiops-alertmanager
-aap_eda_pipeline_event_stream_password: "{{ lookup('ansible.builtin.env', 'AAP_EDA_EVENT_STREAM_PASSWORD') | default('aiops-eda-alert-stream-secret', true) }}"
-
 aap_eda_pipeline_controller_credential: AAP Controller Token
-# AAP 2.7 gateway-backed controller API (required for ansible-rulebook run_job_template)
 aap_eda_pipeline_controller_credential_host_suffix: /api/controller/
 aap_eda_pipeline_gitea_credential: Gitea Rulebooks SCM
 
@@ -24,4 +18,9 @@ aap_eda_pipeline_decision_environment: AIOps Decision Environment
 aap_eda_pipeline_decision_environment_image: registry.redhat.io/ansible-automation-platform-27/de-minimal-rhel9:latest
 aap_eda_pipeline_rulebook_source_name: listen for alerts
 
-aap_eda_pipeline_event_stream_forward_events: true
+aap_eda_pipeline_kafka_bootstrap: "{{ observability_kit_kafka_internal_bootstrap }}"
+aap_eda_pipeline_kafka_topic_alertmanager: "{{ observability_kit_kafka_topic_alertmanager }}"
+
+# Restart EDA activations on every pipeline configure run (avoids stale pods that
+# consume Kafka but never fire rules). Safe for install.yml re-runs.
+aap_eda_activation_restart_on_run: true

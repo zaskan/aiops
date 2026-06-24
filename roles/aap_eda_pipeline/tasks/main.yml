@@ -5,7 +5,7 @@
 - name: Obtain AAP gateway OAuth token for ansible.eda API calls
   ansible.builtin.include_tasks: eda_auth.yml
 
-- name: Configure Event-Driven Ansible for Apache alert incidents
+- name: Configure Event-Driven Ansible for Apache alert incidents via Kafka
   block:
     - name: Ensure EDA credentials exist
       ansible.builtin.include_tasks: credentials.yml
@@ -16,13 +16,10 @@
     - name: Ensure AIOps decision environment exists
       ansible.builtin.include_tasks: decision_environment.yml
 
-    - name: Ensure Alertmanager event stream exists
-      ansible.builtin.include_tasks: event_stream.yml
-
     - name: Ensure Apache alert rulebook activation is enabled
       ansible.builtin.include_tasks: activation.yml
 
-    - name: Publish EDA webhook facts to demo platform artifact
+    - name: Publish EDA Kafka facts to demo platform artifact
       ansible.builtin.include_tasks: update_artifact.yml
 
 - name: Display AAP EDA pipeline summary
@@ -30,6 +27,5 @@
     msg:
       - "EDA URL: {{ aap_eda_pipeline_eda_url }}"
       - "Project: {{ aap_eda_pipeline_project }}"
-      - "Event stream: {{ aap_eda_pipeline_event_stream_name }}"
+      - "Kafka topic: {{ aap_eda_pipeline_kafka_topic_alertmanager }}"
       - "Activation: {{ aap_eda_pipeline_activation_name }}"
-      - "Alertmanager webhook: {{ aap_eda_pipeline_event_stream_post_url }}"

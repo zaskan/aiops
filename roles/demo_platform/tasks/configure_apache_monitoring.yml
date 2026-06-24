@@ -3,8 +3,22 @@
   ansible.builtin.include_vars:
     file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
-- name: Resolve EDA event stream webhook URL for Alertmanager
-  ansible.builtin.include_tasks: resolve_eda_event_stream_url.yml
+- name: Resolve OTel Collector Alertmanager webhook URL from observability facts
+  ansible.builtin.set_fact:
+    openshift_apache_monitoring_collector_webhook_url: >-
+      {{ demo_platform.observability.collector_alertmanager_url | default('') | string | trim }}
+    openshift_apache_monitoring_collector_webhook_username: >-
+      {{ demo_platform.observability.alertmanager_webhook_username | default(observability_kit_alertmanager_webhook_username) }}
+    openshift_apache_monitoring_collector_webhook_password: >-
+      {{ demo_platform.observability.alertmanager_webhook_password | default(observability_kit_alertmanager_webhook_password) }}
+  no_log: true
+
+- name: Fail when observability collector Alertmanager URL is missing
+  ansible.builtin.fail:
+    msg: >-
+      demo_platform.observability.collector_alertmanager_url is missing. Run
+      configure_observability_kit.yml before configure_apache_monitoring.
+  when: openshift_apache_monitoring_collector_webhook_url | length == 0
 
 - name: Enable OpenShift user-workload monitoring and alerting when needed
   ansible.builtin.include_tasks: enable_uwm_alerting.yml
@@ -66,19 +80,19 @@
           openshift.io/user-monitoring: "true"
     merge_type: merge
 
-- name: Create Secret for Alertmanager webhook basic auth to EDA event stream
+- name: Create Secret for Alertmanager webhook basic auth to OTel Collector
   kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: "{{ openshift_apache_monitoring_eda_webhook_secret_name }}"
+        name: "{{ openshift_apache_monitoring_collector_webhook_secret_name }}"
         namespace: "{{ openshift_apache_monitoring_namespace }}"
       type: Opaque
       stringData:
-        username: "{{ openshift_apache_monitoring_eda_webhook_username }}"
-        password: "{{ openshift_apache_monitoring_eda_webhook_password }}"
+        username: "{{ openshift_apache_monitoring_collector_webhook_username }}"
+        password: "{{ openshift_apache_monitoring_collector_webhook_password }}"
   no_log: true
 
 - name: Apply PrometheusRule for Apache HTTP probe failures
@@ -86,10 +100,19 @@
     state: present
     definition: "{{ lookup('template', 'openshift_apache_prometheus_rule.yaml.j2') | from_yaml }}"
 
-- name: Apply AlertmanagerConfig routing Apache alerts to EDA
+- name: Apply AlertmanagerConfig routing Apache alerts to OTel Collector
   kubernetes.core.k8s:
     state: present
     definition: "{{ lookup('template', 'openshift_apache_alertmanager_config.yaml.j2') | from_yaml }}"
+
+- name: Remove legacy AlertmanagerConfig routing Apache alerts to EDA event stream
+  kubernetes.core.k8s:
+    state: absent
+    api_version: monitoring.coreos.com/v1alpha1
+    kind: AlertmanagerConfig
+    name: apache-alert-to-eda
+    namespace: "{{ openshift_apache_monitoring_namespace }}"
+  ignore_errors: true
 
 - name: Display Apache monitoring configuration summary
   ansible.builtin.debug:
@@ -98,4 +121,4 @@
       - "PrometheusRule: {{ openshift_apache_monitoring_prometheus_rule_name }}"
       - "Alert: {{ openshift_apache_monitoring_alert_name }}"
       - "AlertmanagerConfig: {{ openshift_apache_monitoring_alertmanager_config_name }}"
-      - "EDA webhook: {{ openshift_apache_monitoring_eda_webhook_url }}"
+      - "OTel Collector webhook: {{ openshift_apache_monitoring_collector_webhook_url }}"

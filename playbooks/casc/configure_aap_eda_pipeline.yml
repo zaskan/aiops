@@ -4,5 +4,6 @@
   gather_facts: false
   vars_files:
     - ../../group_vars/all/aap_eda_pipeline.yml
+    - ../../group_vars/all/observability_kit.yml
   roles:
     - role: aap_eda_pipeline

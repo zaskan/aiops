@@ -10,7 +10,7 @@ apache_exposure_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
 apache_exposure_gitea_use_internal: >-
   {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
 
-apache_exposure_service_port: 80
+apache_exposure_service_port: "80"
 apache_exposure_route_wait_retries: 30
 apache_exposure_route_wait_delay: 10
 
