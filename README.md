@@ -19,7 +19,8 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Generic App workflow (inventory not created) |
 | `playbooks/casc/configure_aap_apache_troubleshoot_pipeline.yml` | AAP job templates for Apache alert incident and remediation |
 | `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Kafka activations, and **Apache Alert Incident Activation** |
-| `playbooks/casc/configure_observability_kit.yml` | Kafka cluster/topics, Loki, Grafana, OTel Collectors, AIOps dashboards |
+| `playbooks/casc/configure_observability_gitops.yml` | Argo CD Application for Observability stack |
+| `playbooks/casc/configure_observability_kit.yml` | Render/push observability manifests to Gitea and sync via Argo CD |
 | `playbooks/casc/configure_aap_lightspeed_remediation_pipeline.yml` | AAP Lightspeed Remediation workflow |
 | `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
 | `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
@@ -115,7 +116,7 @@ The playbook will:
 14. Seed ITSM database after last pod restart: asset types, itsm-app webhooks, KB articles, and service catalog templates (must run after step 13 so data is not wiped by pod restart)
 15. Create application deployment job templates and **Deploy Generic App** workflow (uses **AIOps Infrastructure** inventory)
 16. Create Apache alert remediation job templates (**Create Apache Alert Incident**, **Troubleshoot apache application**)
-17. Deploy **observability kit** in `aiops-observability`: Kafka cluster/topics (via Streams operator), Grafana Loki, **Grafana UI** (AIOps dashboards), upstream/downstream OTel Collectors
+17. Deploy **observability kit** via GitOps: render manifests to Gitea **Observability**, sync with Argo CD **observability-stack** (Kafka, Loki, Grafana, OTel Collectors)
 18. Configure EDA **AIOps Rulebooks** project with Kafka rulebook activations (**Apache Alert Incident Activation**, **ITSM App Chat Activation**)
 19. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → OTel Collector webhook)
 20. Export AAP platform logs via OTLP to the observability pipeline
@@ -285,6 +286,7 @@ The playbook is idempotent — repository creation skips existing repos (HTTP 40
 | Repository | Purpose |
 | ---------- | ------- |
 | Infrastructure | Infra / GitOps manifests (static content; `vms/` owned by VM pipeline) |
+| Observability | Observability stack GitOps manifests (rendered by observability kit) |
 | Playbooks | Ansible playbooks synced from `playbooks/casc/playbooks` |
 | Rulebooks | EDA rulebooks synced from `playbooks/casc/rulebooks` |
 | AIOps_App | Application automation synced from GitHub |
@@ -444,9 +446,23 @@ Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps 
 
 Re-run **Expose application** on existing VMs to strip any legacy Probe documents from GitOps manifests and apply the direct Probe.
 
-### Observability kit
+### Observability kit (GitOps)
 
 Install **Red Hat Streams for Apache Kafka** from OperatorHub before running the observability playbooks. The automation deploys Kafka custom resources (`Kafka`, `KafkaNodePool`, `KafkaTopic`) but does not install the operator.
+
+Manifests are **rendered by Ansible**, pushed to the Gitea **Observability** repository, and deployed by Argo CD Application **`observability-stack`** (automated sync with prune/selfHeal). `install.yml` bootstraps the Argo CD repo secret and Application, then runs the observability kit role.
+
+Cluster-only steps remain outside GitOps:
+
+- Streams for Apache Kafka operator prerequisite
+- Privileged SCC grant for the AAP log forwarder DaemonSet in `aap`
+- HTTP **Probe** resources for Apache monitoring (same as VM GitOps)
+
+One-time Argo CD bootstrap (also run automatically during `install.yml`):
+
+```bash
+ansible-playbook playbooks/casc/configure_observability_gitops.yml
+```
 
 Event-driven automation and log storage share a Kafka-backed observability pipeline in namespace **`aiops-observability`**:
 
@@ -480,10 +496,18 @@ Event-driven automation and log storage share a Kafka-backed observability pipel
 | Alertmanager Events | `aiops-alertmanager` |
 | ITSM Activity | `aiops-itsm` |
 
-Configure standalone:
+Configure standalone (includes GitOps bootstrap when the Argo CD Application is missing):
 
 ```bash
+ansible-playbook playbooks/casc/configure_observability_gitops.yml   # optional if install already ran
 ansible-playbook playbooks/casc/configure_observability_kit.yml
+```
+
+GitOps facts in `artifacts/demo_platform_facts.yml`:
+
+```yaml
+demo_platform.observability.gitops_repo   # Observability
+demo_platform.observability.gitops_app      # observability-stack
 ```
 
 Login URL and credentials are in `artifacts/demo_platform_facts.yml`:

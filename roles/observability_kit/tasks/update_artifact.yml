@@ -63,6 +63,8 @@
               'grafana_username': observability_kit_grafana_admin_user,
               'grafana_password': observability_kit_grafana_admin_password,
               'grafana_dashboard_folder': observability_kit_grafana_dashboard_folder,
+              'gitops_repo': observability_kit_gitea_repo,
+              'gitops_app': gitops_observability_app_name | default('observability-stack'),
             }
           }, recursive=True)
       }}

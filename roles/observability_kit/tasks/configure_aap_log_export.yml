@@ -1,22 +1,4 @@
 ---
-- name: Load demo platform facts artifact for AAP log export
-  ansible.builtin.include_vars:
-    file: "{{ observability_kit_artifact_file }}"
-
-- name: Resolve upstream collector OTLP endpoint for AAP log export
-  ansible.builtin.set_fact:
-    observability_kit_aap_log_otlp_endpoint: >-
-      {{
-        demo_platform.observability.collector_otlp_grpc
-        | default(observability_kit_collector_internal_host ~ ':' ~ observability_kit_collector_otlp_grpc_port)
-      }}
-
-- name: Deploy OTel log forwarder DaemonSet in AAP namespace
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ item }}"
-  loop: "{{ lookup('template', 'aap_log_forwarder.yaml.j2') | from_yaml_all | list }}"
-
 - name: Grant privileged SCC to AAP log forwarder service account
   ansible.builtin.command:
     argv:

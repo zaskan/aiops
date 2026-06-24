@@ -2,26 +2,26 @@
 - name: Run observability kit preflight checks
   ansible.builtin.include_tasks: preflight.yml
 
-- name: Ensure observability namespace exists
-  ansible.builtin.include_tasks: namespace.yml
+- name: Remove legacy Strimzi operator deployment when present
+  ansible.builtin.include_tasks: cleanup_legacy_strimzi.yml
 
-- name: Deploy Kafka cluster and topics
-  ansible.builtin.include_tasks: kafka_cluster.yml
+- name: Render observability stack manifests for GitOps
+  ansible.builtin.include_tasks: render_manifests.yml
 
-- name: Deploy Grafana Loki with OTLP ingestion
-  ansible.builtin.include_tasks: loki.yml
+- name: Push observability manifests to Gitea Observability repository
+  ansible.builtin.include_tasks: push_manifests.yml
 
-- name: Deploy Grafana UI with Loki datasource and AIOps dashboards
-  ansible.builtin.include_tasks: grafana.yml
+- name: Sync Observability stack to OpenShift via Argo CD
+  ansible.builtin.include_tasks: sync_gitops.yml
 
-- name: Deploy upstream OTel Collector (producer)
-  ansible.builtin.include_tasks: collector_upstream.yml
-
-- name: Deploy downstream OTel Collector (Kafka consumer to Loki)
-  ansible.builtin.include_tasks: collector_downstream.yml
+- name: Wait for Kafka cluster to become Ready before dependent services start
+  ansible.builtin.include_tasks: wait_kafka.yml
 
 - name: Wait for observability stack readiness
   ansible.builtin.include_tasks: wait_ready.yml
+
+- name: Discover Grafana external Route URL
+  ansible.builtin.include_tasks: discover_grafana_route.yml
 
 - name: Publish observability facts to demo platform artifact
   ansible.builtin.include_tasks: update_artifact.yml
@@ -32,6 +32,8 @@
 - name: Display observability kit summary
   ansible.builtin.debug:
     msg:
+      - "GitOps repo: {{ observability_kit_gitea_repo }} @ {{ observability_kit_git_commit | default('unknown') }}"
+      - "Argo CD Application: {{ gitops_observability_app_name | default('observability-stack') }}"
       - "Namespace: {{ observability_kit_namespace }}"
       - "Kafka bootstrap: {{ observability_kit_kafka_internal_bootstrap }}"
       - "Topics: {{ observability_kit_kafka_topic_alertmanager }}, {{ observability_kit_kafka_topic_itsm }}, {{ observability_kit_kafka_topic_aap_logs }}"

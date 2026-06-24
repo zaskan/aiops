@@ -3,6 +3,7 @@ gitea_repos_list:
   - Infrastructure
   - Playbooks
   - Rulebooks
+  - Observability
   - AIOps_App
 
 gitea_repos_default_branch: main
@@ -25,6 +26,8 @@ gitea_repos_sync_repo_defs:
       - remediations
   - name: Rulebooks
     local_dir: rulebooks
+  - name: Observability
+    local_dir: observability
   - name: AIOps_App
     source_url: https://github.com/zaskan/AIOps_App.git
     branch: main

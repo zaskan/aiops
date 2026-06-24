@@ -38,6 +38,12 @@
 - name: Uninstall chat-app
   ansible.builtin.include_tasks: uninstall_chat_app.yml
 
+- name: Remove observability kit (Kafka, Loki, OTel Collectors)
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: uninstall.yml
+  when: uninstall_remove_aap | bool
+
 - name: Uninstall gitea
   ansible.builtin.include_tasks: uninstall_gitea.yml
 
@@ -59,12 +65,6 @@
 
 - name: Remove OpenShift Apache monitoring alert resources
   ansible.builtin.include_tasks: uninstall_apache_monitoring.yml
-  when: uninstall_remove_aap | bool
-
-- name: Remove observability kit (Kafka, Loki, OTel Collectors)
-  ansible.builtin.include_role:
-    name: observability_kit
-    tasks_from: uninstall.yml
   when: uninstall_remove_aap | bool
 
 - name: Remove OpenShift ServiceAccount and token created for AAP

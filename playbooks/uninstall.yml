@@ -14,6 +14,8 @@
     - ../group_vars/all/aap_apache_troubleshoot_pipeline.yml
     - ../group_vars/all/aap_lightspeed_remediation_pipeline.yml
     - ../group_vars/all/aap_eda_pipeline.yml
+    - ../group_vars/all/observability_kit.yml
+    - ../group_vars/all/gitops_observability.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
   tasks:
     - ansible.builtin.import_role:
