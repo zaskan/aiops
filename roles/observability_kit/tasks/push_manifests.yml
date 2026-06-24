@@ -1,0 +1,114 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_gitea_credential.yml
+
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    observability_kit_gitea_host: >-
+      {{ observability_kit_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Observability repository
+  ansible.builtin.set_fact:
+    observability_kit_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ observability_kit_gitea_username | urlencode ~ ':'
+          ~ observability_kit_gitea_password | urlencode ~ '@'
+          ~ observability_kit_gitea_internal_host ~ '/'
+          ~ observability_kit_gitea_owner | urlencode ~ '/'
+          ~ observability_kit_gitea_repo | urlencode ~ '.git'
+        )
+        if (observability_kit_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ observability_kit_gitea_username | urlencode ~ ':'
+          ~ observability_kit_gitea_password | urlencode ~ '@'
+          ~ observability_kit_gitea_host ~ '/'
+          ~ observability_kit_gitea_owner | urlencode ~ '/'
+          ~ observability_kit_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Observability clone directory
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea Observability repository
+  block:
+    - name: Clone Gitea Observability repository from Gitea
+      ansible.builtin.git:
+        repo: "{{ observability_kit_gitea_clone_repo }}"
+        dest: "{{ observability_kit_gitops_workdir }}/repo"
+        version: "{{ observability_kit_gitea_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              observability_kit_gitea_use_internal | default(false) | bool
+              or observability_kit_validate_certs | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+  rescue:
+    - name: Report Gitea Observability repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ observability_kit_gitea_owner }}/{{ observability_kit_gitea_repo }}
+          (branch {{ observability_kit_gitea_branch }}). Verify the Gitea credential and that the
+          Observability repository exists. Re-run playbooks/install.yml or
+          playbooks/casc/configure_gitea_repos.yml first.
+
+- name: Copy rendered observability manifests into Observability repository
+  ansible.builtin.copy:
+    src: "{{ observability_kit_gitops_workdir }}/{{ item }}"
+    dest: "{{ observability_kit_gitops_workdir }}/repo/{{ item }}"
+    mode: "0644"
+  loop: "{{ observability_kit_manifest_files }}"
+
+- name: Commit and push observability manifests to Gitea Observability repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ observability_kit_git_user_email }}"
+    git config user.name "{{ observability_kit_git_user_name }}"
+    git add {{ observability_kit_manifest_files | join(' ') }}
+    git commit -m "Update observability stack manifests"
+    git -c http.sslVerify={{ 'true' if observability_kit_validate_certs | bool else 'false' }} push origin "{{ observability_kit_gitea_branch }}"
+  args:
+    chdir: "{{ observability_kit_gitops_workdir }}/repo"
+  register: observability_kit_git_push
+  changed_when: observability_kit_git_push.rc == 0
+  failed_when: >
+    (observability_kit_git_push.rc not in [0, 1])
+    or (
+      observability_kit_git_push.rc != 0
+      and ('nothing to commit' not in (observability_kit_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (observability_kit_git_push.stderr | default('') | lower))
+      and ('up to date' not in (observability_kit_git_push.stdout | default('') | lower))
+      and ('up to date' not in (observability_kit_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Capture Observability repository git commit after push
+  ansible.builtin.command: git rev-parse HEAD
+  args:
+    chdir: "{{ observability_kit_gitops_workdir }}/repo"
+  register: observability_kit_git_head
+  changed_when: false
+
+- name: Record Observability git commit for summary output
+  ansible.builtin.set_fact:
+    observability_kit_git_commit: "{{ observability_kit_git_head.stdout | trim }}"
+
+- name: Remove temporary Observability clone directory after push
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}/repo"
+    state: absent

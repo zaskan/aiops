@@ -1,0 +1,9 @@
+---
+- name: Remove legacy upstream Strimzi operator from observability namespace
+  kubernetes.core.k8s:
+    state: absent
+    api_version: apps/v1
+    kind: Deployment
+    name: strimzi-cluster-operator
+    namespace: "{{ observability_kit_namespace }}"
+  failed_when: false

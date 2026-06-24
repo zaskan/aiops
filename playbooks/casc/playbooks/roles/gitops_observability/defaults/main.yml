@@ -1,0 +1,10 @@
+---
+gitops_observability_app_name: observability-stack
+gitops_observability_app_namespace: openshift-gitops
+gitops_observability_argocd_project: default
+gitops_observability_gitea_repo: Observability
+gitops_observability_source_path: .
+gitops_observability_source_branch: main
+gitops_observability_repo_secret_name: gitea-observability
+gitops_observability_validate_certs: false
+gitops_observability_gitea_insecure: true

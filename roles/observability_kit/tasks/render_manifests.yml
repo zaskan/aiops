@@ -1,0 +1,68 @@
+---
+- name: Prepare runtime variables for observability manifest rendering
+  ansible.builtin.include_tasks: prepare_render_vars.yml
+
+- name: Ensure observability manifest work directory exists
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}"
+    state: directory
+    mode: "0750"
+
+- name: Render observability namespace manifest
+  ansible.builtin.template:
+    src: namespace.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/namespace.yaml"
+    mode: "0640"
+
+- name: Render Kafka cluster manifest
+  ansible.builtin.template:
+    src: kafka_cluster.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/kafka-cluster.yaml"
+    mode: "0640"
+
+- name: Render Kafka topic manifests
+  ansible.builtin.template:
+    src: kafka_topic.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/{{ item.dest }}"
+    mode: "0640"
+  loop:
+    - dest: kafka-topic-alertmanager.yaml
+      topic: "{{ observability_kit_kafka_topic_alertmanager }}"
+    - dest: kafka-topic-itsm.yaml
+      topic: "{{ observability_kit_kafka_topic_itsm }}"
+    - dest: kafka-topic-aap-logs.yaml
+      topic: "{{ observability_kit_kafka_topic_aap_logs }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  vars:
+    observability_kit_kafka_topic_name: "{{ item.topic }}"
+
+- name: Render Loki stack manifest
+  ansible.builtin.template:
+    src: loki_stack.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/loki.yaml"
+    mode: "0640"
+
+- name: Render Grafana stack manifest
+  ansible.builtin.template:
+    src: grafana_stack.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/grafana.yaml"
+    mode: "0640"
+
+- name: Render upstream OTel Collector manifest
+  ansible.builtin.template:
+    src: otel_collector_upstream.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/otel-collector-upstream.yaml"
+    mode: "0640"
+
+- name: Render downstream OTel Collector manifest
+  ansible.builtin.template:
+    src: otel_collector_downstream.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/otel-collector-downstream.yaml"
+    mode: "0640"
+
+- name: Render AAP log forwarder manifest
+  ansible.builtin.template:
+    src: aap_log_forwarder.yaml.j2
+    dest: "{{ observability_kit_gitops_workdir }}/aap-log-forwarder.yaml"
+    mode: "0640"

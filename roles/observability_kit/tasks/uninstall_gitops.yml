@@ -1,0 +1,115 @@
+---
+- name: Load Gitea connection facts from AAP credential or local artifact
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_gitea_credential.yml
+
+- name: Set Gitea host for authenticated git clone during uninstall
+  ansible.builtin.set_fact:
+    observability_kit_gitea_host: >-
+      {{ observability_kit_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for Observability repository uninstall
+  ansible.builtin.set_fact:
+    observability_kit_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ observability_kit_gitea_username | urlencode ~ ':'
+          ~ observability_kit_gitea_password | urlencode ~ '@'
+          ~ observability_kit_gitea_internal_host ~ '/'
+          ~ observability_kit_gitea_owner | urlencode ~ '/'
+          ~ observability_kit_gitea_repo | urlencode ~ '.git'
+        )
+        if (observability_kit_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ observability_kit_gitea_username | urlencode ~ ':'
+          ~ observability_kit_gitea_password | urlencode ~ '@'
+          ~ observability_kit_gitea_host ~ '/'
+          ~ observability_kit_gitea_owner | urlencode ~ '/'
+          ~ observability_kit_gitea_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Observability clone directory before uninstall push
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}/repo"
+    state: absent
+
+- name: Clone Observability repository to remove GitOps manifests
+  ansible.builtin.git:
+    repo: "{{ observability_kit_gitea_clone_repo }}"
+    dest: "{{ observability_kit_gitops_workdir }}/repo"
+    version: "{{ observability_kit_gitea_branch }}"
+    single_branch: true
+    force: true
+  environment:
+    GIT_SSL_NO_VERIFY: >-
+      {{
+        'false'
+        if (
+          observability_kit_gitea_use_internal | default(false) | bool
+          or observability_kit_validate_certs | bool
+        )
+        else 'true'
+      }}
+  no_log: true
+
+- name: Remove observability manifest files from Observability repository
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}/repo/{{ item }}"
+    state: absent
+  loop: "{{ observability_kit_manifest_files }}"
+
+- name: Commit and push observability manifest removal to Gitea
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ observability_kit_git_user_email }}"
+    git config user.name "{{ observability_kit_git_user_name }}"
+    git add -A
+    if git diff --cached --quiet; then
+      exit 0
+    fi
+    git commit -m "Remove observability stack manifests"
+    git -c http.sslVerify={{ 'true' if observability_kit_validate_certs | bool else 'false' }} push origin "{{ observability_kit_gitea_branch }}"
+  args:
+    chdir: "{{ observability_kit_gitops_workdir }}/repo"
+  register: observability_kit_gitops_uninstall_push
+  changed_when: observability_kit_gitops_uninstall_push.rc == 0
+  failed_when: false
+  no_log: true
+
+- name: Remove temporary Observability clone directory after uninstall push
+  ansible.builtin.file:
+    path: "{{ observability_kit_gitops_workdir }}/repo"
+    state: absent
+
+- name: Resolve Observability GitOps destination namespace for final sync
+  ansible.builtin.set_fact:
+    gitops_observability_dest_namespace: "{{ observability_kit_namespace }}"
+
+- name: Sync Observability stack via Argo CD to prune removed manifests
+  ansible.builtin.include_role:
+    name: gitops_observability
+    tasks_from: sync.yml
+  when: observability_kit_gitops_uninstall_push.rc == 0
+
+- name: Remove Observability stack Argo CD Application
+  kubernetes.core.k8s:
+    state: absent
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: "{{ gitops_observability_app_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+  ignore_errors: true
+
+- name: Remove Observability stack Argo CD repository secret
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Secret
+    name: "{{ gitops_observability_repo_secret_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+  ignore_errors: true

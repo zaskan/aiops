@@ -1,0 +1,28 @@
+---
+- name: Ensure Argo CD Application for Observability stack exists
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ gitops_observability_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_observability_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_observability_validate_certs }}"
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: "{{ gitops_observability_app_name }}"
+        namespace: "{{ gitops_observability_app_namespace }}"
+      spec:
+        project: "{{ gitops_observability_argocd_project }}"
+        source:
+          repoURL: "{{ gitops_observability_repo_url }}"
+          targetRevision: "{{ gitops_observability_source_branch }}"
+          path: "{{ gitops_observability_source_path }}"
+          directory:
+            recurse: true
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: "{{ gitops_observability_dest_namespace }}"
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true

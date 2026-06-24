@@ -1,0 +1,15 @@
+---
+- name: Configure Argo CD for Observability repository
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/gitops_observability.yml
+    - ../../group_vars/all/observability_kit.yml
+  pre_tasks:
+    - name: Resolve artifact and GitOps paths for Observability configure
+      ansible.builtin.set_fact:
+        demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+        gitea_credential_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+        gitops_observability_dest_namespace: "{{ observability_kit_namespace }}"
+  roles:
+    - role: gitops_observability

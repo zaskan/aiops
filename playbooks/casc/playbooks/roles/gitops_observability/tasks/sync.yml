@@ -1,0 +1,71 @@
+---
+- name: Detect whether OpenShift credentials are injected by AAP
+  ansible.builtin.set_fact:
+    gitops_observability_use_env_auth: >-
+      {{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY') | default('') | trim | length > 0 }}
+
+- name: Load GitOps observability connection configuration
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Look up Observability stack Argo CD Application
+  kubernetes.core.k8s_info:
+    host: "{{ gitops_observability_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_observability_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_observability_validate_certs }}"
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ gitops_observability_app_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+  register: gitops_observability_app_lookup
+
+- name: Ensure Argo CD repository credentials and Application exist
+  when: gitops_observability_app_lookup.resources | default([]) | length == 0
+  block:
+    - name: Configure Argo CD repository credentials for Observability
+      ansible.builtin.include_tasks: repository_secret.yml
+
+    - name: Configure Argo CD Application for Observability stack
+      ansible.builtin.include_tasks: application.yml
+
+- name: Refresh Argo CD Application for Observability stack
+  kubernetes.core.k8s:
+    state: patched
+    host: "{{ gitops_observability_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_observability_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_observability_validate_certs }}"
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ gitops_observability_app_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+    definition:
+      metadata:
+        annotations:
+          argocd.argoproj.io/refresh: hard
+
+- name: Wait for Argo CD Application to reach Synced and Healthy state
+  kubernetes.core.k8s_info:
+    host: "{{ gitops_observability_openshift_api_server | default(omit) }}"
+    api_key: "{{ gitops_observability_openshift_token | default(omit) }}"
+    validate_certs: "{{ gitops_observability_validate_certs }}"
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ gitops_observability_app_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+  register: gitops_observability_app_status
+  until: >
+    gitops_observability_app_status.resources | default([]) | length > 0
+    and (
+      gitops_observability_app_status.resources[0].status.sync.status | default('') == 'Synced'
+    )
+    and (
+      gitops_observability_app_status.resources[0].status.health.status | default('') in ['Healthy', 'Progressing']
+    )
+  retries: 60
+  delay: 10
+
+- name: Display Argo CD sync status for Observability stack
+  ansible.builtin.debug:
+    msg:
+      - "Application: {{ gitops_observability_app_name }}"
+      - "Sync status: {{ gitops_observability_app_status.resources[0].status.sync.status | default('unknown') }}"
+      - "Health status: {{ gitops_observability_app_status.resources[0].status.health.status | default('unknown') }}"

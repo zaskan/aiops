@@ -1,0 +1,49 @@
+---
+- name: Build basic auth htpasswd entries for upstream collector manifests
+  ansible.builtin.set_fact:
+    observability_kit_alertmanager_htpasswd: >-
+      {{ observability_kit_alertmanager_webhook_username }}:{{
+        observability_kit_alertmanager_webhook_password | password_hash('bcrypt')
+      }}
+    observability_kit_itsm_htpasswd: >-
+      {{ observability_kit_itsm_webhook_username }}:{{
+        observability_kit_itsm_webhook_password | password_hash('bcrypt')
+      }}
+  no_log: true
+
+- name: Discover Grafana dashboard JSON files for manifest rendering
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboard_paths: >-
+      {{ lookup('ansible.builtin.fileglob', role_path ~ '/files/grafana/dashboards/*.json', wantlist=True) }}
+
+- name: Build Grafana dashboards ConfigMap data map for manifest rendering
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboards_data: >-
+      {{
+        observability_kit_grafana_dashboards_data | default({})
+        | combine({ (item | basename): lookup('ansible.builtin.file', item) })
+      }}
+  loop: "{{ observability_kit_grafana_dashboard_paths }}"
+
+- name: Load demo platform facts artifact when present for AAP log forwarder endpoint
+  ansible.builtin.stat:
+    path: "{{ observability_kit_artifact_file }}"
+  register: observability_kit_render_artifact_stat
+
+- name: Read existing demo platform facts artifact for AAP log forwarder endpoint
+  ansible.builtin.include_vars:
+    file: "{{ observability_kit_artifact_file }}"
+  when: observability_kit_render_artifact_stat.stat.exists | default(false)
+  no_log: true
+
+- name: Resolve upstream collector OTLP endpoint for AAP log forwarder manifest
+  ansible.builtin.set_fact:
+    observability_kit_aap_log_otlp_endpoint: >-
+      {{
+        demo_platform.observability.collector_otlp_grpc
+        | default(observability_kit_collector_internal_host ~ ':' ~ observability_kit_collector_otlp_grpc_port)
+        if demo_platform is defined
+        else (
+          observability_kit_collector_internal_host ~ ':' ~ observability_kit_collector_otlp_grpc_port
+        )
+      }}
