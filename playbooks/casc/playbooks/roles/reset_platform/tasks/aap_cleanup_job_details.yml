@@ -1,0 +1,70 @@
+---
+- name: Lookup AAP Cleanup Job Details system job template
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/system_job_templates/?name={{
+      reset_aap_cleanup_job_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ reset_controller_oauthtoken }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [200]
+  register: reset_aap_cleanup_sjt_lookup
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ reset_controller_api_prefix }}"
+
+- name: Fail when Cleanup Job Details system job template was not found
+  ansible.builtin.fail:
+    msg: >-
+      System job template '{{ reset_aap_cleanup_job_name }}' was not found in AAP.
+  when: reset_aap_cleanup_sjt_lookup.json.count | default(0) == 0
+
+- name: Launch AAP Cleanup Job Details system job
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/system_job_templates/{{
+      reset_aap_cleanup_sjt_lookup.json.results[0].id }}/launch/
+    method: POST
+    headers:
+      Authorization: "Bearer {{ reset_controller_oauthtoken }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      extra_vars:
+        days: "{{ reset_aap_cleanup_days | int }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [201]
+  register: reset_aap_cleanup_job_launch
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ reset_controller_api_prefix }}"
+
+- name: Wait for AAP Cleanup Job Details system job to complete
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/system_jobs/{{
+      reset_aap_cleanup_job_launch.json.id }}/
+    method: GET
+    headers:
+      Authorization: "Bearer {{ reset_controller_oauthtoken }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [200]
+  register: reset_aap_cleanup_job_status
+  until: reset_aap_cleanup_job_status.json.status in ['successful', 'failed', 'error', 'canceled']
+  retries: 60
+  delay: 10
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ reset_controller_api_prefix }}"
+
+- name: Fail when AAP Cleanup Job Details system job did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      System job '{{ reset_aap_cleanup_job_name }}' finished with status
+      {{ reset_aap_cleanup_job_status.json.status | default('unknown') }}.
+  when: reset_aap_cleanup_job_status.json.status != 'successful'
+
+- name: Summarize AAP Cleanup Job Details system job
+  ansible.builtin.debug:
+    msg:
+      - "System job: {{ reset_aap_cleanup_job_name }}"
+      - "Days retained: {{ reset_aap_cleanup_days }}"
+      - "Status: {{ reset_aap_cleanup_job_status.json.status | default('unknown') }}"

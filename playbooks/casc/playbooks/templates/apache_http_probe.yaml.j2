@@ -8,7 +8,8 @@ metadata:
     openshift.io/user-monitoring: "true"
 spec:
   jobName: {{ openshift_apache_monitoring_probe_job | default('apache-http') }}
-  interval: {{ openshift_apache_monitoring_probe_interval | default('15s') }}
+  interval: {{ openshift_apache_monitoring_probe_interval | default('10s') }}
+  scrapeTimeout: {{ openshift_apache_monitoring_probe_scrape_timeout | default('5s') }}
   prober:
     url: {{ openshift_apache_monitoring_blackbox_prober | default('blackbox-exporter.aiops-demo.svc:9115') }}
     path: /probe

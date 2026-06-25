@@ -17,6 +17,11 @@
     - ../group_vars/all/observability_kit.yml
     - ../group_vars/all/gitops_observability.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
+  module_defaults:
+    group/awx.awx.controller:
+      request_timeout: "{{ aap_controller_request_timeout }}"
+    ansible.builtin.uri:
+      timeout: "{{ itsm_http_timeout }}"
   tasks:
     - ansible.builtin.import_role:
         name: demo_platform

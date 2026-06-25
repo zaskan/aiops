@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../../group_vars/all/itsm_aiops.yml
     - ../../group_vars/all/itsm_apache_stack.yml
     - ../../group_vars/all/itsm_kb_vm_provisioning.yml
     - ../../group_vars/all/demo_platform.yml

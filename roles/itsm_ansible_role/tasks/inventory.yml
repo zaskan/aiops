@@ -15,7 +15,9 @@
       Accept: application/json
   register: _itsm_list_inv
   when: itsm_ansible_role_inventory | bool and itsm_inventory | length > 0
-
+  until: _itsm_list_inv is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Merge existing inventory into hostname-to-id map
   ansible.builtin.set_fact:
     itsm_inventory_by_hostname: "{{ itsm_inventory_by_hostname | combine({ item.hostname: item.id }) }}"
@@ -51,7 +53,9 @@
     - itsm_ansible_role_inventory | bool
     - itsm_inventory | length > 0
     - item.hostname not in (itsm_inventory_by_hostname | default({}))
-
+  until: _itsm_inv_post is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Merge newly created inventory rows into hostname map
   ansible.builtin.set_fact:
     itsm_inventory_by_hostname: "{{ itsm_inventory_by_hostname | combine({ item.json.hostname: item.json.id }) }}"

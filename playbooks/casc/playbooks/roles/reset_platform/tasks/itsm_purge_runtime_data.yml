@@ -1,0 +1,70 @@
+---
+- name: Resolve ITSM admin credentials for runtime purge
+  ansible.builtin.set_fact:
+    reset_itsm_admin_user: >-
+      {{
+        lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_USER', default='')
+        | default(itsm_api_user, true)
+      }}
+    reset_itsm_admin_password: >-
+      {{
+        lookup('ansible.builtin.env', 'ITSM_BOOTSTRAP_ADMIN_PASSWORD', default='')
+        | default(itsm_api_password, true)
+      }}
+  no_log: true
+
+- name: Purge ITSM runtime data (changes, requests, tasks, incidents, assets)
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/settings/purge-runtime-data"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ reset_itsm_admin_user }}"
+    url_password: "{{ reset_itsm_admin_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    body_format: json
+    body:
+      confirm: "{{ reset_itsm_runtime_purge_confirm_phrase }}"
+    return_content: true
+    status_code: [200, 404]
+  register: reset_itsm_runtime_purge
+  failed_when: false
+
+- name: Use legacy ITSM cleanup when runtime purge endpoint is unavailable
+  when: reset_itsm_runtime_purge.status | default(0) | int == 404
+  block:
+    - name: Cancel open ITSM changes
+      ansible.builtin.include_tasks: itsm_cancel_changes.yml
+
+    - name: Cancel active ITSM service requests
+      ansible.builtin.include_tasks: itsm_cancel_requests.yml
+
+    - name: Delete draft ITSM service requests
+      ansible.builtin.include_tasks: itsm_delete_draft_requests.yml
+
+    - name: Delete all ITSM incidents
+      ansible.builtin.include_tasks: itsm_delete_incidents.yml
+
+    - name: Delete ITSM Generic Application assets
+      ansible.builtin.include_tasks: itsm_delete_assets.yml
+      vars:
+        reset_itsm_asset_type_name: "{{ itsm_apache_app_asset_type_name }}"
+
+    - name: Delete ITSM Virtual Machine assets
+      ansible.builtin.include_tasks: itsm_delete_assets.yml
+      vars:
+        reset_itsm_asset_type_name: "{{ itsm_vm_asset_type_name }}"
+
+- name: Summarize ITSM runtime purge
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Runtime purge: {{
+          'applied' if (reset_itsm_runtime_purge.status | default(0) | int == 200)
+          else 'endpoint unavailable — used legacy open-record cleanup only'
+        }}
+      - >-
+        Deleted rows: {{
+          reset_itsm_runtime_purge.json.deleted | default({})
+          if (reset_itsm_runtime_purge.status | default(0) | int == 200)
+          else 'n/a'
+        }}

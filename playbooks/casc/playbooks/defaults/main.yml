@@ -28,7 +28,10 @@ apache_exposure_route_wait_delay: 10
 apache_exposure_service_port: 80
 
 openshift_apache_monitoring_probe_job: apache-http
-openshift_apache_monitoring_probe_interval: 15s
+openshift_apache_monitoring_probe_for: 15s
+openshift_apache_monitoring_probe_lookback: 1m
+openshift_apache_monitoring_probe_interval: 10s
+openshift_apache_monitoring_probe_scrape_timeout: 5s
 openshift_apache_monitoring_blackbox_prober: blackbox-exporter.aiops-demo.svc:9115
 
 itsm_apache_app_asset_type_name: Generic Application

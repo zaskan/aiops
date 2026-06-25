@@ -1,0 +1,15 @@
+---
+- name: Configure OpenShift monitoring alerts for Apache HTTP probes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/openshift_apache_monitoring.yml
+    - ../../group_vars/all/observability_kit.yml
+  vars:
+    demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+  tasks:
+    - ansible.builtin.import_role:
+        name: demo_platform
+        tasks_from: configure_apache_monitoring.yml
+      vars:
+        demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"

@@ -22,7 +22,10 @@
   loop: "{{ fu.comments | default([]) }}"
   loop_control:
     loop_var: comment
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Resolve KB article id for close (explicit id)
   ansible.builtin.set_fact:
     _close_kb_id: "{{ fu.close.kb_article_id | int }}"
@@ -59,7 +62,10 @@
   when:
     - fu.close is defined
     - _close_kb_id is not none
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: POST close incident without KB resolution
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url }}/api/v1/incidents/{{ itsm_incident_by_key[fu.incident_key] }}/close"
@@ -78,3 +84,7 @@
   when:
     - fu.close is defined
     - _close_kb_id is none
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"

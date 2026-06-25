@@ -7,16 +7,10 @@
 
 - name: Configure AAP VM modification job templates and workflows
   block:
-    - name: Ensure VM modification job templates exist
-      ansible.builtin.include_tasks: job_templates.yml
-
-    - name: Ensure Modify VM CPUs workflow exists
-      ansible.builtin.include_tasks: workflow_cpu.yml
-
-    - name: Ensure Modify VM Memory workflow exists
-      ansible.builtin.include_tasks: workflow_memory.yml
+    - ansible.builtin.include_tasks: configure.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_vm_modification_pipeline_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP VM modification pipeline summary
   ansible.builtin.debug:

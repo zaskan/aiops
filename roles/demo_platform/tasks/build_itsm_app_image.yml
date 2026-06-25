@@ -34,11 +34,24 @@
       - git
       - apply
       - --whitespace=nowarn
-      - "{{ role_path }}/files/itsm_app_catalog_ritm.patch"
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_app_catalog_ritm.patch"
   register: itsm_app_catalog_ritm_patch_apply
   changed_when: itsm_app_catalog_ritm_patch_apply.rc == 0
   failed_when: itsm_app_catalog_ritm_patch_apply.rc != 0
   when: itsm_app_catalog_ritm_patch | default(true) | bool
+
+- name: Patch itsm-app with runtime data purge API for platform reset
+  ansible.builtin.command:
+    chdir: "{{ itsm_app_build_dir.path }}/itsm-app"
+    argv:
+      - git
+      - apply
+      - --whitespace=nowarn
+      - "{{ (role_path | default(demo_platform_role_path)) }}/files/itsm_app_runtime_purge.patch"
+  register: itsm_app_runtime_purge_patch_apply
+  changed_when: itsm_app_runtime_purge_patch_apply.rc == 0
+  failed_when: itsm_app_runtime_purge_patch_apply.rc != 0
+  when: itsm_app_runtime_purge_patch | default(true) | bool
 
 - name: Build itsm-app image from patched source directory
   ansible.builtin.command:

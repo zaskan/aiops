@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../../group_vars/all/aap_casc.yml
     - ../../group_vars/all/aap_apache_troubleshoot_pipeline.yml
     - ../../group_vars/all/chat_aiops.yml
   roles:

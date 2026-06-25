@@ -224,7 +224,7 @@
                 | int
               }}
 
-        - name: Add Service, Route, and HTTP Probe for recovered VM
+        - name: Add Service and Route for recovered VM
           ansible.builtin.include_role:
             name: apache_exposure
 
@@ -233,6 +233,6 @@
             apache_troubleshoot_summary_lines: >-
               {{
                 apache_troubleshoot_summary_lines
-                + ['Exposed Apache application for ' ~ vm_name ~ ' (Service, Route, HTTP Probe).']
+                + ['Exposed Apache application for ' ~ vm_name ~ ' (Service, Route).']
               }}
 

@@ -22,4 +22,3 @@ observability_kit_manifest_files:
   - grafana.yaml
   - otel-collector-upstream.yaml
   - otel-collector-downstream.yaml
-  - aap-log-forwarder.yaml

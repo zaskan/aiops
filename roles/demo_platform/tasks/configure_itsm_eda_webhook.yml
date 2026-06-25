@@ -216,7 +216,9 @@
     status_code: 201
     return_content: true
   register: itsm_collector_webhook_test_incident_create
-
+  until: itsm_collector_webhook_test_incident_create is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Record test incident public_id for chat verification
   ansible.builtin.set_fact:
     itsm_collector_webhook_test_incident_ref: "{{ itsm_collector_webhook_test_incident_create.json.public_id }}"
@@ -295,7 +297,10 @@
     body_format: json
     body: {}
     status_code: 200
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Display ITSM collector webhook configuration summary
   ansible.builtin.debug:
     msg:

@@ -7,6 +7,7 @@
     - ../../group_vars/all/itsm_agent.yml
   vars:
     demo_platform_artifacts_file: "{{ playbook_dir }}/../../artifacts/demo_platform_facts.yml"
+    demo_platform_role_path: "{{ playbook_dir }}/../../roles/demo_platform"
   tasks:
     - name: Check demo platform facts artifact exists
       ansible.builtin.stat:

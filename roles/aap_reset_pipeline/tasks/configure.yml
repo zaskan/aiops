@@ -1,0 +1,6 @@
+---
+- name: Sync AIOps Playbooks project from Gitea
+  ansible.builtin.include_tasks: project_update.yml
+
+- name: Ensure Reset job template exists
+  ansible.builtin.include_tasks: job_templates.yml

@@ -9,7 +9,10 @@
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop: "{{ aap_uninstall_legacy_apache_stack_workflows | default([]) }}"
   when: aap_uninstall_legacy_apache_stack_workflows | default([]) | length > 0
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove legacy Apache stack job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
@@ -20,7 +23,10 @@
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop: "{{ aap_uninstall_legacy_apache_stack_job_templates | default([]) }}"
   when: aap_uninstall_legacy_apache_stack_job_templates | default([]) | length > 0
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Deploy Generic Application Stack master workflow from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_apache_stack_pipeline_workflow }}"
@@ -29,7 +35,10 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Deploy Generic App workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_httpd_pipeline_workflow }}"
@@ -38,7 +47,10 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Provision VM workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_vm_pipeline_workflow }}"
@@ -47,7 +59,10 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Modify VM CPUs workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_vm_cpu_modification_pipeline_workflow }}"
@@ -56,7 +71,10 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Modify VM Memory workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_vm_memory_modification_pipeline_workflow }}"
@@ -65,7 +83,10 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Lightspeed Remediation workflow job template from AAP
   awx.awx.workflow_job_template:
     name: "{{ aap_lightspeed_remediation_pipeline_workflow }}"
@@ -74,3 +95,7 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

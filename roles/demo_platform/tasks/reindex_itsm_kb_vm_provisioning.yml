@@ -18,6 +18,8 @@
       Accept: application/json
       Content-Type: application/json
   register: itsm_kb_vm_provisioning_reindex
-
+  until: itsm_kb_vm_provisioning_reindex is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Backfill all ITSM KB article embeddings after publish
   ansible.builtin.include_tasks: reindex_itsm_kb_all.yml

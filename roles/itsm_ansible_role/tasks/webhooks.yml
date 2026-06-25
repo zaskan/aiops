@@ -32,7 +32,9 @@
     headers:
       Accept: application/json
   register: _itsm_webhooks_get
-
+  until: _itsm_webhooks_get is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Index current webhooks by normalized URL
   ansible.builtin.set_fact:
     itsm_hooks_by_url: "{{ itsm_hooks_by_url | default({}) | combine({ (item.url | trim): item }) }}"
@@ -60,7 +62,10 @@
   loop_control:
     loop_var: wh_item
   when: (wh_item.url | trim) not in (itsm_hooks_by_url | default({}))
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: PATCH existing webhooks when label or enabled differs from desired
   ansible.builtin.include_tasks: webhooks_patch_one.yml
   loop: "{{ itsm_webhooks_effective }}"
@@ -84,3 +89,7 @@
   when:
     - itsm_webhooks_remove_unlisted | default(false) | bool
     - (item.url | trim) not in itsm_desired_urls_list
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"

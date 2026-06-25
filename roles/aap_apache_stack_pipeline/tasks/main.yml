@@ -7,10 +7,10 @@
 
 - name: Configure AAP master workflow for Apache Application stack
   block:
-    - name: Ensure Deploy Apache Application Stack master workflow exists
-      ansible.builtin.include_tasks: workflow.yml
+    - ansible.builtin.include_tasks: configure.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_apache_stack_pipeline_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP Apache stack pipeline summary
   ansible.builtin.debug:

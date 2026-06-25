@@ -7,3 +7,7 @@
     controller_host: "{{ aap_uninstall_controller_host }}"
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

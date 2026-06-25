@@ -1,0 +1,18 @@
+---
+- name: Ensure AIOps localhost inventory exists
+  ansible.builtin.include_tasks: inventory.yml
+
+- name: Ensure Gitea Source Control credential exists in AAP
+  ansible.builtin.include_tasks: scm_credential.yml
+
+- name: Ensure AIOps Playbooks project exists
+  ansible.builtin.include_tasks: project.yml
+
+- name: Ensure AIOps Infrastructure inventory and ITSM inventory source exist
+  ansible.builtin.include_tasks: infrastructure_inventory.yml
+
+- name: Ensure VM pipeline job templates exist
+  ansible.builtin.include_tasks: job_templates.yml
+
+- name: Ensure Provision VM workflow exists
+  ansible.builtin.include_tasks: workflow.yml

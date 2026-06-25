@@ -7,25 +7,10 @@
 
 - name: Configure AAP inventory, project, job templates, and workflow
   block:
-    - name: Ensure AIOps localhost inventory exists
-      ansible.builtin.include_tasks: inventory.yml
-
-    - name: Ensure Gitea Source Control credential exists in AAP
-      ansible.builtin.include_tasks: scm_credential.yml
-
-    - name: Ensure AIOps Playbooks project exists
-      ansible.builtin.include_tasks: project.yml
-
-    - name: Ensure AIOps Infrastructure inventory and ITSM inventory source exist
-      ansible.builtin.include_tasks: infrastructure_inventory.yml
-
-    - name: Ensure VM pipeline job templates exist
-      ansible.builtin.include_tasks: job_templates.yml
-
-    - name: Ensure Provision VM workflow exists
-      ansible.builtin.include_tasks: workflow.yml
+    - ansible.builtin.include_tasks: configure.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_vm_pipeline_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP VM pipeline summary
   ansible.builtin.debug:

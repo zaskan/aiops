@@ -1,0 +1,26 @@
+---
+- name: Ensure Reset job template exists in AAP
+  awx.awx.job_template:
+    name: "{{ aap_reset_pipeline_jt_name }}"
+    organization: "{{ aap_reset_pipeline_organization }}"
+    project: "{{ aap_reset_pipeline_project }}"
+    inventory: "{{ aap_reset_pipeline_inventory }}"
+    playbook: "{{ aap_reset_pipeline_playbook }}"
+    job_type: run
+    state: present
+    survey_enabled: false
+    extra_vars: "{{ aap_reset_pipeline_job_extra_vars }}"
+    ask_variables_on_launch: false
+    credentials:
+      - "{{ aap_reset_pipeline_credential_gitea }}"
+      - "{{ aap_reset_pipeline_credential_itsm }}"
+      - "{{ aap_reset_pipeline_credential_openshift }}"
+      - "{{ aap_reset_pipeline_credential_aap }}"
+      - "{{ aap_reset_pipeline_credential_chat }}"
+    controller_host: "{{ aap_reset_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_reset_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_reset_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

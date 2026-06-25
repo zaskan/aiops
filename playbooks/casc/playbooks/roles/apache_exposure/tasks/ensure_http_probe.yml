@@ -1,0 +1,24 @@
+---
+- name: Resolve VM name for Apache HTTP monitoring probe
+  ansible.builtin.set_fact:
+    apache_exposure_vm_name: >-
+      {{
+        apache_exposure_vm_name
+        | default(vm_name | default(apache_app_target_host | default(''), true), true)
+        | string
+        | trim
+      }}
+
+- name: Fail when VM name is missing for Apache HTTP probe
+  ansible.builtin.assert:
+    that:
+      - apache_exposure_vm_name | length > 0
+    fail_msg: >-
+      vm_name or target_host is required to apply the Apache HTTP monitoring probe.
+
+- name: Derive Apache Service name for HTTP probe targets
+  ansible.builtin.set_fact:
+    apache_exposure_service_name: "{{ apache_exposure_vm_name }}-http"
+
+- name: Apply Apache HTTP monitoring probe
+  ansible.builtin.include_tasks: apply_http_probe.yml

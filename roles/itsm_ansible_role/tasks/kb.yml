@@ -20,7 +20,9 @@
   loop: "{{ itsm_kb_articles }}"
   register: _itsm_kb_post
   when: itsm_ansible_role_kb | bool and itsm_kb_articles | length > 0
-
+  until: _itsm_kb_post is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Build KB title to id map
   ansible.builtin.set_fact:
     itsm_kb_by_title: "{{ itsm_kb_by_title | combine({ item.json.title: item.json.id }) }}"

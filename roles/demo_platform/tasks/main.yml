@@ -150,13 +150,6 @@
 - name: Configure OpenShift monitoring alerts for Apache HTTP probes
   ansible.builtin.include_tasks: configure_apache_monitoring.yml
 
-- name: Export AAP platform logs to observability pipeline
-  ansible.builtin.include_role:
-    name: observability_kit
-    tasks_from: configure_aap_log_export.yml
-  vars:
-    observability_kit_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
-
 - name: Configure AAP Deploy Apache Application Stack master workflow
   ansible.builtin.include_role:
     name: aap_apache_stack_pipeline
@@ -168,3 +161,9 @@
     name: aap_vm_modification_pipeline
   vars:
     aap_vm_modification_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Reset job template
+  ansible.builtin.include_role:
+    name: aap_reset_pipeline
+  vars:
+    aap_reset_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

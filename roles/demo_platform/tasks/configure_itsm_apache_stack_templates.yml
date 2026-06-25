@@ -24,7 +24,9 @@
     headers:
       Accept: application/json
   register: itsm_apache_stack_kb_list
-
+  until: itsm_apache_stack_kb_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Build KB title to id map for task template linking
   ansible.builtin.set_fact:
     itsm_kb_by_title: >-

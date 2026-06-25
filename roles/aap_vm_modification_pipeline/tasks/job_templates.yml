@@ -19,7 +19,10 @@
     controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
   no_log: true
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Patch VM Memory Manifest job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_vm_memory_modification_pipeline_jt_patch }}"
@@ -40,7 +43,10 @@
     controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
   no_log: true
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Restart VM job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
@@ -59,3 +65,7 @@
     controller_host: "{{ aap_vm_modification_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_modification_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_modification_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

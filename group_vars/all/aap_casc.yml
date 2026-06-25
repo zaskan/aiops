@@ -22,4 +22,8 @@ aap_casc_credential_vms: Virtual Machines
 aap_casc_openshift_token_wait_retries: 30
 aap_casc_openshift_token_wait_delay: 2
 
+aap_controller_request_timeout: 60
+aap_controller_api_retries: 3
+aap_controller_api_retry_delay: 10
+
 # Override any value above in this file; token is read at runtime from PUBLIC_AH_OFFLINE_TOKEN.

@@ -63,7 +63,10 @@
   when:
     - itsm_vm_modification_change_template_id is not none
     - itsm_vm_modification_change_template_task_ids | default([]) | length > 0
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Display synced VM modification change template task order
   ansible.builtin.debug:
     msg: >-

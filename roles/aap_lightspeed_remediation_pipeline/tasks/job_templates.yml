@@ -16,7 +16,10 @@
     controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Sync AIOps Playbooks Project job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_lightspeed_remediation_pipeline_jt_sync }}"
@@ -33,7 +36,10 @@
     controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Create Lightspeed Remediation Job Template job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_lightspeed_remediation_pipeline_jt_create }}"
@@ -51,7 +57,10 @@
     controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Launch Lightspeed Remediation Job Template job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_lightspeed_remediation_pipeline_jt_launch }}"
@@ -69,7 +78,10 @@
     controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Close Lightspeed Remediation Incident job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_lightspeed_remediation_pipeline_jt_close }}"
@@ -87,3 +99,7 @@
     controller_host: "{{ aap_lightspeed_remediation_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_lightspeed_remediation_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_lightspeed_remediation_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

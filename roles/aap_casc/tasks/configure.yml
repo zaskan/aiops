@@ -1,0 +1,9 @@
+---
+- name: Ensure AIOps organization exists in AAP
+  ansible.builtin.include_tasks: organization.yml
+
+- name: Ensure custom AAP credential types exist
+  ansible.builtin.include_tasks: credential_types.yml
+
+- name: Ensure AAP credentials exist for demo platform services
+  ansible.builtin.include_tasks: credentials.yml

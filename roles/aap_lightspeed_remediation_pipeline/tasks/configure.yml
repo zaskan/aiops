@@ -1,0 +1,9 @@
+---
+- name: Sync AIOps Playbooks project from Gitea
+  ansible.builtin.include_tasks: project_update.yml
+
+- name: Ensure Lightspeed remediation job templates exist
+  ansible.builtin.include_tasks: job_templates.yml
+
+- name: Ensure Lightspeed Remediation workflow exists
+  ansible.builtin.include_tasks: workflow.yml

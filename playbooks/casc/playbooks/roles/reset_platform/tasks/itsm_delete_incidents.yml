@@ -1,0 +1,53 @@
+---
+- name: List all ITSM incidents
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: reset_itsm_incidents_list
+
+- name: Build ITSM incident refs to delete
+  ansible.builtin.set_fact:
+    reset_itsm_incident_refs: >-
+      {{
+        reset_itsm_incidents_list.json
+        | default([])
+        | map(attribute='public_id')
+        | list
+      }}
+
+- name: Delete ITSM incidents
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      item | urlencode }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409]
+  register: reset_itsm_incident_delete_results
+  failed_when: false
+  loop: "{{ reset_itsm_incident_refs | default([]) }}"
+  when: reset_itsm_incident_refs | default([]) | length > 0
+
+- name: Summarize ITSM incident deletions
+  ansible.builtin.debug:
+    msg:
+      - "Incidents found: {{ reset_itsm_incident_refs | default([]) | length }}"
+      - >-
+        Deleted: {{
+          reset_itsm_incident_delete_results.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 204])
+          | list
+          | length
+        }}

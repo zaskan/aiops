@@ -1,0 +1,33 @@
+---
+- name: Resolve VM name for Apache HTTP probe removal
+  ansible.builtin.set_fact:
+    apache_exposure_vm_name: >-
+      {{
+        apache_exposure_vm_name
+        | default(vm_name | default('', true), true)
+        | string
+        | trim
+      }}
+
+- name: Skip Apache HTTP probe removal when VM name is not set
+  ansible.builtin.debug:
+    msg: No VM name provided; skipping Apache HTTP probe removal.
+  when: apache_exposure_vm_name | length == 0
+
+- name: Remove Apache HTTP monitoring probe for VM
+  when: apache_exposure_vm_name | length > 0
+  block:
+    - name: Load OpenShift API credentials for HTTP Probe removal
+      ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+    - name: Delete HTTP Probe for Apache Service monitoring
+      kubernetes.core.k8s:
+        host: "{{ openshift_credential_host | default(omit) }}"
+        api_key: "{{ openshift_credential_token | default(omit) }}"
+        validate_certs: false
+        state: absent
+        api_version: monitoring.coreos.com/v1
+        kind: Probe
+        name: "{{ apache_exposure_vm_name }}-http-probe"
+        namespace: "{{ vm_namespace | default(openshift_apache_monitoring_namespace | default('aiops-demo')) }}"
+  delegate_to: localhost

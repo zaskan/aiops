@@ -24,6 +24,7 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_aap_lightspeed_remediation_pipeline.yml` | AAP Lightspeed Remediation workflow |
 | `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
 | `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
+| `playbooks/casc/configure_aap_reset_pipeline.yml` | AAP **Reset** job template for clearing demo runtime state |
 | `playbooks/casc/submit_apache_stack_service_request.yml` | Demo helper: submit ITSM Generic Application Stack service request |
 | `playbooks/casc/playbooks/install_httpd.yml` | Install httpd and git on a RHEL host |
 | `playbooks/casc/playbooks/deploy_apache_app.yml` | Clone Gitea app repo into Apache docroot |
@@ -442,9 +443,9 @@ Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache 
 
 Install deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter, `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the **upstream OTel Collector** (not directly to EDA).
 
-Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps manifest. **Expose application** applies each `{vm_name}-http-probe` directly to the cluster via the OpenShift API after Argo CD sync creates the in-cluster Service. GitOps owns only the VirtualMachine, Service, and Route documents.
+Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps manifest. **Start application services** applies each `{vm_name}-http-probe` directly to the cluster via the OpenShift API after httpd is running and the in-cluster Service exists (created by **Expose application**). GitOps owns only the VirtualMachine, Service, and Route documents.
 
-Re-run **Expose application** on existing VMs to strip any legacy Probe documents from GitOps manifests and apply the direct Probe.
+Re-run **Start application services** on existing VMs to (re)apply the HTTP Probe. **Reset** removes all `apache-http` probes from the cluster.
 
 ### Observability kit (GitOps)
 
@@ -455,7 +456,7 @@ Manifests are **rendered by Ansible**, pushed to the Gitea **Observability** rep
 Cluster-only steps remain outside GitOps:
 
 - Streams for Apache Kafka operator prerequisite
-- Privileged SCC grant for the AAP log forwarder DaemonSet in `aap`
+- AAP controller **external logging aggregation** via settings API (`LOG_AGGREGATOR_TYPE: other`) — configured automatically after the observability stack syncs
 - HTTP **Probe** resources for Apache monitoring (same as VM GitOps)
 
 One-time Argo CD bootstrap (also run automatically during `install.yml`):
@@ -480,12 +481,22 @@ Event-driven automation and log storage share a Kafka-backed observability pipel
 
 | Component | Purpose |
 | --------- | ------- |
-| **Upstream OTel Collector** | Receives Alertmanager + ITSM webhooks and OTLP logs; publishes canonical JSON to Kafka |
+| **Upstream OTel Collector** | Receives Alertmanager + ITSM webhooks and AAP controller logs (HTTP JSON); publishes canonical JSON to Kafka |
 | **Kafka topics** | `aiops.alertmanager`, `aiops.itsm`, `aiops.aap.logs` |
 | **EDA activations** | `ansible.eda.kafka` rulebooks consume alert and ITSM topics |
-| **Downstream OTel Collector** | Consumes all three Kafka topics; forwards to Loki via OTLP HTTP |
+| **Downstream OTel Collector** | Consumes all three Kafka topics; sets Loki labels (`aiops_source`, `itsm_event`, etc.) and forwards via OTLP HTTP |
 | **Loki** | Stores AAP logs, Alertmanager events, and ITSM activity |
 | **Grafana** | Queries Loki; provisioned **AIOps** dashboards |
+
+**AAP platform logs** use the [AAP 2.7 logging aggregation API](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7/observe-assembly_controller_logging_aggregation): `PATCH /api/controller/v2/settings/logging/` with `LOG_AGGREGATOR_TYPE: other` and `LOG_AGGREGATOR_HOST` pointing at the upstream collector (`http://otel-collector-upstream.aiops-observability.svc:8092/v1/aap/logs`). Loggers: `awx`, `activity_stream`, `job_events`, `system_tracking`. The downstream collector labels records with `aiops_source=aap` and `service_namespace=aap` for the **AAP Platform Logs** dashboard.
+
+**Dashboard label requirements:**
+
+| Source | Loki labels |
+| ------ | ----------- |
+| AAP | `aiops_source=aap`, `service_namespace=aap` |
+| Alertmanager | `aiops_source=alertmanager`, `alert_status`, `alertname`, `vm_name` |
+| ITSM | `aiops_source=itsm`, `itsm_event` (e.g. `incident.created`, `request.submitted`) |
 
 **Provisioned dashboards** (folder **AIOps**):
 
@@ -508,6 +519,8 @@ GitOps facts in `artifacts/demo_platform_facts.yml`:
 ```yaml
 demo_platform.observability.gitops_repo   # Observability
 demo_platform.observability.gitops_app      # observability-stack
+demo_platform.observability.collector_aap_logs_url
+demo_platform.observability.aap_logging_aggregation_enabled
 ```
 
 Login URL and credentials are in `artifacts/demo_platform_facts.yml`:
@@ -618,6 +631,23 @@ Workflow survey (CPU): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`,
 Workflow survey (Memory): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`, `mem`.
 
 Install also upserts KB articles **Modify VM CPUs (ITSM service request + AIOps)** and **Modify VM Memory (ITSM service request + AIOps)** for RAG. The bot uses a two-step flow documented in each KB: Step 1 submit the catalog request via ITSM API; Step 2 launch the matching AAP workflow with `itsm_change_ref` and resource parameters. Passing `extra_vars` on MCP workflow launch requires a small [itsm-agent](https://github.com/zaskan/itsm-agent) follow-up (`requestBody` is currently empty).
+
+## Reset demo runtime state
+
+`configure_aap_reset_pipeline.yml` registers job template **Reset** (`reset.yml`) in org **AIOps**. Launch it from AAP (or run the playbook locally with credentials) to clear demo **runtime** data while preserving ITSM catalog templates, KB articles, and asset types.
+
+**Clears:** all ITSM runtime records (completed and open changes, requests, CTASKs, incidents, and assets) via `POST /api/v1/settings/purge-runtime-data` when the patched itsm-app image is deployed; otherwise falls back to cancelling open changes/requests and deleting drafts, incidents, and assets only. Also clears Gitea `Infrastructure/vms/` and `Playbooks/remediations/`, Argo CD–managed KubeVirt VMs, ephemeral `Lightspeed Remediation - *` job templates, **operations** channel chat history, and AAP job-detail records (via **Cleanup Job Details** with `days: 0`). Preserves ITSM catalog templates, KB articles, and asset types. Finishes with an **AIOps Infrastructure** inventory sync.
+
+Re-run `playbooks/install.yml` (or rebuild the itsm-app image) after upgrading so the runtime purge API is available; without it, completed changes and fulfilled requests remain visible in ITSM.
+
+**Requires:** `reset_confirm: true` (set automatically on the AAP job template).
+
+```bash
+ansible-playbook playbooks/casc/configure_aap_reset_pipeline.yml
+ansible-playbook playbooks/casc/playbooks/reset.yml -e reset_confirm=true
+```
+
+After adding or editing `reset.yml`, re-run `configure_gitea_repos.yml` and sync the **AIOps Playbooks** project in AAP.
 
 ## Configure chat-app for AIOps
 

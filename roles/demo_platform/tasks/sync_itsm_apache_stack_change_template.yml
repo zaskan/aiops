@@ -12,7 +12,9 @@
     headers:
       Accept: application/json
   register: itsm_apache_stack_task_templates_list
-
+  until: itsm_apache_stack_task_templates_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: GET ITSM change templates for Apache stack change template sync
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates"
@@ -26,7 +28,9 @@
     headers:
       Accept: application/json
   register: itsm_apache_stack_change_templates_list
-
+  until: itsm_apache_stack_change_templates_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Resolve Apache stack change template id
   ansible.builtin.set_fact:
     itsm_apache_stack_change_template_id: >-
@@ -90,7 +94,10 @@
   when:
     - itsm_apache_stack_change_template_id is not none
     - itsm_apache_stack_change_template_task_ids | default([]) | length > 0
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Display synced Apache stack change template task order
   ansible.builtin.debug:
     msg: >-

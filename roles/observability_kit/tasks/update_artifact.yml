@@ -39,6 +39,14 @@
                 ~ observability_kit_collector_itsm_port
                 ~ observability_kit_collector_itsm_path
               ),
+              'collector_aap_logs_url': (
+                'http://'
+                ~ observability_kit_collector_internal_host
+                ~ ':'
+                ~ observability_kit_collector_aap_logs_port
+                ~ observability_kit_collector_aap_logs_path
+              ),
+              'aap_logging_aggregation_enabled': observability_kit_configure_aap_logging | default(true) | bool,
               'collector_otlp_grpc': (
                 observability_kit_collector_internal_host
                 ~ ':'

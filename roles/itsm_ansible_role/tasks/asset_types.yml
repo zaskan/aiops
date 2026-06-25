@@ -15,7 +15,9 @@
       Accept: application/json
   register: _itsm_list_at
   when: itsm_ansible_role_asset_types | bool and itsm_asset_types | length > 0
-
+  until: _itsm_list_at is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Merge existing asset types into name-to-id map
   ansible.builtin.set_fact:
     itsm_asset_type_by_name: "{{ itsm_asset_type_by_name | combine({ item.name: item.id }) }}"
@@ -49,7 +51,9 @@
     - itsm_ansible_role_asset_types | bool
     - itsm_asset_types | length > 0
     - item.name not in (itsm_asset_type_by_name | default({}))
-
+  until: _itsm_at_post is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Merge newly created asset types into name map
   ansible.builtin.set_fact:
     itsm_asset_type_by_name: "{{ itsm_asset_type_by_name | combine({ item.json.name: item.json.id }) }}"

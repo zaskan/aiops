@@ -19,7 +19,10 @@
     - itsm_ansible_role_admin_settings | bool
     - itsm_app_title is defined
     - itsm_app_title | length > 0
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: PATCH branding
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url }}/api/v1/settings/branding"
@@ -39,7 +42,10 @@
     - itsm_ansible_role_admin_settings | bool
     - itsm_branding is mapping
     - itsm_branding | length > 0
-
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Sync outbound webhooks (GET/POST/PATCH/DELETE multi-target API)
   ansible.builtin.include_tasks: webhooks.yml
   when:

@@ -14,7 +14,10 @@
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
   no_log: true
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Update AIOps Playbooks project from SCM
   awx.awx.project_update:
     project: "{{ aap_vm_pipeline_project }}"
@@ -24,7 +27,10 @@
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
   register: aap_vm_pipeline_project_update
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Fail when AIOps Playbooks SCM sync did not succeed
   ansible.builtin.fail:
     msg: >-

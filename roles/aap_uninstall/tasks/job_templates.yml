@@ -13,7 +13,10 @@
     - "{{ aap_httpd_pipeline_jt_expose }}"
     - "{{ aap_httpd_pipeline_jt_register_itsm }}"
     - "{{ aap_httpd_pipeline_jt_start }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Apache troubleshoot pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
@@ -25,7 +28,10 @@
   loop:
     - "{{ aap_apache_troubleshoot_pipeline_jt_create_incident }}"
     - "{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove ITSM chat notification job template from AAP
   awx.awx.job_template:
     name: "{{ aap_itsm_chat_pipeline_jt_publish }}"
@@ -35,7 +41,10 @@
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   ignore_errors: true
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove Lightspeed remediation pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
@@ -50,7 +59,10 @@
     - "{{ aap_lightspeed_remediation_pipeline_jt_create }}"
     - "{{ aap_lightspeed_remediation_pipeline_jt_launch }}"
     - "{{ aap_lightspeed_remediation_pipeline_jt_close }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove VM pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
@@ -63,7 +75,10 @@
     - "{{ aap_vm_pipeline_jt_push_vm }}"
     - "{{ aap_vm_pipeline_jt_sync_vms }}"
     - "{{ aap_vm_pipeline_jt_register_itsm }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove VM modification pipeline job templates from AAP
   awx.awx.job_template:
     name: "{{ item }}"
@@ -76,7 +91,23 @@
     - "{{ aap_vm_cpu_modification_pipeline_jt_patch }}"
     - "{{ aap_vm_memory_modification_pipeline_jt_patch }}"
     - "{{ aap_vm_modification_pipeline_jt_restart_vm }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
+- name: Remove Reset job template from AAP
+  awx.awx.job_template:
+    name: "{{ aap_reset_pipeline_jt_name }}"
+    organization: "{{ aap_uninstall_organization }}"
+    state: absent
+    controller_host: "{{ aap_uninstall_controller_host }}"
+    controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
+    validate_certs: "{{ aap_uninstall_validate_certs }}"
+  ignore_errors: true
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Remove legacy Deploy Apache App job template from AAP if present
   awx.awx.job_template:
     name: "{{ item }}"
@@ -86,3 +117,7 @@
     controller_oauthtoken: "{{ aap_uninstall_controller_oauthtoken }}"
     validate_certs: "{{ aap_uninstall_validate_certs }}"
   loop: "{{ [aap_uninstall_legacy_jt_deploy_apache_app] + (aap_uninstall_legacy_apache_stack_job_templates | default([])) | unique }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

@@ -29,7 +29,9 @@
     headers:
       Accept: application/json
   register: itsm_kb_apache_troubleshoot_list
-
+  until: itsm_kb_apache_troubleshoot_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Resolve existing KB article id by title
   ansible.builtin.set_fact:
     itsm_kb_apache_troubleshoot_existing_id: >-
@@ -64,7 +66,9 @@
       Content-Type: application/json
   register: itsm_kb_apache_troubleshoot_update
   when: itsm_kb_apache_troubleshoot_existing_id is not none and itsm_kb_apache_troubleshoot_existing_id | string | length > 0
-
+  until: itsm_kb_apache_troubleshoot_update is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Create ITSM KB article for Apache troubleshoot
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/kb/articles"
@@ -85,7 +89,9 @@
       Content-Type: application/json
   register: itsm_kb_apache_troubleshoot_create
   when: itsm_kb_apache_troubleshoot_existing_id is none or itsm_kb_apache_troubleshoot_existing_id | string | length == 0
-
+  until: itsm_kb_apache_troubleshoot_create is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Record ITSM KB article id from upsert response
   ansible.builtin.set_fact:
     itsm_kb_apache_troubleshoot_article_id: >-

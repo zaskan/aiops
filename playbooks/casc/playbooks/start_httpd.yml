@@ -27,6 +27,17 @@
         name: apache_app
         tasks_from: start
 
+- name: Enable Apache HTTP monitoring probe after httpd is running
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Apply Apache HTTP monitoring probe for provisioned application
+      ansible.builtin.include_role:
+        name: apache_exposure
+        tasks_from: ensure_http_probe.yml
+
 - name: Complete ITSM change task tracking
   hosts: localhost
   gather_facts: false

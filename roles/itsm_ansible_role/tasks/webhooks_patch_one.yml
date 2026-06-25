@@ -29,3 +29,7 @@
          | combine({'enabled': _want_en}
            if ((_have_en | bool) != (_want_en | bool)) else {}) }}
   when: (wh_patch | length) > 0
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"

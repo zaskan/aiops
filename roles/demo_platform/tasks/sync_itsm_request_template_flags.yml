@@ -13,7 +13,9 @@
     headers:
       Accept: application/json
   register: itsm_request_template_flags_list
-
+  until: itsm_request_template_flags_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: PATCH ITSM request template flags when they differ from desired state
   ansible.builtin.uri:
     url: >-
@@ -59,3 +61,7 @@
           | first
         ).require_standard_change | default(false) | bool
       ) != (item.require_standard_change | default(false) | bool)
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"

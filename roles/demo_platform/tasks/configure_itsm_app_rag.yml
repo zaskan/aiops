@@ -46,6 +46,9 @@
 - name: Ensure itsm-app avoids duplicate catalog request changes
   ansible.builtin.include_tasks: ensure_itsm_app_catalog_ritm_patch.yml
 
+- name: Ensure itsm-app exposes runtime purge API for platform reset
+  ansible.builtin.include_tasks: ensure_itsm_app_runtime_purge_patch.yml
+
 - name: Resolve effective ITSM KB embedding settings
   ansible.builtin.set_fact:
     itsm_app_embedding_base_url_effective: >-

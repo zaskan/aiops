@@ -1,0 +1,3 @@
+---
+- name: Ensure Deploy Apache Application Stack master workflow exists
+  ansible.builtin.include_tasks: workflow.yml

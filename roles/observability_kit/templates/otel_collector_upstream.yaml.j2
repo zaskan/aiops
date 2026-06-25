@@ -39,6 +39,11 @@ data:
         path: {{ observability_kit_collector_itsm_path }}
         health_path: /health/itsm
 
+      webhookevent/aap:
+        endpoint: 0.0.0.0:{{ observability_kit_collector_aap_logs_port }}
+        path: {{ observability_kit_collector_aap_logs_path }}
+        health_path: /health/aap
+
     processors:
       batch:
         timeout: 1s
@@ -51,6 +56,12 @@ data:
               - set(body, ParseJSON(body)) where IsString(body)
 
       transform/itsm_kafka:
+        log_statements:
+          - context: log
+            statements:
+              - set(body, ParseJSON(body)) where IsString(body)
+
+      transform/aap_kafka:
         log_statements:
           - context: log
             statements:
@@ -75,7 +86,7 @@ data:
         brokers:
           - {{ observability_kit_kafka_internal_bootstrap }}
         topic: {{ observability_kit_kafka_topic_aap_logs }}
-        encoding: otlp_proto
+        encoding: raw
         protocol_version: 2.0.0
 
     service:
@@ -90,8 +101,8 @@ data:
           processors: [transform/itsm_kafka, batch]
           exporters: [kafka/itsm]
         logs/aap:
-          receivers: [otlp]
-          processors: [batch]
+          receivers: [webhookevent/aap]
+          processors: [transform/aap_kafka, batch]
           exporters: [kafka/aap]
 ---
 apiVersion: apps/v1
@@ -126,6 +137,8 @@ spec:
               containerPort: {{ observability_kit_collector_alertmanager_port }}
             - name: itsm
               containerPort: {{ observability_kit_collector_itsm_port }}
+            - name: aap-logs
+              containerPort: {{ observability_kit_collector_aap_logs_port }}
             - name: health
               containerPort: 13133
           readinessProbe:
@@ -179,6 +192,9 @@ spec:
     - name: itsm
       port: {{ observability_kit_collector_itsm_port }}
       targetPort: itsm
+    - name: aap-logs
+      port: {{ observability_kit_collector_aap_logs_port }}
+      targetPort: aap-logs
     - name: health
       port: 13133
       targetPort: health

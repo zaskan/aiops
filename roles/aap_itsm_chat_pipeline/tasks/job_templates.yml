@@ -20,3 +20,7 @@
     controller_host: "{{ aap_itsm_chat_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_itsm_chat_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_itsm_chat_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

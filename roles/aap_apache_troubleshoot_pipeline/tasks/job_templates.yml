@@ -17,7 +17,10 @@
     controller_host: "{{ aap_apache_troubleshoot_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_apache_troubleshoot_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_troubleshoot_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Troubleshoot apache application job template exists in AAP
   awx.awx.job_template:
     name: "{{ aap_apache_troubleshoot_pipeline_jt_troubleshoot }}"
@@ -44,3 +47,7 @@
     controller_host: "{{ aap_apache_troubleshoot_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_apache_troubleshoot_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_apache_troubleshoot_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

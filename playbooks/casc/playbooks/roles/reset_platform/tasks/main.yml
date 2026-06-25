@@ -1,0 +1,65 @@
+---
+- name: Preflight and load credentials for platform reset
+  ansible.builtin.include_tasks: load_credentials.yml
+  tags:
+    - always
+
+- name: Purge ITSM runtime data
+  ansible.builtin.include_tasks: itsm_purge_runtime_data.yml
+  tags:
+    - itsm
+
+- name: Remove Gitea remediation playbooks
+  ansible.builtin.include_tasks: gitea_cleanup_directory.yml
+  vars:
+    reset_gitea_cleanup_repo: "{{ reset_gitea_playbooks_repo }}"
+    reset_gitea_cleanup_path: "{{ reset_gitea_remediations_path }}"
+    reset_gitea_cleanup_patterns: "*.yml"
+    reset_gitea_cleanup_commit_message: Reset demo remediations
+    reset_gitea_cleanup_workdir: "{{ reset_gitea_workdir }}-playbooks"
+  tags:
+    - gitea_remediations
+
+- name: Remove Gitea VM manifests
+  ansible.builtin.include_tasks: gitea_cleanup_directory.yml
+  vars:
+    reset_gitea_cleanup_repo: "{{ reset_gitea_infrastructure_repo }}"
+    reset_gitea_cleanup_path: "{{ reset_gitea_infrastructure_path }}"
+    reset_gitea_cleanup_patterns: "*.yaml"
+    reset_gitea_cleanup_commit_message: Reset demo VM manifests
+    reset_gitea_cleanup_workdir: "{{ reset_gitea_workdir }}-infrastructure"
+  tags:
+    - gitea_vms
+
+- name: Remove Apache HTTP monitoring probes for deleted VMs
+  ansible.builtin.include_tasks: openshift_delete_apache_http_probes.yml
+  tags:
+    - gitea_vms
+    - openshift
+
+- name: Sync and prune Infrastructure VMs via Argo CD
+  ansible.builtin.include_role:
+    name: gitops_infrastructure
+    tasks_from: sync.yml
+  tags:
+    - argocd
+
+- name: Delete ephemeral Lightspeed remediation job templates
+  ansible.builtin.include_tasks: aap_delete_ephemeral_remediation_jts.yml
+  tags:
+    - aap_jts
+
+- name: Clear operations channel chat history
+  ansible.builtin.include_tasks: chat_clear_operations_channel.yml
+  tags:
+    - chat
+
+- name: Run AAP Cleanup Job Details system job
+  ansible.builtin.include_tasks: aap_cleanup_job_details.yml
+  tags:
+    - aap_cleanup
+
+- name: Sync AIOps Infrastructure inventory from ITSM
+  ansible.builtin.include_tasks: sync_infrastructure_inventory.yml
+  tags:
+    - inventory

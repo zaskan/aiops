@@ -1,0 +1,92 @@
+diff --git a/app/routes/api_v1.py b/app/routes/api_v1.py
+index a4a756f..240931d 100644
+--- a/app/routes/api_v1.py
++++ b/app/routes/api_v1.py
+@@ -20,6 +20,7 @@ from app.services import inventory as inv_svc
+ from app.services import kb as kb_svc
+ from app.services import branding as branding_svc
+ from app.services import data_purge as data_purge_svc
++from app.services import runtime_purge as runtime_purge_svc
+ from app.services import request_templates as rtpl_svc
+ from app.services import service_requests as req_svc
+ from app.services import settings as settings_svc
+@@ -132,6 +133,23 @@ def api_purge_data(
+     return {"deleted": deleted}
+ 
+ 
++@router.post("/settings/purge-runtime-data", response_model=schemas.PurgeDataOut)
++def api_purge_runtime_data(
++    user: Annotated[dict, Depends(get_current_user_basic_admin)],
++    body: schemas.PurgeDataBody,
++) -> dict:
++    if body.confirm != runtime_purge_svc.RUNTIME_PURGE_CONFIRM_PHRASE:
++        raise HTTPException(
++            status.HTTP_400_BAD_REQUEST,
++            f'Confirmation phrase must be exactly "{runtime_purge_svc.RUNTIME_PURGE_CONFIRM_PHRASE}"',
++        )
++    try:
++        deleted = runtime_purge_svc.purge_runtime_data(actor_admin_id=user["id"])
++    except ValueError as e:
++        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
++    return {"deleted": deleted}
++
++
+ @router.get("/incidents", response_model=list[schemas.IncidentOut])
+ def api_list_incidents(
+     _user: Annotated[dict, Depends(get_current_user_basic)],
+diff --git a/app/services/runtime_purge.py b/app/services/runtime_purge.py
+new file mode 100644
+index 0000000..278dee3
+--- /dev/null
++++ b/app/services/runtime_purge.py
+@@ -0,0 +1,50 @@
++"""Runtime data purge — delete operational records while preserving catalog."""
++
++from __future__ import annotations
++
++from app import db
++from app.services import users_admin as usr_svc
++
++RUNTIME_PURGE_CONFIRM_PHRASE = "DELETE RUNTIME DATA"
++
++_RUNTIME_PURGE_TABLES: tuple[str, ...] = (
++    "workflow_events",
++    "change_tasks",
++    "change_requests",
++    "requested_items",
++    "service_requests",
++    "request_comments",
++    "comments",
++    "incident_events",
++    "incidents",
++    "inventory_assets",
++)
++
++
++def purge_runtime_data(*, actor_admin_id: int) -> dict[str, int]:
++    """Delete operational ITSM records; preserve templates, KB, and asset types."""
++    actor = usr_svc.get_user(actor_admin_id)
++    if not actor or actor.get("role") != "admin":
++        raise ValueError("Administrator access required")
++
++    deleted: dict[str, int] = {}
++
++    with db.cursor() as cur:
++        cur.execute("PRAGMA foreign_keys = OFF")
++        try:
++            for table in _RUNTIME_PURGE_TABLES:
++                cur.execute(
++                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
++                    (table,),
++                )
++                if not cur.fetchone():
++                    continue
++                cur.execute(f"DELETE FROM {table}")  # noqa: S608
++                deleted[table] = cur.rowcount
++
++            for table in _RUNTIME_PURGE_TABLES:
++                cur.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table,))
++        finally:
++            cur.execute("PRAGMA foreign_keys = ON")
++
++    return deleted

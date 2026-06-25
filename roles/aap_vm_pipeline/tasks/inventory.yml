@@ -7,7 +7,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure localhost host exists in AIOps Localhost inventory
   awx.awx.host:
     name: localhost
@@ -18,3 +21,7 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

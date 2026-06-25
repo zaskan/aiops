@@ -239,6 +239,17 @@
       delegate_to: localhost
       delegate_facts: true
 
+- name: Ensure Apache HTTP monitoring probe after remediation
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    - name: Apply Apache HTTP monitoring probe after successful remediation
+      ansible.builtin.include_role:
+        name: apache_exposure
+        tasks_from: ensure_http_probe.yml
+
 - name: Complete ITSM incident and notify chat
   hosts: localhost
   gather_facts: false

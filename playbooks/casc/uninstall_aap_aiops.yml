@@ -12,5 +12,6 @@
     - ../../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
     - ../../group_vars/all/aap_itsm_chat_pipeline.yml
     - ../../group_vars/all/aap_apache_troubleshoot_pipeline.yml
+    - ../../group_vars/all/aap_reset_pipeline.yml
   roles:
     - role: aap_uninstall

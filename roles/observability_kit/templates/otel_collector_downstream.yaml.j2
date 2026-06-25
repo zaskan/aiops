@@ -18,8 +18,9 @@ data:
         brokers:
           - {{ observability_kit_kafka_internal_bootstrap }}
         topic: {{ observability_kit_kafka_topic_aap_logs }}
-        encoding: otlp_proto
-        group_id: otel-collector-downstream-aap
+        encoding: raw
+        group_id: otel-collector-downstream-aap-raw
+        initial_offset: latest
         protocol_version: 2.0.0
 
       kafka/alertmanager:
@@ -45,41 +46,53 @@ data:
 
       transform/aap:
         log_statements:
-          - context: resource
+          - context: log
             statements:
-              - set(attributes["aiops_source"], "aap")
+              - set(resource.attributes["aiops_source"], "aap")
+              - set(resource.attributes["service_namespace"], "{{ observability_kit_aap_namespace }}")
+              - merge_maps(cache, ParseJSON(body), "upsert") where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
+              - set(body, ParseJSON(body)) where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
+              - set(resource.attributes["aap_logger"], cache["logger"]) where cache["logger"] != nil
+              - set(resource.attributes["aap_logger"], cache["logger_name"]) where cache["logger_name"] != nil and cache["logger"] == nil
+              - set(body, String(cache)) where IsMap(cache)
 
       transform/alertmanager:
         log_statements:
           - context: log
             statements:
-              - set(body, ParseJSON(body)) where IsMatch(body, "^\"")
-              - merge_maps(cache, ParseJSON(body), "upsert") where IsMatch(body, "^\\{")
-              - set(resource.attributes["aiops_source"], "alertmanager") where IsMap(cache)
+              - set(resource.attributes["aiops_source"], "alertmanager")
+              - merge_maps(cache, ParseJSON(body), "upsert") where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
+              - set(body, ParseJSON(body)) where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
               - set(resource.attributes["alert_status"], cache["payload"]["status"]) where cache["payload"]["status"] != nil
-              - set(resource.attributes["alert_status"], cache["status"]) where cache["status"] != nil and cache["payload"] == nil
+              - set(resource.attributes["alert_status"], cache["status"]) where cache["status"] != nil
               - set(resource.attributes["alertname"], cache["payload"]["commonLabels"]["alertname"]) where cache["payload"]["commonLabels"]["alertname"] != nil
-              - set(resource.attributes["alertname"], cache["commonLabels"]["alertname"]) where cache["commonLabels"]["alertname"] != nil and cache["payload"] == nil
+              - set(resource.attributes["alertname"], cache["commonLabels"]["alertname"]) where cache["commonLabels"]["alertname"] != nil
               - set(resource.attributes["vm_name"], cache["payload"]["commonLabels"]["vm_name"]) where cache["payload"]["commonLabels"]["vm_name"] != nil
-              - set(resource.attributes["vm_name"], cache["commonLabels"]["vm_name"]) where cache["commonLabels"]["vm_name"] != nil and cache["payload"] == nil
+              - set(resource.attributes["vm_name"], cache["commonLabels"]["vm_name"]) where cache["commonLabels"]["vm_name"] != nil
               - set(body, String(cache["payload"])) where cache["payload"] != nil
-              - set(body, String(cache)) where cache["payload"] == nil and cache["commonLabels"] != nil
+              - set(body, String(cache)) where cache["payload"] == nil
 
       transform/itsm:
         log_statements:
           - context: log
             statements:
-              - set(body, ParseJSON(body)) where IsMatch(body, "^\"")
-              - merge_maps(cache, ParseJSON(body), "upsert") where IsMatch(body, "^\\{")
-              - set(resource.attributes["aiops_source"], "itsm") where IsMap(cache)
-              - set(resource.attributes["itsm.event"], cache["payload"]["event"]) where cache["payload"]["event"] != nil
-              - set(resource.attributes["itsm.event"], cache["event"]) where cache["event"] != nil and cache["payload"] == nil
-              - set(resource.attributes["itsm.public_id"], cache["payload"]["incident"]["public_id"]) where cache["payload"]["incident"]["public_id"] != nil
-              - set(resource.attributes["itsm.public_id"], cache["incident"]["public_id"]) where cache["incident"]["public_id"] != nil and cache["payload"] == nil
-              - set(resource.attributes["itsm.public_id"], cache["payload"]["request"]["public_id"]) where cache["payload"]["request"]["public_id"] != nil
-              - set(resource.attributes["itsm.public_id"], cache["request"]["public_id"]) where cache["request"]["public_id"] != nil and cache["payload"] == nil
+              - set(resource.attributes["aiops_source"], "itsm")
+              - merge_maps(cache, ParseJSON(body), "upsert") where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
+              - set(body, ParseJSON(body)) where IsString(body)
+              - merge_maps(cache, body, "upsert") where IsMap(body)
+              - set(resource.attributes["itsm_event"], cache["payload"]["event"]) where cache["payload"]["event"] != nil
+              - set(resource.attributes["itsm_event"], cache["event"]) where cache["event"] != nil
+              - set(resource.attributes["itsm_public_id"], cache["payload"]["incident"]["public_id"]) where cache["payload"]["incident"]["public_id"] != nil
+              - set(resource.attributes["itsm_public_id"], cache["incident"]["public_id"]) where cache["incident"]["public_id"] != nil
+              - set(resource.attributes["itsm_public_id"], cache["payload"]["request"]["public_id"]) where cache["payload"]["request"]["public_id"] != nil
+              - set(resource.attributes["itsm_public_id"], cache["request"]["public_id"]) where cache["request"]["public_id"] != nil
               - set(body, String(cache["payload"])) where cache["payload"] != nil
-              - set(body, String(cache)) where cache["payload"] == nil and cache["event"] != nil
+              - set(body, String(cache)) where cache["payload"] == nil
 
     exporters:
       otlphttp/loki:
@@ -120,6 +133,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ observability_kit_collector_downstream_name }}
+      annotations:
+        checksum/config: "{{ observability_kit_collector_downstream_config_checksum | default('') }}"
     spec:
       containers:
         - name: otel-collector

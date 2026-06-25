@@ -10,6 +10,10 @@ itsm_test_incident_severity: low
 itsm_chat_webhook_verify_retries: 15
 itsm_chat_webhook_verify_delay: 2
 
+itsm_http_timeout: 60
+itsm_http_retries: 3
+itsm_http_retry_delay: 10
+
 itsm_ansible_role_check_connection: true
 itsm_ansible_role_admin_settings: false
 itsm_ansible_role_users: false

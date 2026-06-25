@@ -29,6 +29,9 @@
   loop_control:
     loop_var: repo
     label: "{{ repo.name }}"
+  when:
+    - not (repo.skip_sync | default(false) | bool)
+    - gitea_repos_sync_only | default([]) | length == 0 or repo.name in gitea_repos_sync_only
   vars:
     gitea_repos_seed_entry: >-
       {{

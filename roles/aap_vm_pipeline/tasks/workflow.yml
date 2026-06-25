@@ -12,7 +12,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Register ITSM VM Asset workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: register_itsm_vm_asset
@@ -31,7 +34,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Clear Sync Infrastructure VMs workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: sync_infrastructure_vms
@@ -47,7 +53,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Sync Infrastructure VMs workflow node links to Register ITSM VM Asset
   awx.awx.workflow_job_template_node:
     identifier: sync_infrastructure_vms
@@ -64,7 +73,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Clear Push VM Manifest workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: push_vm_manifest
@@ -83,7 +95,10 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Push VM Manifest workflow node links to Sync Infrastructure VMs
   awx.awx.workflow_job_template_node:
     identifier: push_vm_manifest
@@ -103,3 +118,7 @@
     controller_host: "{{ aap_vm_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_vm_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_vm_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

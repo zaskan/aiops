@@ -1,0 +1,40 @@
+---
+- name: Fail when chat admin credentials are unavailable for channel history cleanup
+  ansible.builtin.fail:
+    msg: >-
+      Chat admin credentials are required to clear channel history. Ensure the Chat App
+      credential is attached or artifacts/demo_platform_facts.yml is available.
+  when: >-
+    (reset_chat_admin_username is not defined or reset_chat_admin_username | string | trim | length == 0)
+    or (reset_chat_admin_password is not defined or reset_chat_admin_password | string | trim | length == 0)
+
+- name: Login to chat-app as admin for channel history cleanup
+  ansible.builtin.uri:
+    url: "{{ reset_chat_api_base_url }}/api/v1/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ reset_chat_admin_username }}"
+      password: "{{ reset_chat_admin_password }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [200]
+  register: reset_chat_admin_login
+  no_log: true
+
+- name: Clear operations channel chat history
+  ansible.builtin.uri:
+    url: >-
+      {{ reset_chat_api_base_url }}/api/v1/channels/{{
+      reset_chat_channel | urlencode }}/messages
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ reset_chat_admin_login.json.access_token }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [200, 204, 404]
+  register: reset_chat_clear_messages
+
+- name: Summarize operations channel chat history cleanup
+  ansible.builtin.debug:
+    msg:
+      - "Channel: {{ reset_chat_channel }}"
+      - "Clear status: {{ reset_chat_clear_messages.status | default('unknown') }}"

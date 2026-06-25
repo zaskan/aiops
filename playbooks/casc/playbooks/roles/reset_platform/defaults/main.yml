@@ -1,0 +1,38 @@
+---
+reset_validate_certs: false
+reset_itsm_runtime_purge_confirm_phrase: DELETE RUNTIME DATA
+reset_controller_api_prefix: /api/controller/
+
+aap_reset_pipeline_organization: AIOps
+aap_reset_pipeline_infrastructure_inventory: AIOps Infrastructure
+aap_reset_pipeline_inventory_source: ITSM Assets
+
+reset_chat_channel: operations
+reset_gitea_infrastructure_repo: Infrastructure
+reset_gitea_infrastructure_path: vms
+reset_gitea_playbooks_repo: Playbooks
+reset_gitea_remediations_path: remediations
+reset_gitea_branch: main
+reset_gitea_git_user_name: aiops-automation
+reset_gitea_git_user_email: aiops@example.com
+reset_gitea_workdir: /tmp/reset-gitea
+reset_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+reset_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+reset_lightspeed_jt_name_prefix: "Lightspeed Remediation - "
+reset_aap_cleanup_job_name: Cleanup Job Details
+reset_aap_cleanup_days: 0
+
+itsm_vm_asset_type_name: Virtual Machine
+
+openshift_apache_monitoring_namespace: aiops-demo
+openshift_apache_monitoring_alert_name: ApacheApplicationDown
+openshift_apache_monitoring_probe_job: apache-http
+openshift_apache_monitoring_probe_for: 15s
+openshift_apache_monitoring_probe_lookback: 1m
+openshift_apache_monitoring_probe_interval: 10s
+openshift_apache_monitoring_probe_scrape_timeout: 5s
+openshift_apache_monitoring_prometheus_rule_name: apache-http-probes
+reset_apache_alert_clear_retries: 20
+reset_apache_alert_clear_delay: 15

@@ -25,10 +25,16 @@
     - ../group_vars/all/aap_eda_pipeline.yml
     - ../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
     - ../group_vars/all/aap_itsm_chat_pipeline.yml
+    - ../group_vars/all/aap_reset_pipeline.yml
     - ../group_vars/all/observability_kit.yml
     - ../group_vars/all/gitops_observability.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
     - ../group_vars/all/itsm_kb_apache_troubleshoot.yml
     - ../group_vars/all/vm_network.yml
+  module_defaults:
+    group/awx.awx.controller:
+      request_timeout: "{{ aap_controller_request_timeout }}"
+    ansible.builtin.uri:
+      timeout: "{{ itsm_http_timeout }}"
   roles:
     - role: demo_platform

@@ -13,3 +13,7 @@
     headers:
       Accept: application/json
   when: itsm_ansible_role_check_connection | bool
+  register: itsm_http_result
+  until: itsm_http_result is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"

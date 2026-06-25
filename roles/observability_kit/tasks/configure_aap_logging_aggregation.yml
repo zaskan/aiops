@@ -1,0 +1,92 @@
+---
+- name: Load demo platform facts artifact for AAP logging aggregation
+  ansible.builtin.include_vars:
+    file: "{{ observability_kit_artifact_file }}"
+
+- name: Resolve AAP controller logging aggregator URL
+  ansible.builtin.set_fact:
+    observability_kit_aap_logging_aggregator_url: >-
+      {{
+        demo_platform.observability.collector_aap_logs_url
+        | default(
+          'http://'
+          ~ observability_kit_collector_internal_host
+          ~ ':'
+          ~ observability_kit_collector_aap_logs_port
+          ~ observability_kit_collector_aap_logs_path
+        )
+      }}
+
+- name: Read current AAP controller logging settings
+  ansible.builtin.uri:
+    url: >-
+      {{ demo_platform.aap.gateway_url | regex_replace('/$', '') }}/api/controller/v2/settings/logging/
+    method: GET
+    user: "{{ demo_platform.aap.username }}"
+    password: "{{ demo_platform.aap.password }}"
+    force_basic_auth: true
+    validate_certs: "{{ observability_kit_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: observability_kit_aap_logging_settings_current
+  no_log: true
+
+- name: Determine whether AAP logging aggregation is already configured
+  ansible.builtin.set_fact:
+    observability_kit_aap_logging_already_configured: >-
+      {{
+        observability_kit_aap_logging_settings_current.json.LOG_AGGREGATOR_ENABLED | default(false) | bool
+        and observability_kit_aap_logging_settings_current.json.LOG_AGGREGATOR_TYPE | default('') == 'other'
+        and observability_kit_aap_logging_settings_current.json.LOG_AGGREGATOR_HOST | default('') | trim
+          == observability_kit_aap_logging_aggregator_url | trim
+      }}
+
+- name: Configure AAP controller external logging aggregation (type other)
+  ansible.builtin.uri:
+    url: >-
+      {{ demo_platform.aap.gateway_url | regex_replace('/$', '') }}/api/controller/v2/settings/logging/
+    method: PATCH
+    user: "{{ demo_platform.aap.username }}"
+    password: "{{ demo_platform.aap.password }}"
+    force_basic_auth: true
+    validate_certs: "{{ observability_kit_validate_certs }}"
+    body_format: json
+    body:
+      LOG_AGGREGATOR_ENABLED: true
+      LOG_AGGREGATOR_TYPE: other
+      LOG_AGGREGATOR_PROTOCOL: https
+      LOG_AGGREGATOR_HOST: "{{ observability_kit_aap_logging_aggregator_url }}"
+      LOG_AGGREGATOR_PORT: null
+      LOG_AGGREGATOR_VERIFY_CERT: false
+      LOG_AGGREGATOR_LEVEL: "{{ observability_kit_aap_logging_level }}"
+      LOG_AGGREGATOR_LOGGERS: "{{ observability_kit_aap_logging_loggers }}"
+      LOG_AGGREGATOR_INDIVIDUAL_FACTS: false
+    status_code: 200
+    return_content: true
+  register: observability_kit_aap_logging_settings_patch
+  when: not observability_kit_aap_logging_already_configured | bool
+  no_log: true
+
+- name: Send AAP logging aggregation test event to upstream collector
+  ansible.builtin.uri:
+    url: >-
+      {{ demo_platform.aap.gateway_url | regex_replace('/$', '') }}/api/controller/v2/settings/logging/test/
+    method: POST
+    user: "{{ demo_platform.aap.username }}"
+    password: "{{ demo_platform.aap.password }}"
+    force_basic_auth: true
+    validate_certs: "{{ observability_kit_validate_certs }}"
+    body_format: json
+    body: {}
+    status_code: [200, 201, 204]
+  register: observability_kit_aap_logging_test
+  failed_when: false
+  no_log: true
+
+- name: Display AAP logging aggregation configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "AAP logging aggregator: {{ observability_kit_aap_logging_aggregator_url }}"
+      - "Configured: {{ 'already set' if observability_kit_aap_logging_already_configured | bool else 'updated' }}"
+      - "Loggers: {{ observability_kit_aap_logging_loggers | join(', ') }}"
+      - "Test event: {{ 'sent' if observability_kit_aap_logging_test.status | default(0) in [200, 201, 204] else 'skipped or unavailable' }}"

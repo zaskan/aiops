@@ -12,7 +12,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Start application services workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: start_httpd
@@ -36,7 +39,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Register ITSM Generic Application Asset workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: register_itsm_apache_app_asset
@@ -58,7 +64,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Expose application workflow node exists
   awx.awx.workflow_job_template_node:
     identifier: expose_apache
@@ -83,7 +92,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Clear Deploy application repository workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: deploy_apache_app
@@ -107,7 +119,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Clear Install application packages workflow node edges before re-linking
   awx.awx.workflow_job_template_node:
     identifier: install_httpd
@@ -131,7 +146,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Deploy application repository workflow node links to Expose application
   awx.awx.workflow_job_template_node:
     identifier: deploy_apache_app
@@ -156,7 +174,10 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
-
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
 - name: Ensure Install application packages workflow node links to Deploy application repository
   awx.awx.workflow_job_template_node:
     identifier: install_httpd
@@ -181,3 +202,7 @@
     controller_host: "{{ aap_httpd_pipeline_controller_host }}"
     controller_oauthtoken: "{{ aap_httpd_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_httpd_pipeline_validate_certs }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"

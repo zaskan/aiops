@@ -13,16 +13,10 @@
 
 - name: Configure AAP organization, credential types, and credentials
   block:
-    - name: Ensure AIOps organization exists in AAP
-      ansible.builtin.include_tasks: organization.yml
-
-    - name: Ensure custom AAP credential types exist
-      ansible.builtin.include_tasks: credential_types.yml
-
-    - name: Ensure AAP credentials exist for demo platform services
-      ansible.builtin.include_tasks: credentials.yml
+    - ansible.builtin.include_tasks: configure.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_casc_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP CASC configuration summary
   ansible.builtin.debug:

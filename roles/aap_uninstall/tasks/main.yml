@@ -24,42 +24,20 @@
 - name: Remove AIOps organization resources from AAP
   when: aap_uninstall_org_present | bool
   block:
-    - name: Remove EDA resources for Apache alert pipeline
-      ansible.builtin.include_tasks: eda_resources.yml
-
-    - name: Remove workflow job templates
-      ansible.builtin.include_tasks: workflows.yml
-
-    - name: Remove job templates
-      ansible.builtin.include_tasks: job_templates.yml
-
-    - name: Remove AIOps Playbooks project
-      ansible.builtin.include_tasks: project.yml
-
-    - name: Remove inventories
-      ansible.builtin.include_tasks: inventories.yml
-
-    - name: Remove credentials
-      ansible.builtin.include_tasks: credentials.yml
-
-    - name: Remove AIOps organization
-      ansible.builtin.include_tasks: organization.yml
-
-    - name: Remove custom credential types
-      ansible.builtin.include_tasks: credential_types.yml
-      when: uninstall_aap_remove_credential_types | bool
+    - ansible.builtin.include_tasks: remove_organization.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_uninstall_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Remove custom credential types when AIOps organization is already absent
   when:
     - not aap_uninstall_org_present | bool
     - uninstall_aap_remove_credential_types | bool
   block:
-    - name: Remove custom credential types from AAP
-      ansible.builtin.include_tasks: credential_types.yml
+    - ansible.builtin.include_tasks: remove_credential_types.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_uninstall_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP uninstall summary
   ansible.builtin.debug:

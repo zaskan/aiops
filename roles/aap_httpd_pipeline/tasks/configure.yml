@@ -1,0 +1,6 @@
+---
+- name: Ensure Apache deployment job templates exist
+  ansible.builtin.include_tasks: job_templates.yml
+
+- name: Ensure Deploy Apache App workflow exists
+  ansible.builtin.include_tasks: workflow.yml

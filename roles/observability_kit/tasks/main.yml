@@ -26,6 +26,10 @@
 - name: Publish observability facts to demo platform artifact
   ansible.builtin.include_tasks: update_artifact.yml
 
+- name: Configure AAP controller native log aggregation
+  ansible.builtin.include_tasks: configure_aap_logging_aggregation.yml
+  when: observability_kit_configure_aap_logging | default(true) | bool
+
 - name: Verify observability stack health endpoints
   ansible.builtin.include_tasks: verify_e2e.yml
 
@@ -39,6 +43,7 @@
       - "Topics: {{ observability_kit_kafka_topic_alertmanager }}, {{ observability_kit_kafka_topic_itsm }}, {{ observability_kit_kafka_topic_aap_logs }}"
       - "Upstream collector (Alertmanager): http://{{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_alertmanager_port }}{{ observability_kit_collector_alertmanager_path }}"
       - "Upstream collector (ITSM): http://{{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_itsm_port }}{{ observability_kit_collector_itsm_path }}"
-      - "Upstream collector (OTLP): {{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_otlp_grpc_port }}"
+      - "Upstream collector (AAP logs): http://{{ observability_kit_collector_internal_host }}:{{ observability_kit_collector_aap_logs_port }}{{ observability_kit_collector_aap_logs_path }}"
+      - "AAP logging aggregation: {{ 'enabled' if observability_kit_configure_aap_logging | default(true) | bool else 'disabled' }}"
       - "Loki OTLP: {{ observability_kit_loki_internal_url }}{{ observability_kit_loki_otlp_path }}"
       - "Grafana: {{ observability_kit_grafana_url | default('pending route') }}"

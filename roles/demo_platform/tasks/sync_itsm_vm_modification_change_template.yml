@@ -12,7 +12,9 @@
     headers:
       Accept: application/json
   register: itsm_vm_modification_task_templates_list
-
+  until: itsm_vm_modification_task_templates_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: GET ITSM change templates for VM modification change template sync
   ansible.builtin.uri:
     url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/change-templates"
@@ -26,7 +28,9 @@
     headers:
       Accept: application/json
   register: itsm_vm_modification_change_templates_list
-
+  until: itsm_vm_modification_change_templates_list is succeeded
+  retries: "{{ itsm_http_retries }}"
+  delay: "{{ itsm_http_retry_delay }}"
 - name: Sync ordered CTASK template ids for each VM modification change template
   ansible.builtin.include_tasks: sync_itsm_vm_modification_change_template_one.yml
   loop: "{{ itsm_vm_modification_change_template_sync_specs }}"

@@ -4,7 +4,9 @@ itsm_api_base_url: "http://127.0.0.1:8000"
 itsm_api_user: admin
 itsm_api_password: changeme
 itsm_validate_certs: true
-itsm_http_timeout: 30
+itsm_http_timeout: 60
+itsm_http_retries: 3
+itsm_http_retry_delay: 10
 
 # Section toggles (bootstrap / POST pass — mostly non-idempotent)
 itsm_ansible_role_check_connection: true

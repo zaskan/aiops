@@ -7,13 +7,10 @@
 
 - name: Configure AAP job templates and workflow for Apache deployment
   block:
-    - name: Ensure Apache deployment job templates exist
-      ansible.builtin.include_tasks: job_templates.yml
-
-    - name: Ensure Deploy Apache App workflow exists
-      ansible.builtin.include_tasks: workflow.yml
+    - ansible.builtin.include_tasks: configure.yml
   environment:
     CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_httpd_pipeline_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
 
 - name: Display AAP httpd pipeline summary
   ansible.builtin.debug:

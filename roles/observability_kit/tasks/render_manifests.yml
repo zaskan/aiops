@@ -60,9 +60,3 @@
     src: otel_collector_downstream.yaml.j2
     dest: "{{ observability_kit_gitops_workdir }}/otel-collector-downstream.yaml"
     mode: "0640"
-
-- name: Render AAP log forwarder manifest
-  ansible.builtin.template:
-    src: aap_log_forwarder.yaml.j2
-    dest: "{{ observability_kit_gitops_workdir }}/aap-log-forwarder.yaml"
-    mode: "0640"

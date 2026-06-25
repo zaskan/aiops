@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../../group_vars/all/aap_casc.yml
     - ../../group_vars/all/aap_vm_pipeline.yml
     - ../../group_vars/all/aap_vm_cpu_modification_pipeline.yml
     - ../../group_vars/all/aap_vm_memory_modification_pipeline.yml

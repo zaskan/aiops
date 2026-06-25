@@ -61,6 +61,7 @@
         namespace: "{{ openshift_apache_monitoring_namespace }}"
       spec:
         interval: "{{ openshift_apache_monitoring_probe_interval }}"
+        scrapeTimeout: "{{ openshift_apache_monitoring_probe_scrape_timeout }}"
         prober:
           url: "{{ openshift_apache_monitoring_blackbox_prober }}"
   loop: "{{ openshift_apache_monitoring_probes.resources | default([]) }}"

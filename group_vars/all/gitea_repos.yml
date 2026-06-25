@@ -28,6 +28,7 @@ gitea_repos_sync_repo_defs:
     local_dir: rulebooks
   - name: Observability
     local_dir: observability
+    skip_sync: true
   - name: AIOps_App
     source_url: https://github.com/zaskan/AIOps_App.git
     branch: main
