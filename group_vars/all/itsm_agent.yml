@@ -14,8 +14,9 @@ itsm_agent_llm_api_key: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_API_KE
 itsm_agent_llm_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_LLM_MODEL', default='llama-scout-17b') }}"
 itsm_agent_llm_embedding_model: "{{ lookup('ansible.builtin.env', 'ITSM_AGENT_EMBEDDING_MODEL', default='') }}"
 itsm_agent_aap_tls_verify: "false"
-itsm_agent_apache_asset_extra_vars_patch: true
-itsm_agent_lightspeed_remediation_patch: true
+itsm_agent_apache_asset_extra_vars_patch: false
+itsm_agent_lightspeed_remediation_patch: false
+itsm_agent_lightspeed_routing_patch: false
 itsm_agent_lightspeed_api_url: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_API_URL', default='') }}"
 itsm_agent_lightspeed_api_token: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_API_TOKEN', default='') }}"
 itsm_agent_lightspeed_api_tls_verify: "{{ lookup('ansible.builtin.env', 'AAP_LIGHTSPEED_TLS_VERIFY', default='false') }}"

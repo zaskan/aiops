@@ -2,7 +2,7 @@
 
 AIOps applies temporary patches at image build time. Track what should land upstream so we can drop the workarounds here.
 
-Issue drafts: `docs/upstream-issues/`. File on GitHub: `scripts/file-upstream-issues.sh` (requires `gh auth login`).
+Issue drafts: `docs/upstream-issues/`. File on GitHub: `scripts/file-upstream-issues.sh` or `scripts/file-itsm-agent-upstream-issues.sh` (requires `GH_TOKEN` / `GITHUB_PAT`).
 
 ---
 
@@ -26,23 +26,19 @@ Ensure tasks: `ensure_itsm_app_vllm_embedding_patch.yml`, `ensure_itsm_app_catal
 
 ## itsm-agent (https://github.com/zaskan/itsm-agent)
 
-Applied in: `roles/demo_platform/tasks/build_itsm_agent_image.yml`  
-Toggle: `itsm_agent_apache_asset_extra_vars_patch` (`group_vars/all/itsm_agent.yml`)  
-Ensure task: `ensure_itsm_agent_apache_asset_patch.yml`
+**Status:** merged on upstream `main` (PRs #4–#5, #7, routing fix #8). Image builds clone `main` with patch toggles **disabled** in `group_vars/all/itsm_agent.yml`.
 
-| # | Patch | File(s) | Upstream fix |
-|---|-------|---------|--------------|
-| 1 | Map ITSM Apache Application asset fields to AAP `extra_vars` before workflow launch | New `bot/apache_assets.py`; runner hook in `bot/runner.py` | On launch, resolve matching **Apache Application** asset and pass: `rpm_packages` → `apache_app_rpm_packages`, `enabled_services` → `apache_app_enabled_services`, `app_clone_path` → `apache_app_docroot`; derive `apache_app_package` / `apache_app_git_package` / `apache_app_service` from those lists |
-| 2 | Pass workflow `extra_vars` in AAP MCP launch `requestBody` | `bot/aap_mcp.py` | Verify upstream sends `requestBody.extra_vars` on `workflow_job_templates_launch_create` / `job_templates_launch_create` (may already be fixed on `main`) |
+| # | Feature | Upstream PR |
+|---|---------|-------------|
+| 1 | Apache asset → AAP `extra_vars` | https://github.com/zaskan/itsm-agent/pull/5 |
+| 2 | Incident `vm_name` parsing | https://github.com/zaskan/itsm-agent/pull/4 |
+| 3 | Lightspeed remediation + playbook review | https://github.com/zaskan/itsm-agent/pull/7 |
+| 4 | LLM-silent remediation routing + `vm server` host parsing | https://github.com/zaskan/itsm-agent/pull/8 |
 
-Patch artifacts in aiops:
+Legacy patch artifacts (kept for reference; toggles off): `roles/demo_platform/files/itsm_agent*`  
+Overlay modules synced from upstream: `roles/demo_platform/files/itsm_agent/bot/`
 
-- `roles/demo_platform/files/itsm_agent/bot/apache_assets.py`
-- `roles/demo_platform/files/itsm_agent_runner_apache_assets.patch`
-
-**Upstream issue to open:** `docs/upstream-issues/itsm-agent-apache-asset-extra-vars.md`
-
-**After upstream merges:** set `itsm_agent_apache_asset_extra_vars_patch: false`, remove build/ensure patch tasks and overlay files.
+Re-enable a toggle only when pinning an older `itsm_agent_git_ref` that lacks the upstream fix.
 
 ---
 

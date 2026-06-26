@@ -536,7 +536,7 @@ Workflow survey (CPU): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`,
 
 Workflow survey (Memory): `itsm_change_ref`, `itsm_service_request_ref`, `vm_name`, `mem`.
 
-Install also upserts KB articles **Modify VM CPUs (ITSM service request + AIOps)** and **Modify VM Memory (ITSM service request + AIOps)** for RAG. The bot uses a two-step flow documented in each KB: Step 1 submit the catalog request via ITSM API; Step 2 launch the matching AAP workflow with `itsm_change_ref` and resource parameters. Passing `extra_vars` on MCP workflow launch requires a small [itsm-agent](https://github.com/zaskan/itsm-agent) follow-up (`requestBody` is currently empty).
+Install also upserts KB articles **Modify VM CPUs (ITSM service request + AIOps)** and **Modify VM Memory (ITSM service request + AIOps)** for RAG. The bot uses a two-step flow documented in each KB: Step 1 submit the catalog request via ITSM API; Step 2 launch the matching AAP workflow with `itsm_change_ref` and resource parameters. Upstream [itsm-agent](https://github.com/zaskan/itsm-agent) `main` already passes `extra_vars` in the AAP MCP launch `requestBody`.
 
 ## Configure chat-app for AIOps
 
@@ -724,7 +724,7 @@ When launching application-stack AAP workflows, the bot maps ITSM request fields
 | Repository clone path | `apache_app_docroot` |
 | Port to expose | `apache_exposure_service_port` |
 
-`apache_app_rpm_packages` also derives `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` derives `apache_app_service`. Implemented via patched `bot/apache_assets.py` at itsm-agent image build (`itsm_agent_apache_asset_extra_vars_patch`).
+`apache_app_rpm_packages` also derives `apache_app_package` / `apache_app_git_package`; `apache_app_enabled_services` derives `apache_app_service`. Implemented in upstream [itsm-agent](https://github.com/zaskan/itsm-agent) `main` (`bot/apache_assets.py`).
 
 There is no public Route for the bot; health checks run on port **8080** inside the pod (`/healthz`, `/readyz`).
 
