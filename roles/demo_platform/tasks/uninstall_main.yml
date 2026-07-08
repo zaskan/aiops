@@ -42,6 +42,8 @@
   ansible.builtin.include_role:
     name: observability_kit
     tasks_from: uninstall.yml
+  vars:
+    gitea_credential_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
   when: uninstall_remove_aap | bool
 
 - name: Uninstall gitea
