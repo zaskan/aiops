@@ -1,0 +1,137 @@
+---
+- name: Look up observability namespace state
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ observability_kit_namespace }}"
+  register: observability_kit_namespace_info
+  failed_when: false
+
+- name: Remove observability namespace and Strimzi leftovers
+  when: observability_kit_namespace_info.resources | default([]) | length > 0
+  block:
+    - name: Remove Observability stack Argo CD Application before namespace teardown
+      kubernetes.core.k8s:
+        state: absent
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: "{{ gitops_observability_app_name }}"
+        namespace: "{{ gitops_observability_app_namespace }}"
+      failed_when: false
+
+    - name: Delete Strimzi KafkaTopics in observability namespace
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kafka.strimzi.io/v1
+        kind: KafkaTopic
+        name: "{{ item }}"
+        namespace: "{{ observability_kit_namespace }}"
+      loop:
+        - "{{ observability_kit_kafka_topic_alertmanager | replace('.', '-') }}"
+        - "{{ observability_kit_kafka_topic_itsm | replace('.', '-') }}"
+        - "{{ observability_kit_kafka_topic_aap_logs | replace('.', '-') }}"
+      failed_when: false
+
+    - name: Delete Strimzi Kafka cluster in observability namespace
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kafka.strimzi.io/v1
+        kind: Kafka
+        name: "{{ observability_kit_kafka_cluster_name }}"
+        namespace: "{{ observability_kit_namespace }}"
+      failed_when: false
+
+    - name: Delete Strimzi KafkaNodePool in observability namespace
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kafka.strimzi.io/v1
+        kind: KafkaNodePool
+        name: dual-role
+        namespace: "{{ observability_kit_namespace }}"
+      failed_when: false
+
+    - name: Request observability namespace deletion
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Namespace
+        name: "{{ observability_kit_namespace }}"
+      failed_when: false
+
+    - name: Wait until observability namespace is removed
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ observability_kit_namespace }}"
+      register: observability_kit_namespace_wait
+      until: observability_kit_namespace_wait.resources | default([]) | length == 0
+      retries: "{{ observability_kit_namespace_delete_retries | default(30) }}"
+      delay: "{{ observability_kit_namespace_delete_delay | default(10) }}"
+      failed_when: false
+
+    - name: List remaining KafkaTopics blocking observability namespace deletion
+      kubernetes.core.k8s_info:
+        api_version: kafka.strimzi.io/v1
+        kind: KafkaTopic
+        namespace: "{{ observability_kit_namespace }}"
+      register: observability_kit_stuck_topics
+      when: observability_kit_namespace_wait.resources | default([]) | length > 0
+      failed_when: false
+
+    - name: Clear Strimzi finalizers from remaining KafkaTopics
+      ansible.builtin.command:
+        argv:
+          - oc
+          - patch
+          - kafkatopic
+          - "{{ item.metadata.name }}"
+          - -n
+          - "{{ observability_kit_namespace }}"
+          - --type=json
+          - -p
+          - '[{"op": "remove", "path": "/metadata/finalizers"}]'
+      loop: "{{ observability_kit_stuck_topics.resources | default([]) }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when:
+        - observability_kit_namespace_wait.resources | default([]) | length > 0
+        - observability_kit_stuck_topics.resources | default([]) | length > 0
+      changed_when: true
+      failed_when: false
+
+    - name: Force-finalize observability namespace when still terminating
+      ansible.builtin.shell: |
+        set -euo pipefail
+        oc get namespace "{{ observability_kit_namespace }}" -o json \
+          | python3 -c 'import json,sys; obj=json.load(sys.stdin); obj["spec"]["finalizers"]=[]; print(json.dumps(obj))' \
+          | oc replace --raw "/api/v1/namespaces/{{ observability_kit_namespace }}/finalize" -f -
+      when:
+        - observability_kit_force_finalize_namespace | default(true) | bool
+        - observability_kit_namespace_wait.resources | default([]) | length > 0
+      changed_when: true
+      failed_when: false
+
+    - name: Wait again until observability namespace is fully removed
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ observability_kit_namespace }}"
+      register: observability_kit_namespace_final_wait
+      until: observability_kit_namespace_final_wait.resources | default([]) | length == 0
+      retries: "{{ observability_kit_namespace_delete_retries | default(30) }}"
+      delay: "{{ observability_kit_namespace_delete_delay | default(10) }}"
+      when: observability_kit_namespace_wait.resources | default([]) | length > 0
+      failed_when: false
+
+    - name: Fail when observability namespace is still present after forced cleanup
+      ansible.builtin.fail:
+        msg: >-
+          Namespace {{ observability_kit_namespace }} is still present after forced cleanup.
+          Inspect remaining resources with:
+          oc get all,kafkas,kafkatopics,kafkanodepools -n {{ observability_kit_namespace }}
+      when: >
+        (
+          observability_kit_namespace_final_wait.resources
+          | default(observability_kit_namespace_wait.resources | default([]))
+          | length
+        ) > 0

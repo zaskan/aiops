@@ -12,6 +12,10 @@ observability_kit_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
 observability_kit_gitea_use_internal: >-
   {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
 
+observability_kit_namespace_delete_retries: 30
+observability_kit_namespace_delete_delay: 10
+observability_kit_force_finalize_namespace: true
+
 observability_kit_manifest_files:
   - namespace.yaml
   - kafka-cluster.yaml

@@ -11,6 +11,9 @@
 - name: Push observability manifests to Gitea Observability repository
   ansible.builtin.include_tasks: push_manifests.yml
 
+- name: Ensure observability namespace is not stuck terminating before GitOps sync
+  ansible.builtin.include_tasks: ensure_namespace_ready.yml
+
 - name: Sync Observability stack to OpenShift via Argo CD
   ansible.builtin.include_tasks: sync_gitops.yml
 

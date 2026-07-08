@@ -33,6 +33,15 @@
       }}
   no_log: true
 
+- name: Stop Argo CD from reconciling observability manifests during uninstall
+  kubernetes.core.k8s:
+    state: absent
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: "{{ gitops_observability_app_name }}"
+    namespace: "{{ gitops_observability_app_namespace }}"
+  failed_when: false
+
 - name: Remove temporary Observability clone directory before uninstall push
   ansible.builtin.file:
     path: "{{ observability_kit_gitops_workdir }}/repo"
@@ -90,26 +99,8 @@
     path: "{{ observability_kit_gitops_workdir }}/repo"
     state: absent
 
-- name: Resolve Observability GitOps destination namespace for final sync
-  ansible.builtin.set_fact:
-    gitops_observability_dest_namespace: "{{ observability_kit_namespace }}"
-
-- name: Sync Observability stack via Argo CD to prune removed manifests
-  ansible.builtin.include_role:
-    name: gitops_observability
-    tasks_from: sync.yml
-  when:
-    - observability_kit_gitops_clone is succeeded
-    - observability_kit_gitops_uninstall_push.rc == 0
-
-- name: Remove Observability stack Argo CD Application
-  kubernetes.core.k8s:
-    state: absent
-    api_version: argoproj.io/v1alpha1
-    kind: Application
-    name: "{{ gitops_observability_app_name }}"
-    namespace: "{{ gitops_observability_app_namespace }}"
-  ignore_errors: true
+- name: Force-remove observability namespace and Strimzi leftovers
+  ansible.builtin.include_tasks: force_remove_namespace.yml
 
 - name: Remove Observability stack Argo CD repository secret
   kubernetes.core.k8s:
@@ -118,13 +109,4 @@
     kind: Secret
     name: "{{ gitops_observability_repo_secret_name }}"
     namespace: "{{ gitops_observability_app_namespace }}"
-  ignore_errors: true
-
-- name: Remove observability namespace when GitOps prune path is unavailable
-  kubernetes.core.k8s:
-    state: absent
-    api_version: v1
-    kind: Namespace
-    name: "{{ observability_kit_namespace }}"
-  when: observability_kit_gitops_clone is failed
-  ignore_errors: true
+  failed_when: false

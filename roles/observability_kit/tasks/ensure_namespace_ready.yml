@@ -1,0 +1,14 @@
+---
+- name: Check whether observability namespace already exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ observability_kit_namespace }}"
+  register: observability_kit_namespace_precheck
+  failed_when: false
+
+- name: Clean up terminating observability namespace before install sync
+  ansible.builtin.include_tasks: force_remove_namespace.yml
+  when:
+    - observability_kit_namespace_precheck.resources | default([]) | length > 0
+    - observability_kit_namespace_precheck.resources[0].metadata.deletionTimestamp is defined
