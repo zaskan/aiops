@@ -6,43 +6,35 @@ itsm-app outbound webhooks POST structured events:
 {"event":"incident.created","timestamp":"...","actor":"admin","incident":{...}}
 ```
 
-chat-app channel webhooks expect:
+chat-app channel webhooks historically expected:
 
 ```json
 {"body":"message text"}
 ```
 
-A direct itsm → chat URL will not work without a translation layer.
+A direct itsm → chat URL did not work without a translation layer.
 
-## AIOps workaround today
+## Upstream fix (chat-app)
 
-itsm-app webhooks POST to an **EDA event stream** (`ITSM App Webhook`). The rulebook
-`itsm_app_chat_notifications.yml` launches AAP job template **Publish ITSM Chat Notification**,
-which formats and POSTs to the chat **operations** channel anonymous webhook.
+Per-channel `webhook_payload_format`:
 
-Example message mapping (same as the legacy bridge):
+- `body` (default) — require `{"body":"..."}`
+- `itsm` — accept itsm-app `incident.created` and `request.submitted` events; map to channel messages. Plain `body` is still accepted when present.
+
+Message mapping:
 
 - `incident.created` → `[incident.created] INC-123 — Title (severity)`
 - `request.submitted` → `[request.submitted] REQ-456 — Service request title`
 
-Configure playbooks:
+Unsupported ITSM event types return HTTP 204 (no message created).
 
-- `playbooks/casc/configure_aap_eda_itsm_webhook_pipeline.yml`
-- `playbooks/casc/configure_aap_itsm_chat_pipeline.yml`
-- `playbooks/casc/configure_itsm_eda_webhook.yml`
+## AIOps integration
 
-itsm-app delivers webhooks with `httpx` and verifies TLS on the configured URL. The external
-EDA Route uses a self-signed certificate chain, so `configure_itsm_eda_webhook.yml` registers the
-in-cluster HTTP ingress (`ansible-eda-event-stream.aap.svc.cluster.local:8000`) with embedded basic
-auth instead of the public Route URL.
+Default (`itsm_chat_webhook_delivery: direct` in `group_vars/all/itsm_aiops.yml`):
 
-## Proposed upstream enhancement
+1. `configure_chat_aiops.yml` sets `webhook_payload_format: itsm` on the **operations** channel
+2. `configure_itsm_chat_webhook.yml` registers itsm-app outbound webhook to the chat anonymous webhook URL
 
-Add optional inbound webhook modes to chat-app, e.g.:
+Legacy EDA path remains available with `itsm_chat_webhook_delivery: eda` (EDA event stream + **Publish ITSM Chat Notification** AAP job).
 
-- `itsm` payload adapter mapping `incident.created` / `request.submitted` to channel messages
-- Or a generic JSON template field on channel webhook settings
-
-## Note
-
-This is an integration gap, not a source patch — chat-app is deployed unmodified from `main` in the AIOps install playbook.
+Deprecated `itsm_chat_bridge` sidecar is removed on configure.

@@ -1,0 +1,20 @@
+---
+- name: Read Grafana Route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - "{{ observability_kit_grafana_route_name }}"
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: observability_kit_grafana_route_host
+  changed_when: false
+  failed_when: false
+
+- name: Capture Grafana external URL
+  ansible.builtin.set_fact:
+    observability_kit_grafana_url: "https://{{ observability_kit_grafana_route_host.stdout | trim }}"
+  when: observability_kit_grafana_route_host.stdout | trim | length > 0

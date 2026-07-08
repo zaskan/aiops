@@ -20,13 +20,13 @@ Ensure tasks: `ensure_itsm_app_vllm_embedding_patch.yml`, `ensure_itsm_app_catal
 
 **Upstream issues to open:** `docs/upstream-issues/itsm-app-encoding-format.md`, `itsm-app-kb-truncation.md`, `itsm-app-catalog-ritm.md`
 
-**After upstream merges:** set patch toggles to `false`, remove patch tasks and `itsm_app_catalog_ritm.patch`.
+**After upstream merges:** set patch toggles to `false`, remove patch tasks and `itsm_app_catalog_ritm.patch`, then rebuild the Quay `itsm-app` image and bump `demo_platform_image_tag`.
 
 ---
 
 ## itsm-agent (https://github.com/zaskan/itsm-agent)
 
-**Status:** merged on upstream `main` (PRs #4–#5, #7, routing fix #8). Image builds clone `main` with patch toggles **disabled** in `group_vars/all/itsm_agent.yml`.
+**Status:** merged on upstream `main` (PRs #4–#5, #7, routing fix #8). Image builds clone `main` with no local patches.
 
 | # | Feature | Upstream PR |
 |---|---------|-------------|
@@ -35,24 +35,23 @@ Ensure tasks: `ensure_itsm_app_vllm_embedding_patch.yml`, `ensure_itsm_app_catal
 | 3 | Lightspeed remediation + playbook review | https://github.com/zaskan/itsm-agent/pull/7 |
 | 4 | LLM-silent remediation routing + `vm server` host parsing | https://github.com/zaskan/itsm-agent/pull/8 |
 
-Legacy patch artifacts (kept for reference; toggles off): `roles/demo_platform/files/itsm_agent*`  
-Overlay modules synced from upstream: `roles/demo_platform/files/itsm_agent/bot/`
-
-Re-enable a toggle only when pinning an older `itsm_agent_git_ref` that lacks the upstream fix.
+Build: `roles/demo_platform/tasks/build_itsm_agent_image.yml` clones `itsm_agent_git_ref` and runs `oc start-build`.
 
 ---
 
 ## chat-app (https://github.com/zaskan/chat-app)
 
-**No source patches** — image built unmodified from `main` (`roles/demo_platform/tasks/install_chat_app.yml`).
+**Status:** ITSM inbound webhook support merged upstream (or pending PR). Image built from `main` with no local patches.
 
-| # | Gap (not a code patch) | Workaround in aiops | Upstream enhancement |
-|---|------------------------|---------------------|----------------------|
-| 1 | Inbound webhooks expect `{"body":"..."}`; itsm-app sends `{"event":"incident.created",...}` / `request.submitted` | **itsm-chat-bridge** sidecar: `roles/itsm_chat_bridge/files/bridge.py` | Native ITSM-style webhook adapter or pluggable inbound payload transform |
+| # | Feature | Notes |
+|---|---------|-------|
+| 1 | `webhook_payload_format=itsm` on channel | Accepts itsm-app `incident.created` / `request.submitted` payloads directly |
 
-OpenShift-only install tweaks (not app patches): ImageStream `lookupPolicy.local`, seed admin env vars.
+Default install (`itsm_chat_webhook_delivery: direct`) registers itsm-app → chat **operations** webhook; no bridge sidecar or EDA chat pipeline required.
 
-**Upstream issue to open:** `docs/upstream-issues/chat-app-itsm-webhook.md`
+Set `itsm_chat_webhook_delivery: eda` in `group_vars/all/itsm_aiops.yml` to restore the legacy EDA + AAP job path.
+
+Build: `roles/demo_platform/tasks/install_chat_app.yml`
 
 ---
 

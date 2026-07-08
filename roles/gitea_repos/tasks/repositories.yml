@@ -8,17 +8,47 @@
     force_basic_auth: true
     validate_certs: "{{ gitea_validate_certs }}"
     body_format: json
-    body:
-      name: "{{ item }}"
-      auto_init: "{{ gitea_repos_auto_init | bool }}"
-      default_branch: "{{ gitea_repos_default_branch }}"
-      private: "{{ gitea_repos_private | bool }}"
+    body: >-
+      {{
+        {
+          'name': item,
+          'auto_init': gitea_repos_auto_init | bool,
+          'default_branch': gitea_repos_default_branch,
+          'private': gitea_repos_private | bool
+        }
+      }}
     status_code:
       - 201
       - 409
+      - 403
   loop: "{{ gitea_repos_list }}"
+  loop_control:
+    label: "{{ item }}"
   register: gitea_repos_create
-  no_log: true
+
+- name: Fail when Gitea admin must change password before creating repositories
+  ansible.builtin.fail:
+    msg: >-
+      Gitea rejected repository creation for {{ item.item }}: admin must change password.
+      Re-run install (ensure_gitea_admin_user clears the flag) or reset via:
+      oc exec -n gitea deployment/gitea -c gitea -- gitea --config /data/gitea/conf/app.ini
+      admin user change-password -u {{ gitea_admin_username }} -p '<password>' --must-change-password=false
+  loop: "{{ gitea_repos_create.results }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - item.status | default(0) == 403
+    - item.content is search('must change your password', ignorecase=true)
+
+- name: Fail when Gitea repository creation returns unexpected status
+  ansible.builtin.fail:
+    msg: >-
+      Gitea repository {{ item.item }} creation failed at {{ gitea_api_base }}/api/v1/user/repos
+      (HTTP {{ item.status | default('unknown') }}): {{ item.content | default(item.msg) }}
+  loop: "{{ gitea_repos_create.results }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when: item.status | default(0) not in [201, 409]
 
 - name: Verify Gitea repository exists
   ansible.builtin.uri:
@@ -31,6 +61,8 @@
     validate_certs: "{{ gitea_validate_certs }}"
     status_code: 200
   loop: "{{ gitea_repos_list }}"
+  loop_control:
+    label: "{{ item }}"
   register: gitea_repos_verify
 
 - name: Build Gitea repository clone URL list for summary

@@ -1,0 +1,24 @@
+---
+observability_kit_namespace: aiops-observability
+observability_kit_validate_certs: false
+observability_kit_artifact_file: "{{ demo_platform_artifacts_dir | default(playbook_dir ~ '/../artifacts') }}/demo_platform_facts.yml"
+
+observability_kit_gitops_workdir: /tmp/observability-manifest
+observability_kit_gitea_repo: Observability
+observability_kit_gitea_branch: main
+observability_kit_git_user_name: aiops-automation
+observability_kit_git_user_email: aiops@example.com
+observability_kit_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+observability_kit_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+observability_kit_manifest_files:
+  - namespace.yaml
+  - kafka-cluster.yaml
+  - kafka-topic-alertmanager.yaml
+  - kafka-topic-itsm.yaml
+  - kafka-topic-aap-logs.yaml
+  - loki.yaml
+  - grafana.yaml
+  - otel-collector-upstream.yaml
+  - otel-collector-downstream.yaml

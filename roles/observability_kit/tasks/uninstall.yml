@@ -1,0 +1,3 @@
+---
+- name: Remove observability stack via GitOps repository prune
+  ansible.builtin.include_tasks: uninstall_gitops.yml

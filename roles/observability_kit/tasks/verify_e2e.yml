@@ -1,0 +1,325 @@
+---
+- name: Verify upstream OTel Collector health from inside cluster
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-upstream-health
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - "http://{{ observability_kit_collector_upstream_name }}:13133/"
+  register: observability_kit_upstream_health
+  changed_when: false
+  failed_when: observability_kit_upstream_health.rc != 0
+
+- name: Verify downstream OTel Collector health from inside cluster
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-downstream-health
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - "http://{{ observability_kit_collector_downstream_name }}:13133/"
+  register: observability_kit_downstream_health
+  changed_when: false
+  failed_when: observability_kit_downstream_health.rc != 0
+
+- name: Verify Loki readiness from inside cluster
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-loki-ready
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - "{{ observability_kit_loki_internal_url }}/ready"
+  register: observability_kit_loki_ready
+  changed_when: false
+  failed_when: observability_kit_loki_ready.rc != 0
+
+- name: Verify Grafana health from inside cluster
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-grafana-health
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - "http://{{ observability_kit_grafana_name }}:{{ observability_kit_grafana_port }}/api/health"
+  register: observability_kit_grafana_health
+  changed_when: false
+  failed_when: observability_kit_grafana_health.rc != 0
+
+- name: Send Alertmanager probe event to upstream collector
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-am-probe
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -H
+      - "Content-Type: application/json"
+      - -d
+      - '{"status":"firing","commonLabels":{"alertname":"AIOpsProbe","vm_name":"probe"}}'
+      - "http://{{ observability_kit_collector_upstream_name }}:{{ observability_kit_collector_alertmanager_port }}{{ observability_kit_collector_alertmanager_path }}"
+  register: observability_kit_am_probe
+  changed_when: false
+  failed_when: false
+
+- name: Send ITSM probe event to upstream collector
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-itsm-probe
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -H
+      - "Content-Type: application/json"
+      - -d
+      - '{"event":"incident.created","incident":{"public_id":"LOKI-PROBE","title":"Loki pipeline probe","severity":"low"}}'
+      - "http://{{ observability_kit_collector_upstream_name }}:{{ observability_kit_collector_itsm_port }}{{ observability_kit_collector_itsm_path }}"
+  register: observability_kit_itsm_probe
+  changed_when: false
+  failed_when: false
+
+- name: Send AAP log probe event to upstream collector
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-aap-probe
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -H
+      - "Content-Type: application/json"
+      - -d
+      - '{"logger":"awx","logger_name":"awx","message":"AIOpsProbe","levelname":"INFO"}'
+      - "http://{{ observability_kit_collector_upstream_name }}:{{ observability_kit_collector_aap_logs_port }}{{ observability_kit_collector_aap_logs_path }}"
+  register: observability_kit_aap_probe
+  changed_when: false
+  failed_when: false
+
+- name: Wait for Kafka and Loki pipeline to index probe events
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: Verify ITSM probe event is queryable in Loki
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-loki-itsm-query
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -G
+      - "{{ observability_kit_loki_internal_url }}/loki/api/v1/query"
+      - --data-urlencode
+      - 'query={aiops_source="itsm"} |= "LOKI-PROBE"'
+      - --data-urlencode
+      - limit=5
+  register: observability_kit_loki_itsm_query
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: >-
+    observability_kit_loki_itsm_query.rc == 0
+    and ('"result":[]' not in observability_kit_loki_itsm_query.stdout)
+    and ('"values"' in observability_kit_loki_itsm_query.stdout)
+  failed_when: false
+
+- name: Verify ITSM probe event type label is queryable in Loki
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-loki-itsm-event-query
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -G
+      - "{{ observability_kit_loki_internal_url }}/loki/api/v1/query"
+      - --data-urlencode
+      - 'query={aiops_source="itsm", itsm_event="incident.created"} |= "LOKI-PROBE"'
+      - --data-urlencode
+      - limit=5
+  register: observability_kit_loki_itsm_event_query
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: >-
+    observability_kit_loki_itsm_event_query.rc == 0
+    and ('"result":[]' not in observability_kit_loki_itsm_event_query.stdout)
+    and ('"values"' in observability_kit_loki_itsm_event_query.stdout)
+  failed_when: false
+
+- name: Verify Alertmanager probe event is queryable in Loki
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-loki-am-query
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -G
+      - "{{ observability_kit_loki_internal_url }}/loki/api/v1/query"
+      - --data-urlencode
+      - 'query={aiops_source="alertmanager",alertname="AIOpsProbe"}'
+      - --data-urlencode
+      - limit=5
+  register: observability_kit_loki_am_query
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: >-
+    observability_kit_loki_am_query.rc == 0
+    and ('"result":[]' not in observability_kit_loki_am_query.stdout)
+    and ('"values"' in observability_kit_loki_am_query.stdout)
+  failed_when: false
+
+- name: Verify AAP probe event is queryable in Loki
+  ansible.builtin.command:
+    argv:
+      - oc
+      - run
+      - observability-loki-aap-query
+      - --rm
+      - -i
+      - --restart=Never
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - --image=curlimages/curl:8.5.0
+      - --
+      - curl
+      - -sf
+      - -G
+      - "{{ observability_kit_loki_internal_url }}/loki/api/v1/query"
+      - --data-urlencode
+      - 'query={aiops_source="aap"} |= "AIOpsProbe"'
+      - --data-urlencode
+      - limit=5
+  register: observability_kit_loki_aap_query
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: >-
+    observability_kit_loki_aap_query.rc == 0
+    and ('"result":[]' not in observability_kit_loki_aap_query.stdout)
+    and ('"values"' in observability_kit_loki_aap_query.stdout)
+  failed_when: false
+
+- name: Set Loki probe result flags for summary output
+  ansible.builtin.set_fact:
+    observability_kit_loki_itsm_probe_ok: >-
+      {{ observability_kit_loki_itsm_query.rc == 0
+         and ('"result":[]' not in observability_kit_loki_itsm_query.stdout)
+         and ('"values"' in observability_kit_loki_itsm_query.stdout) }}
+    observability_kit_loki_itsm_event_probe_ok: >-
+      {{ observability_kit_loki_itsm_event_query.rc == 0
+         and ('"result":[]' not in observability_kit_loki_itsm_event_query.stdout)
+         and ('"values"' in observability_kit_loki_itsm_event_query.stdout) }}
+    observability_kit_loki_am_probe_ok: >-
+      {{ observability_kit_loki_am_query.rc == 0
+         and ('"result":[]' not in observability_kit_loki_am_query.stdout)
+         and ('"values"' in observability_kit_loki_am_query.stdout) }}
+    observability_kit_loki_aap_probe_ok: >-
+      {{ observability_kit_loki_aap_query.rc == 0
+         and ('"result":[]' not in observability_kit_loki_aap_query.stdout)
+         and ('"values"' in observability_kit_loki_aap_query.stdout) }}
+
+- name: Fail when strict E2E verification is enabled and Loki probes did not succeed
+  ansible.builtin.assert:
+    that:
+      - observability_kit_loki_itsm_probe_ok | default(false) | bool
+      - observability_kit_loki_itsm_event_probe_ok | default(false) | bool
+      - observability_kit_loki_am_probe_ok | default(false) | bool
+      - observability_kit_loki_aap_probe_ok | default(false) | bool
+    fail_msg: >-
+      One or more Loki probe queries returned no results. Check Loki OTLP index labels,
+      downstream collector transforms (aiops_source, itsm_event, alertname), and Kafka connectivity.
+  when: observability_kit_verify_strict | default(false) | bool
+
+- name: Display observability E2E health summary
+  ansible.builtin.debug:
+    msg:
+      - "Upstream collector health: OK"
+      - "Downstream collector health: OK"
+      - "Loki ready: OK"
+      - "Grafana health: OK"
+      - "Kafka bootstrap: {{ observability_kit_kafka_internal_bootstrap }}"
+      - "Grafana URL: {{ observability_kit_grafana_url | default('see Route in aiops-observability') }}"
+      - "Loki ITSM probe query: {{ 'OK' if observability_kit_loki_itsm_probe_ok | default(false) | bool else 'pending (check Loki index labels and itsm pipeline)' }}"
+      - "Loki ITSM event label query: {{ 'OK' if observability_kit_loki_itsm_event_probe_ok | default(false) | bool else 'pending (check itsm_event index label)' }}"
+      - "Loki Alertmanager probe query: {{ 'OK' if observability_kit_loki_am_probe_ok | default(false) | bool else 'pending (check alertname index label)' }}"
+      - "Loki AAP probe query: {{ 'OK' if observability_kit_loki_aap_probe_ok | default(false) | bool else 'pending (check AAP log pipeline)' }}"

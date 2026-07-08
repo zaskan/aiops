@@ -30,9 +30,9 @@ On workflow launch, after collecting survey/catalog fields:
 
 ### New file: `bot/apache_assets.py`
 
-Reference implementation:
+Reference implementation on upstream `main`:
 
-https://github.com/zaskan/aiops/blob/main/roles/demo_platform/files/itsm_agent/bot/apache_assets.py
+https://github.com/zaskan/itsm-agent/blob/main/bot/apache_assets.py
 
 Key export: `enrich_collected_from_apache_asset(http, mcp_url_str, mcp_token, collected)`.
 
@@ -62,13 +62,8 @@ Call `enrich_collected_from_apache_asset` in `_launch_in_background` after the I
          session.collected = collected
 ```
 
-Full patch file: https://github.com/zaskan/aiops/blob/main/roles/demo_platform/files/itsm_agent_runner_apache_assets.patch
+Merged upstream: https://github.com/zaskan/itsm-agent/pull/5
 
-## AIOps workaround
+## Status
 
-Patched at image build in `roles/demo_platform/tasks/build_itsm_agent_image.yml`:
-
-- `roles/demo_platform/files/itsm_agent/bot/apache_assets.py`
-- `roles/demo_platform/files/itsm_agent_runner_apache_assets.patch`
-
-Toggle: `itsm_agent_apache_asset_extra_vars_patch` in `group_vars/all/itsm_agent.yml`
+Merged on upstream `main`. AIOps builds the image from `itsm_agent_git_ref` with no local patches (`roles/demo_platform/tasks/build_itsm_agent_image.yml`).

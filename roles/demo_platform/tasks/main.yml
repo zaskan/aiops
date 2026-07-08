@@ -18,6 +18,12 @@
 - name: Verify OVN UserDefinedNetwork support for VM fixed IPs
   ansible.builtin.include_tasks: check_vm_fixed_ip_network.yml
 
+- name: Verify Red Hat Streams for Apache Kafka operator is installed
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: check_streams_operator.yml
+  when: demo_platform_enable_observability_kit | default(true) | bool
+
 - name: Ensure itsm-app is installed and healthy
   ansible.builtin.include_tasks: install_itsm_app.yml
 
@@ -102,6 +108,22 @@
   vars:
     aap_apache_troubleshoot_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
+- name: Configure Argo CD for Observability repository
+  ansible.builtin.include_role:
+    name: gitops_observability
+  vars:
+    gitops_observability_dest_namespace: "{{ observability_kit_namespace }}"
+    gitea_credential_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when: demo_platform_enable_observability_kit | default(true) | bool
+
+- name: Deploy observability kit via GitOps (Kafka, Loki, OTel Collectors)
+  ansible.builtin.include_role:
+    name: observability_kit
+  vars:
+    observability_kit_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    gitea_credential_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when: demo_platform_enable_observability_kit | default(true) | bool
+
 - name: Configure AAP Lightspeed Remediation workflow
   ansible.builtin.include_role:
     name: aap_lightspeed_remediation_pipeline
@@ -113,24 +135,39 @@
     name: aap_eda_pipeline
   vars:
     aap_eda_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when: demo_platform_enable_observability_kit | default(true) | bool
 
 - name: Configure Event-Driven Ansible ITSM webhook chat pipeline
   ansible.builtin.include_role:
     name: aap_eda_itsm_webhook_pipeline
   vars:
     aap_eda_itsm_webhook_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when:
+    - demo_platform_enable_observability_kit | default(true) | bool
+    - itsm_chat_webhook_delivery | default('direct') == 'eda'
 
 - name: Configure AAP ITSM chat notification job template
   ansible.builtin.include_role:
     name: aap_itsm_chat_pipeline
   vars:
     aap_itsm_chat_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+  when:
+    - demo_platform_enable_observability_kit | default(true) | bool
+    - itsm_chat_webhook_delivery | default('direct') == 'eda'
+
+- name: Point itsm-app outbound webhook to chat and verify notifications
+  ansible.builtin.include_tasks: configure_itsm_chat_webhook.yml
+  when: itsm_chat_webhook_delivery | default('direct') == 'direct'
 
 - name: Point itsm-app outbound webhook to EDA and verify chat notifications
   ansible.builtin.include_tasks: configure_itsm_eda_webhook.yml
+  when:
+    - demo_platform_enable_observability_kit | default(true) | bool
+    - itsm_chat_webhook_delivery | default('direct') == 'eda'
 
 - name: Configure OpenShift monitoring alerts for Apache HTTP probes
   ansible.builtin.include_tasks: configure_apache_monitoring.yml
+  when: demo_platform_enable_observability_kit | default(true) | bool
 
 - name: Configure AAP Deploy Apache Application Stack master workflow
   ansible.builtin.include_role:
@@ -143,3 +180,9 @@
     name: aap_vm_modification_pipeline
   vars:
     aap_vm_modification_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Configure AAP Reset job template
+  ansible.builtin.include_role:
+    name: aap_reset_pipeline
+  vars:
+    aap_reset_pipeline_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

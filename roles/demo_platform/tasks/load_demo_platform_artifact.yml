@@ -1,0 +1,11 @@
+---
+- name: Read demo platform facts artifact from disk
+  ansible.builtin.slurp:
+    src: "{{ demo_platform_artifact_file | default(demo_platform_artifacts_dir ~ '/demo_platform_facts.yml') }}"
+  register: demo_platform_artifact_slurp
+  no_log: true
+
+- name: Load demo platform facts from artifact slurp
+  ansible.builtin.set_fact:
+    demo_platform: "{{ (demo_platform_artifact_slurp.content | b64decode | from_yaml).demo_platform | default({}) }}"
+  no_log: true

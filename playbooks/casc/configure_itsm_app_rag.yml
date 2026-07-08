@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../../group_vars/all/container_images.yml
     - ../../group_vars/all/demo_platform.yml
     - ../../group_vars/all/itsm_agent.yml
   vars:

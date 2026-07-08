@@ -1,0 +1,59 @@
+---
+- name: List AAP job templates in organization for ephemeral remediation cleanup
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/?organization__name={{
+      aap_vm_pipeline_organization | default(aap_reset_pipeline_organization) | urlencode }}&page_size=200
+    method: GET
+    headers:
+      Authorization: "Bearer {{ reset_controller_oauthtoken }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [200]
+  register: reset_aap_job_templates_lookup
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ reset_controller_api_prefix }}"
+
+- name: Build ephemeral Lightspeed remediation job templates to delete
+  ansible.builtin.set_fact:
+    reset_ephemeral_remediation_jts: >-
+      {{
+        reset_aap_job_templates_lookup.json.results
+        | default([])
+        | selectattr('name', 'defined')
+        | selectattr('name', 'match', '^' ~ reset_lightspeed_jt_name_prefix)
+        | list
+      }}
+
+- name: Delete ephemeral Lightspeed remediation job templates from AAP
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_controller_host }}/api/controller/v2/job_templates/{{ item.id }}/
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ reset_controller_oauthtoken }}"
+    validate_certs: "{{ reset_validate_certs }}"
+    status_code: [202, 204, 404]
+  register: reset_ephemeral_remediation_jt_delete_results
+  failed_when: false
+  loop: "{{ reset_ephemeral_remediation_jts | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default(item.id) }}"
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ reset_controller_api_prefix }}"
+  when: reset_ephemeral_remediation_jts | default([]) | length > 0
+
+- name: Summarize ephemeral Lightspeed remediation job template deletions
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Ephemeral job templates found: {{
+          reset_ephemeral_remediation_jts | default([]) | length
+        }}
+      - >-
+        Deleted: {{
+          reset_ephemeral_remediation_jt_delete_results.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [202, 204])
+          | list
+          | length
+        }}

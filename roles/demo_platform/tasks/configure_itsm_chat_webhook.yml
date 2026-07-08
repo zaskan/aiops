@@ -1,0 +1,197 @@
+---
+- name: Load demo platform facts artifact for ITSM chat webhook configuration
+  ansible.builtin.include_vars:
+    file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+
+- name: Map itsm-app and chat API connections
+  ansible.builtin.set_fact:
+    itsm_api_base_url: "{{ demo_platform.itsm_app.url }}"
+    itsm_api_user: "{{ demo_platform.itsm_app.username }}"
+    itsm_api_password: "{{ demo_platform.itsm_app.password }}"
+    itsm_validate_certs: false
+    chat_api_base: "{{ demo_platform.chat_app.url }}"
+    chat_admin_username: "{{ demo_platform.chat_app.username }}"
+    chat_admin_password: "{{ demo_platform.chat_app.password }}"
+  no_log: true
+
+- name: Build itsm-app outbound webhook URL for chat operations channel
+  ansible.builtin.set_fact:
+    itsm_chat_webhook_url: >-
+      http://{{ itsm_chat_webhook_chat_service }}.{{ itsm_chat_webhook_chat_namespace }}.svc.cluster.local:{{
+      itsm_chat_webhook_chat_port }}/api/v1/webhooks/channels/{{
+      chat_aiops_channel_name | urlencode }}/messages
+    itsm_chat_webhook_public_url: >-
+      {{ demo_platform.chat_app.url | regex_replace('/$', '') }}/api/v1/webhooks/channels/{{
+      chat_aiops_channel_name | urlencode }}/messages
+
+- name: Remove deprecated itsm-chat-bridge Deployment
+  kubernetes.core.k8s:
+    state: absent
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Remove deprecated itsm-chat-bridge Service
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Service
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Remove deprecated itsm-chat-bridge ConfigMap
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: ConfigMap
+    name: "{{ itsm_chat_bridge_name }}"
+    namespace: "{{ itsm_chat_bridge_namespace }}"
+
+- name: Register itsm-app outbound webhook to chat operations channel
+  ansible.builtin.include_role:
+    name: demos.utils.itsm_ansible_role
+  vars:
+    itsm_ansible_role_check_connection: false
+    itsm_ansible_role_admin_settings: true
+    itsm_ansible_role_users: false
+    itsm_ansible_role_asset_types: false
+    itsm_ansible_role_assets: false
+    itsm_ansible_role_inventory: false
+    itsm_ansible_role_kb: false
+    itsm_ansible_role_incidents: false
+    itsm_ansible_role_followups: false
+    itsm_ansible_role_task_templates: false
+    itsm_ansible_role_change_templates: false
+    itsm_ansible_role_request_templates: false
+    itsm_ansible_role_service_requests: false
+    itsm_ansible_role_changes: false
+    itsm_ansible_role_change_tasks: false
+    itsm_webhooks:
+      - url: "{{ itsm_chat_webhook_url }}"
+        label: Chat operations channel (ITSM payload)
+        enabled: true
+    itsm_webhooks_remove_unlisted: true
+
+- name: Authenticate to chat-app as admin for webhook verification
+  ansible.builtin.uri:
+    url: "{{ chat_api_base }}/api/v1/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ chat_admin_username }}"
+      password: "{{ chat_admin_password }}"
+    validate_certs: false
+    status_code: 200
+  register: itsm_chat_webhook_login
+  no_log: true
+
+- name: Create test incident in itsm-app for chat webhook verification
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents"
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body:
+      title: "{{ itsm_test_incident_title }}"
+      description: "{{ itsm_test_incident_description }}"
+      severity: "{{ itsm_test_incident_severity }}"
+    status_code: 201
+    return_content: true
+  register: itsm_chat_webhook_test_incident_create
+
+- name: Record test incident public_id for chat verification
+  ansible.builtin.set_fact:
+    itsm_chat_webhook_test_incident_ref: "{{ itsm_chat_webhook_test_incident_create.json.public_id }}"
+    itsm_chat_webhook_incident_body_pattern: >-
+      ^\[incident\.created\] {{
+      itsm_chat_webhook_test_incident_create.json.public_id | regex_escape
+      }} — {{
+      itsm_test_incident_title | regex_escape
+      }} \({{
+      itsm_test_incident_severity | regex_escape
+      }}\)
+
+- name: Wait for incident notification in chat operations channel
+  ansible.builtin.uri:
+    url: >-
+      {{ chat_api_base }}/api/v1/channels/{{ chat_aiops_channel_name | urlencode }}/messages?limit=30
+    method: GET
+    headers:
+      Authorization: "Bearer {{ itsm_chat_webhook_login.json.access_token }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: itsm_chat_webhook_chat_messages
+  until: >
+    (
+      itsm_chat_webhook_chat_messages.json['items']
+      | default([])
+      | map(attribute='body')
+      | select('search', itsm_chat_webhook_incident_body_pattern)
+      | list
+      | length
+    ) > 0
+  retries: "{{ itsm_chat_webhook_verify_retries }}"
+  delay: "{{ itsm_chat_webhook_verify_delay }}"
+
+- name: Resolve chat message for test incident
+  ansible.builtin.set_fact:
+    itsm_chat_webhook_test_chat_message: >-
+      {{
+        (
+          itsm_chat_webhook_chat_messages.json['items']
+          | default([])
+          | selectattr('body', 'search', itsm_chat_webhook_incident_body_pattern)
+          | list
+          | first
+          | default({}, true)
+        ).body | default('')
+      }}
+
+- name: Fail when chat message for test incident was not received
+  ansible.builtin.fail:
+    msg: >-
+      No chat message containing '{{ itsm_chat_webhook_test_incident_ref }}' appeared in channel
+      '{{ chat_aiops_channel_name }}' within {{
+      itsm_chat_webhook_verify_retries * itsm_chat_webhook_verify_delay }}s.
+      itsm-app registers an in-cluster webhook URL ({{ itsm_chat_webhook_url }}) to avoid Route TLS
+      errors. Ensure chat-app supports webhook_payload_format=itsm (Quay image when
+      demo_platform_skip_image_builds is true), the operations channel has that format set
+      (configure_chat_aiops.yml), and anonymous webhook is enabled.
+  when: itsm_chat_webhook_test_chat_message | string | trim | length == 0
+
+- name: Fail when chat message does not match incident.created format
+  ansible.builtin.assert:
+    that:
+      - itsm_chat_webhook_test_chat_message is search('^\[incident\.created\]')
+      - itsm_chat_webhook_test_incident_ref in itsm_chat_webhook_test_chat_message
+      - itsm_test_incident_title in itsm_chat_webhook_test_chat_message
+    fail_msg: >-
+      Chat message '{{ itsm_chat_webhook_test_chat_message }}' does not match the expected
+      [incident.created] INC-* — title (severity) format.
+
+- name: Close test incident in itsm-app
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/incidents/{{
+      itsm_chat_webhook_test_incident_ref | urlencode }}/close
+    method: POST
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: false
+    body_format: json
+    body: {}
+    status_code: 200
+
+- name: Display ITSM direct chat webhook configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "itsm webhook (chat, in-cluster): {{ itsm_chat_webhook_url }}"
+      - "itsm webhook (chat, public Route): {{ itsm_chat_webhook_public_url }}"
+      - "test incident: {{ itsm_chat_webhook_test_incident_ref }} (closed)"
+      - "chat verification: {{ itsm_chat_webhook_test_chat_message }}"

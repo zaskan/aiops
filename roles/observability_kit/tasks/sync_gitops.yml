@@ -1,0 +1,9 @@
+---
+- name: Resolve Observability GitOps destination namespace
+  ansible.builtin.set_fact:
+    gitops_observability_dest_namespace: "{{ observability_kit_namespace }}"
+
+- name: Sync Observability stack via Argo CD
+  ansible.builtin.include_role:
+    name: gitops_observability
+    tasks_from: sync.yml

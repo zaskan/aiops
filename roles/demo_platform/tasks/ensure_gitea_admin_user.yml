@@ -1,0 +1,101 @@
+---
+# Idempotent: create admin from secrets when missing (e.g. after postgres PVC reset).
+
+- name: Check whether gitea admin user already exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - exec
+      - deployment/gitea
+      - -n
+      - "{{ gitea_namespace }}"
+      - -c
+      - gitea
+      - --
+      - gitea
+      - --config
+      - /data/gitea/conf/app.ini
+      - admin
+      - user
+      - list
+  register: demo_gitea_admin_list
+  changed_when: false
+  failed_when: false
+
+- name: Create gitea admin user when missing
+  when: gitea_admin_user not in demo_gitea_admin_list.stdout
+  block:
+    - name: Create gitea admin user
+      ansible.builtin.command:
+        argv:
+          - oc
+          - exec
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - -c
+          - gitea
+          - --
+          - gitea
+          - --config
+          - /data/gitea/conf/app.ini
+          - admin
+          - user
+          - create
+          - --admin
+          - --username
+          - "{{ gitea_admin_user }}"
+          - --password
+          - "{{ gitea_admin_password }}"
+          - --email
+          - "{{ gitea_admin_email }}"
+          - --must-change-password=false
+      register: demo_gitea_admin_create
+      retries: 12
+      delay: 10
+      until: demo_gitea_admin_create.rc == 0
+      no_log: true
+  rescue:
+    - name: Fail when gitea admin user could not be created
+      ansible.builtin.fail:
+        msg: >-
+          gitea admin user creation failed for {{ gitea_admin_user }} in namespace
+          {{ gitea_namespace }}. Ensure deployment/gitea and deployment/postgres are
+          available. Check: oc logs -n {{ gitea_namespace }} deployment/gitea --tail=80
+
+- name: Update gitea admin password when user already exists
+  when: gitea_admin_user in demo_gitea_admin_list.stdout
+  block:
+    - name: Update gitea admin password
+      ansible.builtin.command:
+        argv:
+          - oc
+          - exec
+          - deployment/gitea
+          - -n
+          - "{{ gitea_namespace }}"
+          - -c
+          - gitea
+          - --
+          - gitea
+          - --config
+          - /data/gitea/conf/app.ini
+          - admin
+          - user
+          - change-password
+          - --username
+          - "{{ gitea_admin_user }}"
+          - --password
+          - "{{ gitea_admin_password }}"
+          - --must-change-password=false
+      register: demo_gitea_admin_password_update
+      retries: 6
+      delay: 10
+      until: demo_gitea_admin_password_update.rc == 0
+      no_log: true
+  rescue:
+    - name: Fail when gitea admin password could not be updated
+      ansible.builtin.fail:
+        msg: >-
+          gitea admin password update failed for {{ gitea_admin_user }} in namespace
+          {{ gitea_namespace }}. Check: oc logs -n {{ gitea_namespace }} deployment/gitea --tail=80

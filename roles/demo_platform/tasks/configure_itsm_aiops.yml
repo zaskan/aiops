@@ -91,4 +91,4 @@
   ansible.builtin.debug:
     msg:
       - "itsm user: {{ itsm_aiops_username }}"
-      - "outbound webhook: configured later by configure_itsm_eda_webhook (EDA event stream)"
+      - "outbound webhook: configured later by configure_itsm_chat_webhook (direct) or configure_itsm_eda_webhook (EDA)"

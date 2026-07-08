@@ -6,6 +6,7 @@
     - ../../group_vars/all/gitea_repos.yml
   vars:
     demo_platform_artifacts_dir: "{{ playbook_dir }}/../../artifacts"
+    gitea_namespace: gitea
     gitea_repos_local_base: "{{ playbook_dir }}"
   tasks:
     - name: Sync Gitea repositories from configured sources

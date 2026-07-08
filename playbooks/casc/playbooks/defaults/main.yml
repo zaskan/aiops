@@ -1,5 +1,5 @@
 ---
-image: quay.io/zaskan/fedora-cloud-containerdisk:v43
+image: "{{ demo_platform_images.fedora_containerdisk | default('quay.io/rhn_support_rafsanch/fedora-cloud-containerdisk:v43') }}"
 vm_namespace: aiops-demo
 ssh_secret_name: authorized-keys
 gitops_infrastructure_dest_namespace: "{{ vm_namespace }}"

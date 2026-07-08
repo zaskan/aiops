@@ -38,6 +38,12 @@
 - name: Uninstall chat-app
   ansible.builtin.include_tasks: uninstall_chat_app.yml
 
+- name: Remove observability kit (Kafka, Loki, OTel Collectors)
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: uninstall.yml
+  when: uninstall_remove_aap | bool
+
 - name: Uninstall gitea
   ansible.builtin.include_tasks: uninstall_gitea.yml
 

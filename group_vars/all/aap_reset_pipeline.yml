@@ -1,0 +1,43 @@
+---
+aap_reset_pipeline_organization: AIOps
+aap_reset_pipeline_validate_certs: false
+aap_reset_pipeline_controller_api_prefix: /api/controller/
+
+aap_reset_pipeline_inventory: AIOps Localhost
+aap_reset_pipeline_project: AIOps Playbooks
+
+aap_reset_pipeline_jt_name: Reset
+aap_reset_pipeline_playbook: reset.yml
+
+aap_reset_pipeline_job_extra_vars:
+  reset_confirm: true
+
+aap_reset_pipeline_credential_gitea: Gitea
+aap_reset_pipeline_credential_itsm: ITSM App
+aap_reset_pipeline_credential_openshift: OpenShift Cluster
+aap_reset_pipeline_credential_aap: AAP Gateway
+aap_reset_pipeline_credential_chat: Chat App
+
+reset_chat_channel: operations
+reset_gitea_infrastructure_repo: Infrastructure
+reset_gitea_infrastructure_path: vms
+reset_gitea_playbooks_repo: Playbooks
+reset_gitea_remediations_path: remediations
+reset_gitea_branch: main
+reset_gitea_git_user_name: aiops-automation
+reset_gitea_git_user_email: aiops@example.com
+reset_gitea_workdir: /tmp/reset-gitea
+reset_gitea_internal_host: gitea-http.gitea.svc.cluster.local:3000
+reset_gitea_use_internal: >-
+  {{ lookup('ansible.builtin.env', 'KUBERNETES_SERVICE_HOST', default='') | trim | length > 0 }}
+
+reset_lightspeed_jt_name_prefix: "Lightspeed Remediation - "
+reset_aap_cleanup_job_name: Cleanup Job Details
+reset_aap_cleanup_days: 0
+
+aap_reset_pipeline_infrastructure_inventory: AIOps Infrastructure
+aap_reset_pipeline_inventory_source: ITSM Assets
+
+aap_controller_request_timeout: 60
+aap_controller_api_retries: 3
+aap_controller_api_retry_delay: 10

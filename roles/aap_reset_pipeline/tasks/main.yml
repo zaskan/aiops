@@ -1,0 +1,20 @@
+---
+- name: Run AAP reset pipeline preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Obtain AAP gateway OAuth token for awx.awx API calls
+  ansible.builtin.include_tasks: controller_auth.yml
+
+- name: Configure AAP Reset job template
+  block:
+    - ansible.builtin.include_tasks: configure.yml
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_reset_pipeline_controller_api_prefix }}"
+    CONTROLLER_REQUEST_TIMEOUT: "{{ aap_controller_request_timeout | string }}"
+
+- name: Display AAP reset pipeline summary
+  ansible.builtin.debug:
+    msg:
+      - "Organization: {{ aap_reset_pipeline_organization }}"
+      - "Project: {{ aap_reset_pipeline_project }}"
+      - "Job template: {{ aap_reset_pipeline_jt_name }}"

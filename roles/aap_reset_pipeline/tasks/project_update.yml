@@ -1,0 +1,23 @@
+---
+- name: Sync AIOps Playbooks project before creating Reset job template
+  awx.awx.project_update:
+    project: "{{ aap_reset_pipeline_project }}"
+    organization: "{{ aap_reset_pipeline_organization }}"
+    wait: true
+    controller_host: "{{ aap_reset_pipeline_controller_host }}"
+    controller_oauthtoken: "{{ aap_reset_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_reset_pipeline_validate_certs }}"
+  register: aap_reset_pipeline_project_update
+  environment:
+    CONTROLLER_OPTIONAL_API_URLPATTERN_PREFIX: "{{ aap_reset_pipeline_controller_api_prefix }}"
+  register: aap_controller_api_result
+  until: aap_controller_api_result is succeeded
+  retries: "{{ aap_controller_api_retries }}"
+  delay: "{{ aap_controller_api_retry_delay }}"
+- name: Fail when AIOps Playbooks SCM sync did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      AIOps Playbooks project SCM sync failed before Reset job template creation
+      ({{ aap_reset_pipeline_project_update.msg | default('unknown error') }}).
+      Run playbooks/casc/configure_gitea_repos.yml first so reset.yml is present in Gitea.
+  when: aap_reset_pipeline_project_update.failed | default(false)

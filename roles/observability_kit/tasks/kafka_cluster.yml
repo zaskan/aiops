@@ -1,0 +1,39 @@
+---
+- name: Apply Kafka cluster and node pool manifests
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ lookup('template', 'kafka_cluster.yaml.j2') | from_yaml_all | list }}"
+
+- name: Apply Kafka topic for Alertmanager events
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'kafka_topic.yaml.j2') | from_yaml }}"
+  vars:
+    observability_kit_kafka_topic_name: "{{ observability_kit_kafka_topic_alertmanager }}"
+
+- name: Apply Kafka topic for ITSM events
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'kafka_topic.yaml.j2') | from_yaml }}"
+  vars:
+    observability_kit_kafka_topic_name: "{{ observability_kit_kafka_topic_itsm }}"
+
+- name: Apply Kafka topic for AAP logs
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'kafka_topic.yaml.j2') | from_yaml }}"
+  vars:
+    observability_kit_kafka_topic_name: "{{ observability_kit_kafka_topic_aap_logs }}"
+
+- name: Remove legacy upstream Strimzi operator from observability namespace
+  kubernetes.core.k8s:
+    state: absent
+    api_version: apps/v1
+    kind: Deployment
+    name: strimzi-cluster-operator
+    namespace: "{{ observability_kit_namespace }}"
+  failed_when: false
+
+- name: Wait for Kafka cluster to become Ready before dependent services start
+  ansible.builtin.include_tasks: wait_kafka.yml

@@ -1,0 +1,8 @@
+---
+- name: Reset demo platform runtime state
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - defaults/main.yml
+  roles:
+    - reset_platform

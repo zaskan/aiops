@@ -15,9 +15,9 @@ Reliable `vm_name` extraction from incident bodies (see separate issue for `bot/
 
 ### New file: `bot/lightspeed_remediation.py`
 
-Reference implementation (~362 lines):
+Reference implementation on upstream `main`:
 
-https://github.com/zaskan/aiops/blob/main/roles/demo_platform/files/itsm_agent/bot/lightspeed_remediation.py
+https://github.com/zaskan/itsm-agent/blob/main/bot/lightspeed_remediation.py
 
 Responsibilities:
 
@@ -38,7 +38,7 @@ Integrate Lightspeed flow into root message handling, thread follow-ups, launch 
 - Incident launches require explicit `go` / `yes` confirmation
 - Lightspeed workflow launch waits for `ansible_playbook` in collected fields
 
-Full patch file: https://github.com/zaskan/aiops/blob/main/roles/demo_platform/files/itsm_agent_runner_lightspeed.patch
+Merged upstream: https://github.com/zaskan/itsm-agent/pull/7 (routing fixes: https://github.com/zaskan/itsm-agent/pull/8)
 
 ### New configuration (env / `k8s/secret_template.yaml`)
 
@@ -68,14 +68,6 @@ flowchart TD
   userGo --> launch[Launch workflow with ansible_playbook + limit]
 ```
 
-## AIOps workaround
+## Status
 
-Patched at image build in `roles/demo_platform/tasks/build_itsm_agent_image.yml`:
-
-- `roles/demo_platform/files/itsm_agent/bot/lightspeed_remediation.py`
-- `roles/demo_platform/files/itsm_agent_runner_lightspeed.patch`
-- `roles/demo_platform/files/itsm_agent_knowledge_incident.patch` (vm_name parsing; filed separately)
-
-Toggle: `itsm_agent_lightspeed_remediation_patch` in `group_vars/all/itsm_agent.yml`
-
-Reference tree: https://github.com/zaskan/aiops/tree/main/roles/demo_platform/files/itsm_agent
+Merged on upstream `main`. AIOps builds the image from `itsm_agent_git_ref` with no local patches (`roles/demo_platform/tasks/build_itsm_agent_image.yml`).

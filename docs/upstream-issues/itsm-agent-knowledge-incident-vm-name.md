@@ -44,11 +44,11 @@ diff --git a/bot/knowledge.py b/bot/knowledge.py
 +                out["vm_name"] = host_part
 ```
 
-Full patch file: https://github.com/zaskan/aiops/blob/main/roles/demo_platform/files/itsm_agent_knowledge_incident.patch
+Merged upstream: https://github.com/zaskan/itsm-agent/pull/4
 
-## AIOps workaround
+## Status
 
-Applied at image build when `itsm_agent_lightspeed_remediation_patch` is enabled (`group_vars/all/itsm_agent.yml`). Part of the Lightspeed remediation patch set in `roles/demo_platform/tasks/build_itsm_agent_image.yml`.
+Merged on upstream `main`. AIOps builds the image from `itsm_agent_git_ref` with no local patches.
 
 ## Related
 

@@ -8,26 +8,29 @@ metadata:
     openshift.io/user-monitoring: "true"
 spec:
   route:
-    receiver: eda-apache-alerts
+    receiver: otel-collector-alerts
     groupBy:
       - alertname
       - vm_name
+    groupWait: {{ openshift_apache_monitoring_alertmanager_group_wait }}
+    groupInterval: {{ openshift_apache_monitoring_alertmanager_group_interval }}
+    repeatInterval: {{ openshift_apache_monitoring_alertmanager_repeat_interval }}
     matchers:
       - name: alertname
         matchType: "="
         value: {{ openshift_apache_monitoring_alert_name }}
   receivers:
-    - name: eda-apache-alerts
+    - name: otel-collector-alerts
       webhookConfigs:
-        - url: {{ openshift_apache_monitoring_eda_webhook_url | to_json }}
-          sendResolved: false
+        - url: {{ openshift_apache_monitoring_collector_webhook_url | to_json }}
+          sendResolved: {{ openshift_apache_monitoring_alertmanager_send_resolved | bool }}
           httpConfig:
             basicAuth:
               username:
-                name: {{ openshift_apache_monitoring_eda_webhook_secret_name }}
+                name: {{ openshift_apache_monitoring_collector_webhook_secret_name }}
                 key: username
               password:
-                name: {{ openshift_apache_monitoring_eda_webhook_secret_name }}
+                name: {{ openshift_apache_monitoring_collector_webhook_secret_name }}
                 key: password
             tlsConfig:
               insecureSkipVerify: true

@@ -1,0 +1,111 @@
+---
+# OpenShift-compatible postgres for gitea (emptyDir for /var/run/postgresql) and optional Quay image.
+
+- name: Scale down gitea postgres before PVC reset
+  ansible.builtin.command:
+    argv:
+      - oc
+      - scale
+      - deployment/postgres
+      - --replicas=0
+      - -n
+      - "{{ gitea_namespace }}"
+  when: gitea_postgres_reset_pvc | default(false) | bool
+  changed_when: true
+
+- name: Wait for gitea postgres pods to terminate before PVC reset
+  ansible.builtin.command:
+    argv:
+      - oc
+      - wait
+      - --for=delete
+      - pod
+      - -l
+      - app=postgres
+      - -n
+      - "{{ gitea_namespace }}"
+      - --timeout=120s
+  when: gitea_postgres_reset_pvc | default(false) | bool
+  changed_when: false
+  failed_when: false
+
+- name: Remove gitea postgres PVC for clean database initialization
+  kubernetes.core.k8s:
+    state: absent
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: postgres-data
+      namespace: "{{ gitea_namespace }}"
+  when: gitea_postgres_reset_pvc | default(false) | bool
+
+- name: Recreate gitea postgres PVC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: postgres-data
+        namespace: "{{ gitea_namespace }}"
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+  when: gitea_postgres_reset_pvc | default(false) | bool
+
+- name: Patch gitea postgres deployment for OpenShift and prebuilt image
+  kubernetes.core.k8s:
+    state: present
+    merge_type: strategic-merge
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres
+        namespace: "{{ gitea_namespace }}"
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: postgres
+                image: >-
+                  {{
+                    demo_platform_images.postgres
+                    if (demo_platform_skip_image_builds | default(false) | bool)
+                    else 'postgres:16-alpine'
+                  }}
+                imagePullPolicy: IfNotPresent
+                volumeMounts:
+                  - name: run-postgresql
+                    mountPath: /var/run/postgresql
+            volumes:
+              - name: run-postgresql
+                emptyDir: {}
+
+- name: Restart gitea after postgres PVC reset
+  ansible.builtin.command:
+    argv:
+      - oc
+      - rollout
+      - restart
+      - deployment/gitea
+      - -n
+      - "{{ gitea_namespace }}"
+  when: gitea_postgres_reset_pvc | default(false) | bool
+  changed_when: true
+
+- name: Wait for gitea postgres deployment after patch
+  ansible.builtin.command:
+    argv:
+      - oc
+      - wait
+      - --for=condition=available
+      - deployment/postgres
+      - -n
+      - "{{ gitea_namespace }}"
+      - --timeout=300s
+  changed_when: false

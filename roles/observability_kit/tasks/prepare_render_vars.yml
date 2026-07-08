@@ -1,0 +1,33 @@
+---
+- name: Build basic auth htpasswd entries for upstream collector manifests
+  ansible.builtin.set_fact:
+    observability_kit_alertmanager_htpasswd: >-
+      {{ observability_kit_alertmanager_webhook_username }}:{{
+        observability_kit_alertmanager_webhook_password | password_hash('bcrypt')
+      }}
+    observability_kit_itsm_htpasswd: >-
+      {{ observability_kit_itsm_webhook_username }}:{{
+        observability_kit_itsm_webhook_password | password_hash('bcrypt')
+      }}
+  no_log: true
+
+- name: Discover Grafana dashboard JSON files for manifest rendering
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboard_paths: >-
+      {{ lookup('ansible.builtin.fileglob', role_path ~ '/files/grafana/dashboards/*.json', wantlist=True) }}
+
+- name: Build Grafana dashboards ConfigMap data map for manifest rendering
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboards_data: >-
+      {{
+        observability_kit_grafana_dashboards_data | default({})
+        | combine({ (item | basename): lookup('ansible.builtin.file', item) })
+      }}
+  loop: "{{ observability_kit_grafana_dashboard_paths }}"
+
+- name: Compute deployment rollout checksums for config-bearing manifests
+  ansible.builtin.set_fact:
+    observability_kit_loki_config_checksum: >-
+      {{ observability_kit_loki_otlp_index_labels | to_json | hash('sha256') }}
+    observability_kit_collector_downstream_config_checksum: >-
+      {{ lookup('template', role_path ~ '/templates/otel_collector_downstream.yaml.j2') | hash('sha256') }}

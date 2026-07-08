@@ -196,82 +196,35 @@
           - --timeout=300s
       changed_when: false
 
-- name: Provision gitea admin user on first install
-  when: demo_gitea_needs_install | bool
+- name: Patch gitea postgres for OpenShift when building images in-cluster
+  ansible.builtin.include_tasks: patch_gitea_postgres_deployment.yml
+  when: not (demo_platform_skip_image_builds | default(false) | bool)
+
+- name: Point gitea workloads at prebuilt Quay images
+  when: demo_platform_skip_image_builds | default(false) | bool
   block:
-    - name: Check whether gitea admin user already exists
+    - name: Patch gitea postgres for OpenShift and Quay image
+      ansible.builtin.include_tasks: patch_gitea_postgres_deployment.yml
+
+    - name: Point gitea deployment at prebuilt Quay image
+      ansible.builtin.include_tasks: apply_prebuilt_workload_image.yml
+      vars:
+        prebuilt_workload_namespace: "{{ gitea_namespace }}"
+        prebuilt_workload_deployment: gitea
+        prebuilt_workload_container: gitea
+        prebuilt_workload_image: "{{ demo_platform_images.gitea }}"
+
+    - name: Wait for gitea deployment after prebuilt image patch
       ansible.builtin.command:
         argv:
           - oc
-          - exec
+          - wait
+          - --for=condition=available
           - deployment/gitea
           - -n
           - "{{ gitea_namespace }}"
-          - -c
-          - gitea
-          - --
-          - gitea
-          - --config
-          - /data/gitea/conf/app.ini
-          - admin
-          - user
-          - list
-      register: demo_gitea_admin_list
+          - --timeout=300s
       changed_when: false
-      failed_when: false
-      no_log: true
-
-    - name: Create gitea admin user
-      ansible.builtin.command:
-        argv:
-          - oc
-          - exec
-          - deployment/gitea
-          - -n
-          - "{{ gitea_namespace }}"
-          - -c
-          - gitea
-          - --
-          - gitea
-          - --config
-          - /data/gitea/conf/app.ini
-          - admin
-          - user
-          - create
-          - --admin
-          - --username
-          - "{{ gitea_admin_user }}"
-          - --password
-          - "{{ gitea_admin_password }}"
-          - --email
-          - "{{ gitea_admin_email }}"
-          - --must-change-password=false
-      when: gitea_admin_user not in demo_gitea_admin_list.stdout
-      no_log: true
-
-    - name: Update gitea admin password when user already exists
-      ansible.builtin.command:
-        argv:
-          - oc
-          - exec
-          - deployment/gitea
-          - -n
-          - "{{ gitea_namespace }}"
-          - -c
-          - gitea
-          - --
-          - gitea
-          - --config
-          - /data/gitea/conf/app.ini
-          - admin
-          - user
-          - change-password
-          - --username
-          - "{{ gitea_admin_user }}"
-          - --password
-          - "{{ gitea_admin_password }}"
-      when: gitea_admin_user in demo_gitea_admin_list.stdout
-      no_log: true
 
 - name: Read gitea Route host for URL fact
   ansible.builtin.command:
@@ -321,6 +274,9 @@
       gitea health check failed at {{ gitea_url }}/api/healthz.
       Check: oc logs -n {{ gitea_namespace }} deployment/gitea --tail=80
   when: demo_gitea_health.status != 200 or demo_gitea_health.content is not search('pass')
+
+- name: Ensure gitea admin user matches secrets
+  ansible.builtin.include_tasks: ensure_gitea_admin_user.yml
 
 - name: Read gitea admin username from secret
   ansible.builtin.command:

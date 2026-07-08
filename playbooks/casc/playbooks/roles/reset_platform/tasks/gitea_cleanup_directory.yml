@@ -1,0 +1,151 @@
+---
+- name: Map Gitea facts for {{ reset_gitea_cleanup_repo }} repository cleanup
+  ansible.builtin.set_fact:
+    reset_gitea_api_base: "{{ gitea_credential_url }}"
+    reset_gitea_username: "{{ gitea_credential_username }}"
+    reset_gitea_password: "{{ gitea_credential_password }}"
+    reset_gitea_owner: "{{ gitea_credential_username }}"
+  no_log: true
+
+- name: Set Gitea host for authenticated git clone
+  ansible.builtin.set_fact:
+    reset_gitea_host: >-
+      {{ reset_gitea_api_base | regex_replace('^https?://', '') | regex_replace('/$', '') }}
+
+- name: Build authenticated Gitea clone URL for {{ reset_gitea_cleanup_repo }}
+  ansible.builtin.set_fact:
+    reset_gitea_clone_repo: >-
+      {{
+        (
+          'http://'
+          ~ reset_gitea_username | urlencode ~ ':'
+          ~ reset_gitea_password | urlencode ~ '@'
+          ~ reset_gitea_internal_host ~ '/'
+          ~ reset_gitea_owner | urlencode ~ '/'
+          ~ reset_gitea_cleanup_repo | urlencode ~ '.git'
+        )
+        if (reset_gitea_use_internal | default(false) | bool)
+        else (
+          'https://'
+          ~ reset_gitea_username | urlencode ~ ':'
+          ~ reset_gitea_password | urlencode ~ '@'
+          ~ reset_gitea_host ~ '/'
+          ~ reset_gitea_owner | urlencode ~ '/'
+          ~ reset_gitea_cleanup_repo | urlencode ~ '.git'
+        )
+      }}
+  no_log: true
+
+- name: Remove temporary Gitea clone directory for {{ reset_gitea_cleanup_repo }}
+  ansible.builtin.file:
+    path: "{{ reset_gitea_cleanup_workdir }}/repo"
+    state: absent
+
+- name: Clone Gitea {{ reset_gitea_cleanup_repo }} repository
+  block:
+    - name: Clone Gitea {{ reset_gitea_cleanup_repo }} repository from Gitea
+      ansible.builtin.git:
+        repo: "{{ reset_gitea_clone_repo }}"
+        dest: "{{ reset_gitea_cleanup_workdir }}/repo"
+        version: "{{ reset_gitea_branch }}"
+        single_branch: true
+        force: true
+      environment:
+        GIT_SSL_NO_VERIFY: >-
+          {{
+            'false'
+            if (
+              reset_gitea_use_internal | default(false) | bool
+              or reset_validate_certs | bool
+            )
+            else 'true'
+          }}
+      no_log: true
+  rescue:
+    - name: Report Gitea {{ reset_gitea_cleanup_repo }} repository clone failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to clone Gitea repository {{ reset_gitea_owner }}/{{ reset_gitea_cleanup_repo }}
+          (branch {{ reset_gitea_branch }}). Verify the Gitea credential and repository exist.
+
+- name: Find files to remove under {{ reset_gitea_cleanup_path }}
+  ansible.builtin.find:
+    paths: "{{ reset_gitea_cleanup_workdir }}/repo/{{ reset_gitea_cleanup_path }}"
+    patterns: "{{ reset_gitea_cleanup_patterns }}"
+    file_type: file
+  register: reset_gitea_cleanup_files
+  failed_when: false
+
+- name: Remove matched files from Gitea {{ reset_gitea_cleanup_repo }} repository
+  ansible.builtin.command: >-
+    git rm -f --ignore-unmatch {{
+      item.path | regex_replace('^' ~ reset_gitea_cleanup_workdir ~ '/repo/', '')
+    }}
+  args:
+    chdir: "{{ reset_gitea_cleanup_workdir }}/repo"
+  register: reset_gitea_git_rm
+  changed_when: reset_gitea_git_rm.rc == 0
+  failed_when: false
+  loop: "{{ reset_gitea_cleanup_files.files | default([]) }}"
+  when: reset_gitea_cleanup_files.matched | default(0) > 0
+
+- name: Ensure {{ reset_gitea_cleanup_path }} directory exists in repository after cleanup
+  ansible.builtin.file:
+    path: "{{ reset_gitea_cleanup_workdir }}/repo/{{ reset_gitea_cleanup_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Ensure {{ reset_gitea_cleanup_path }} directory placeholder remains in Git after cleanup
+  ansible.builtin.file:
+    path: "{{ reset_gitea_cleanup_workdir }}/repo/{{ reset_gitea_cleanup_path }}/.gitkeep"
+    state: touch
+    mode: "0644"
+
+- name: Stage cleanup changes in Gitea {{ reset_gitea_cleanup_repo }} repository
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git add -f "{{ reset_gitea_cleanup_path }}/.gitkeep"
+  args:
+    chdir: "{{ reset_gitea_cleanup_workdir }}/repo"
+  changed_when: false
+
+- name: Commit and push {{ reset_gitea_cleanup_repo }} cleanup to Gitea
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config user.email "{{ reset_gitea_git_user_email }}"
+    git config user.name "{{ reset_gitea_git_user_name }}"
+    if git diff --cached --quiet && git diff --quiet; then
+      exit 0
+    fi
+    git commit -m "{{ reset_gitea_cleanup_commit_message }}"
+    git -c http.sslVerify={{ 'true' if reset_validate_certs | bool else 'false' }} push origin "{{ reset_gitea_branch }}"
+  args:
+    chdir: "{{ reset_gitea_cleanup_workdir }}/repo"
+  register: reset_gitea_git_push
+  changed_when: >
+    reset_gitea_git_push.rc == 0
+    and (
+      'nothing to commit' not in (reset_gitea_git_push.stdout | default('') | lower)
+      and 'nothing to commit' not in (reset_gitea_git_push.stderr | default('') | lower)
+    )
+  failed_when: >
+    (reset_gitea_git_push.rc not in [0, 1])
+    or (
+      reset_gitea_git_push.rc != 0
+      and ('nothing to commit' not in (reset_gitea_git_push.stdout | default('') | lower))
+      and ('nothing to commit' not in (reset_gitea_git_push.stderr | default('') | lower))
+      and ('up to date' not in (reset_gitea_git_push.stdout | default('') | lower))
+      and ('up to date' not in (reset_gitea_git_push.stderr | default('') | lower))
+    )
+  no_log: true
+
+- name: Summarize Gitea {{ reset_gitea_cleanup_repo }} cleanup
+  ansible.builtin.debug:
+    msg:
+      - "Repository: {{ reset_gitea_cleanup_repo }}/{{ reset_gitea_cleanup_path }}"
+      - "Files removed: {{ reset_gitea_cleanup_files.matched | default(0) }}"
+
+- name: Remove temporary Gitea clone directory after {{ reset_gitea_cleanup_repo }} cleanup
+  ansible.builtin.file:
+    path: "{{ reset_gitea_cleanup_workdir }}/repo"
+    state: absent

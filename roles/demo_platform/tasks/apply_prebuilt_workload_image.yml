@@ -1,0 +1,18 @@
+---
+- name: Set deployment container image from prebuilt registry
+  kubernetes.core.k8s:
+    state: present
+    merge_type: strategic-merge
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "{{ prebuilt_workload_deployment }}"
+        namespace: "{{ prebuilt_workload_namespace }}"
+      spec:
+        template:
+          spec:
+            containers:
+              - name: "{{ prebuilt_workload_container }}"
+                image: "{{ prebuilt_workload_image }}"
+                imagePullPolicy: IfNotPresent

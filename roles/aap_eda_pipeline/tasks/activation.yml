@@ -1,5 +1,54 @@
 ---
-- name: Remove Apache alert rulebook activation when Rulebooks project changed
+- name: Lookup existing Apache alert rulebook activation in EDA
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/?name={{
+      aap_eda_pipeline_activation_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: aap_eda_pipeline_activation_lookup
+
+- name: Disable Apache alert rulebook activation before recreate
+  ansible.eda.rulebook_activation:
+    name: "{{ aap_eda_pipeline_activation_name }}"
+    organization_name: "{{ aap_eda_pipeline_organization }}"
+    state: disabled
+    controller_host: "{{ aap_eda_pipeline_controller_host }}"
+    controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+  when: aap_eda_pipeline_activation_lookup.json.count | default(0) | int > 0
+
+- name: Wait until Apache alert rulebook activation is stopped before delete
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/?name={{
+      aap_eda_pipeline_activation_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: aap_eda_pipeline_activation_stop_wait
+  until: >
+    (
+      aap_eda_pipeline_activation_stop_wait.json.results
+      | default([])
+      | selectattr('name', 'equalto', aap_eda_pipeline_activation_name)
+      | map(attribute='status')
+      | list
+      | first
+      | default('stopped')
+    ) in ['stopped', 'failed', 'disabled']
+  retries: 30
+  delay: 3
+  when: aap_eda_pipeline_activation_lookup.json.count | default(0) | int > 0
+
+- name: Remove existing Apache alert rulebook activation before recreate
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
     organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -7,28 +56,42 @@
     controller_host: "{{ aap_eda_pipeline_controller_host }}"
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
-  when: aap_eda_pipeline_project_result is changed
+  when: aap_eda_pipeline_activation_lookup.json.count | default(0) | int > 0
 
-- name: Ensure Apache Alert Incident rulebook activation is enabled in EDA
+- name: Wait until Apache alert rulebook activation is removed from EDA
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/?name={{
+      aap_eda_pipeline_activation_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: aap_eda_pipeline_activation_delete_wait
+  until: aap_eda_pipeline_activation_delete_wait.json.count | default(0) | int == 0
+  retries: 30
+  delay: 3
+  when: aap_eda_pipeline_activation_lookup.json.count | default(0) | int > 0
+
+- name: Ensure Apache Alert Incident rulebook activation is present in EDA
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
-    description: Open ITSM incidents when Apache HTTP probes fail
+    description: Open ITSM incidents when Apache HTTP probes fail (Kafka source)
     organization_name: "{{ aap_eda_pipeline_organization }}"
     project_name: "{{ aap_eda_pipeline_project }}"
     rulebook_name: "{{ aap_eda_pipeline_rulebook }}"
     decision_environment_name: "{{ aap_eda_pipeline_decision_environment }}"
     eda_credentials:
       - "{{ aap_eda_pipeline_controller_credential }}"
-    state: enabled
-    event_streams:
-      - event_stream: "{{ aap_eda_pipeline_event_stream_name }}"
-        source_name: "{{ aap_eda_pipeline_rulebook_source_name }}"
+    state: present
     controller_host: "{{ aap_eda_pipeline_controller_host }}"
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
   register: aap_eda_pipeline_activation_result
 
-- name: Restart Apache alert rulebook activation after create or update
+- name: Restart Apache alert rulebook activation after project sync
   ansible.eda.rulebook_activation:
     name: "{{ aap_eda_pipeline_activation_name }}"
     organization_name: "{{ aap_eda_pipeline_organization }}"
@@ -36,4 +99,31 @@
     controller_host: "{{ aap_eda_pipeline_controller_host }}"
     controller_token: "{{ aap_eda_pipeline_controller_oauthtoken }}"
     validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
-  when: aap_eda_pipeline_activation_result is changed
+  when:
+    - aap_eda_activation_restart_on_run | default(true) | bool
+    - aap_eda_pipeline_activation_lookup.json.count | default(0) | int > 0
+    - not aap_eda_pipeline_activation_result is changed
+
+- name: Wait for Apache alert rulebook activation to reach running state
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_eda_pipeline_controller_host }}/api/eda/v1/activations/?name={{
+      aap_eda_pipeline_activation_name | urlencode }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_eda_pipeline_controller_oauthtoken }}"
+    validate_certs: "{{ aap_eda_pipeline_validate_certs }}"
+    status_code: 200
+    return_content: true
+  register: aap_eda_pipeline_activation_status
+  until: >
+    (
+      aap_eda_pipeline_activation_status.json.results
+      | default([])
+      | selectattr('name', 'equalto', aap_eda_pipeline_activation_name)
+      | selectattr('status', 'equalto', 'running')
+      | list
+      | length
+    ) > 0
+  retries: 30
+  delay: 5

@@ -5,10 +5,24 @@ itsm_aiops_user_password: "{{ lookup('ansible.builtin.env', 'ITSM_AIOPS_PASSWORD
 itsm_chat_bridge_namespace: demo-chat
 itsm_chat_bridge_name: itsm-chat-bridge
 itsm_test_incident_title: AIOps webhook test incident
-itsm_test_incident_description: Automated end-to-end webhook test from configure_itsm_eda_webhook playbook
+itsm_test_incident_description: Automated end-to-end webhook test from configure_itsm_chat_webhook playbook
 itsm_test_incident_severity: low
 itsm_chat_webhook_verify_retries: 15
 itsm_chat_webhook_verify_delay: 2
+
+itsm_http_timeout: 60
+itsm_http_retries: 3
+itsm_http_retry_delay: 10
+
+# itsm-app delivers webhooks from inside the cluster; use Service DNS (HTTP) not the Route
+# (HTTPS with OpenShift router certs fails httpx certificate verify in itsm-app).
+itsm_chat_webhook_chat_service: demo-chat
+itsm_chat_webhook_chat_namespace: demo-chat
+itsm_chat_webhook_chat_port: 8000
+
+# direct: itsm-app → chat-app operations webhook (requires chat-app webhook_payload_format=itsm)
+# eda: legacy EDA event stream + AAP Publish ITSM Chat Notification job template
+itsm_chat_webhook_delivery: eda
 
 itsm_ansible_role_check_connection: true
 itsm_ansible_role_admin_settings: false
@@ -28,6 +42,6 @@ itsm_users:
     password: "{{ itsm_aiops_user_password }}"
     role: user
 
-# Registered at runtime by configure_itsm_eda_webhook.yml after EDA pipeline is provisioned.
+# Registered at runtime by configure_itsm_chat_webhook.yml or configure_itsm_eda_webhook.yml.
 itsm_webhooks: []
 itsm_webhooks_remove_unlisted: false

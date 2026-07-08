@@ -1,0 +1,5 @@
+---
+- name: Trigger ITSM Assets inventory source sync
+  ansible.builtin.include_role:
+    name: itsm_vm_asset
+    tasks_from: sync_inventory.yml

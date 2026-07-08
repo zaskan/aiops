@@ -1,0 +1,74 @@
+---
+- name: Verify Kafka Strimzi API CRDs are registered
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - crd
+      - kafkas.kafka.strimzi.io
+      - kafkanodepools.kafka.strimzi.io
+      - kafkatopics.kafka.strimzi.io
+  register: observability_kit_streams_crds
+  changed_when: false
+  failed_when: false
+
+- name: List Streams for Apache Kafka cluster operator pods
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - pods
+      - -A
+      - -l
+      - strimzi.io/kind=cluster-operator
+      - --field-selector=status.phase=Running
+      - -o
+      - name
+  register: observability_kit_streams_operator_pods
+  changed_when: false
+  failed_when: false
+
+- name: Get Streams for Apache Kafka CSV versions
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - csv
+      - -n
+      - openshift-operators
+      - -l
+      - operators.coreos.com/amq-streams.openshift-operators=
+      - -o
+      - jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}
+  register: observability_kit_streams_csv_raw
+  changed_when: false
+  failed_when: false
+
+- name: Build Streams for Apache Kafka CSV list
+  ansible.builtin.set_fact:
+    observability_kit_streams_csv_lines: >-
+      {{
+        observability_kit_streams_csv_raw.stdout_lines
+        | default([])
+        | map('trim')
+        | select('ne', '')
+        | list
+      }}
+
+- name: Fail when Streams for Apache Kafka CRDs are missing
+  ansible.builtin.fail:
+    msg: >-
+      Red Hat Streams for Apache Kafka is not available. Install the operator from
+      OperatorHub and wait for CRDs kafkas.kafka.strimzi.io, kafkanodepools.kafka.strimzi.io,
+      and kafkatopics.kafka.strimzi.io to be registered.
+  when: observability_kit_streams_crds.rc != 0
+
+- name: Fail when Streams for Apache Kafka cluster operator is not running
+  ansible.builtin.fail:
+    msg: >-
+      Red Hat Streams for Apache Kafka is not available. Expected a running cluster
+      operator pod in openshift-operators (label strimzi.io/kind=cluster-operator).
+      Install Streams for Apache Kafka from OperatorHub and wait for the operator CSV
+      to reach Succeeded. CSVs in openshift-operators:
+      {{ observability_kit_streams_csv_lines | default([]) | join(', ') | default('none', true) }}.
+  when: observability_kit_streams_operator_pods.stdout | default('') | trim | length == 0

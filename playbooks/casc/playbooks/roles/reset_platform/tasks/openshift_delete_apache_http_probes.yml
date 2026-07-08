@@ -1,0 +1,118 @@
+---
+- name: Load OpenShift API credentials for Apache HTTP probe cleanup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: load_openshift_credential.yml
+
+- name: List Apache HTTP Probe resources in monitoring namespace
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    api_version: monitoring.coreos.com/v1
+    kind: Probe
+    namespace: "{{ openshift_apache_monitoring_namespace | default(vm_namespace | default('aiops-demo')) }}"
+  register: reset_apache_http_probes
+
+- name: Build Apache HTTP probes to remove
+  ansible.builtin.set_fact:
+    reset_apache_http_probes_to_remove: >-
+      {{
+        reset_apache_http_probes.resources
+        | default([])
+        | selectattr('spec.jobName', 'defined')
+        | selectattr('spec.jobName', 'equalto', openshift_apache_monitoring_probe_job | default('apache-http'))
+        | list
+      }}
+
+- name: Remove Apache HTTP Probe resources from OpenShift
+  kubernetes.core.k8s:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    state: absent
+    api_version: monitoring.coreos.com/v1
+    kind: Probe
+    name: "{{ item.metadata.name }}"
+    namespace: "{{ item.metadata.namespace }}"
+  loop: "{{ reset_apache_http_probes_to_remove | default([]) }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when: reset_apache_http_probes_to_remove | default([]) | length > 0
+
+- name: Re-apply Apache PrometheusRule so stale probe metrics stop firing alerts
+  kubernetes.core.k8s:
+    host: "{{ openshift_credential_host | default(omit) }}"
+    api_key: "{{ openshift_credential_token | default(omit) }}"
+    validate_certs: false
+    state: present
+    definition: "{{ lookup('template', playbook_dir ~ '/templates/openshift_apache_prometheus_rule.yaml.j2') | from_yaml }}"
+
+- name: Resolve Thanos querier URL for alert clearance check
+  ansible.builtin.set_fact:
+    reset_thanos_querier_url: >-
+      {{
+        (
+          'https://thanos-querier-openshift-monitoring.apps.'
+          ~ (
+            openshift_cluster_domain | default(demo_platform.openshift.cluster_domain | default(''))
+          )
+        ) | replace('.apps.apps.', '.apps.')
+      }}
+
+- name: Resolve OpenShift bearer token from AAP injected credential
+  ansible.builtin.set_fact:
+    reset_openshift_bearer_token: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY') }}"
+  when: lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY') | default('') | trim | length > 0
+  no_log: true
+
+- name: Resolve OpenShift bearer token from loaded credential facts
+  ansible.builtin.set_fact:
+    reset_openshift_bearer_token: "{{ openshift_credential_token }}"
+  when:
+    - reset_openshift_bearer_token is not defined or reset_openshift_bearer_token | string | trim | length == 0
+    - openshift_credential_token is defined
+    - openshift_credential_token | string | trim | length > 0
+  no_log: true
+
+- name: Wait for ApacheApplicationDown alerts to clear after probe removal
+  ansible.builtin.uri:
+    url: >-
+      {{ reset_thanos_querier_url }}/api/v1/query?query={{
+      'count(ALERTS{alertname="' ~ openshift_apache_monitoring_alert_name ~ '",alertstate="firing"}) or vector(0)' | urlencode
+      }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ reset_openshift_bearer_token }}"
+    validate_certs: false
+    status_code: [200]
+    return_content: true
+  register: reset_apache_firing_alerts_lookup
+  until: >-
+    (
+      reset_apache_firing_alerts_lookup.json.data.result | default([])
+      | length == 0
+    )
+    or (
+      reset_apache_firing_alerts_lookup.json.data.result | default([])
+      | length > 0
+      and (reset_apache_firing_alerts_lookup.json.data.result[0].value[1] | default('1') | int) == 0
+    )
+  retries: "{{ reset_apache_alert_clear_retries }}"
+  delay: "{{ reset_apache_alert_clear_delay }}"
+
+- name: Summarize Apache HTTP probe cleanup
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Apache HTTP probes removed: {{
+          reset_apache_http_probes_to_remove | default([]) | length
+        }}
+      - >-
+        Firing {{ openshift_apache_monitoring_alert_name }} alerts after cleanup: {{
+          (
+            reset_apache_firing_alerts_lookup.json.data.result | default([])
+            | first
+            | default({'value': [0, '0']})
+          ).value[1] | default('unknown')
+        }}

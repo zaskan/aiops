@@ -1,0 +1,24 @@
+---
+# Prebuilt container images on Quay (public: quay.io/rhn_support_rafsanch).
+# Build and push: scripts/build-push-quay-images.sh
+# Bump demo_platform_image_tag after each publish.
+
+demo_platform_image_registry: quay.io/rhn_support_rafsanch
+demo_platform_image_tag: aiops-1.0.0
+demo_platform_skip_image_builds: true
+
+demo_platform_images:
+  itsm_app: "{{ demo_platform_image_registry }}/itsm-app:{{ demo_platform_image_tag }}"
+  chat_app: "{{ demo_platform_image_registry }}/chat-app:{{ demo_platform_image_tag }}"
+  itsm_agent: "{{ demo_platform_image_registry }}/itsm-agent:{{ demo_platform_image_tag }}"
+  gitea: "{{ demo_platform_image_registry }}/gitea:1.24-rootless"
+  postgres: "{{ demo_platform_image_registry }}/postgres:16-alpine"
+  blackbox_exporter: "{{ demo_platform_image_registry }}/blackbox-exporter:v0.25.0"
+  fedora_containerdisk: "{{ demo_platform_image_registry }}/fedora-cloud-containerdisk:v43"
+
+# Upstream sources mirrored by build-push-quay-images.sh (reference only).
+demo_platform_mirror_image_sources:
+  gitea: docker.gitea.com/gitea:1.24-rootless
+  postgres: docker.io/library/postgres:16-alpine
+  blackbox_exporter: quay.io/prometheus/blackbox-exporter:v0.25.0
+  fedora_containerdisk: quay.io/zaskan/fedora-cloud-containerdisk:v43

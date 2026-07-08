@@ -12,6 +12,7 @@ chat_channels:
   - name: "{{ chat_aiops_channel_name }}"
     allow_anonymous_webhook: true
     anonymous_webhook_username: "{{ chat_aiops_username }}"
+    webhook_payload_format: itsm
 
 chat_memberships:
   - channel: "{{ chat_aiops_channel_name }}"

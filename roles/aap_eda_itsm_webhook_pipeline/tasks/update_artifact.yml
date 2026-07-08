@@ -1,30 +1,38 @@
 ---
-- name: Reload demo platform facts artifact before merging ITSM webhook EDA block
-  ansible.builtin.include_vars:
-    file: "{{ aap_eda_itsm_webhook_pipeline_artifact_file }}"
+- name: Read demo platform facts artifact from disk before merging ITSM Kafka EDA block
+  ansible.builtin.slurp:
+    src: "{{ aap_eda_itsm_webhook_pipeline_artifact_file }}"
+  register: aap_eda_itsm_webhook_pipeline_artifact_slurp
   no_log: true
 
-- name: Merge ITSM webhook EDA facts into demo platform artifact
+- name: Merge ITSM Kafka EDA facts into demo platform artifact
   ansible.builtin.set_fact:
-    demo_platform: >-
+    demo_platform_artifact_merged: >-
       {{
-        demo_platform | combine({
-          'eda': demo_platform.eda | default({}) | combine({
-            'itsm_webhook_event_stream_post_url': aap_eda_itsm_webhook_pipeline_event_stream_post_url,
-            'itsm_webhook_event_stream_username': aap_eda_itsm_webhook_pipeline_event_stream_username,
-            'itsm_webhook_event_stream_password': aap_eda_itsm_webhook_pipeline_event_stream_password,
-            'itsm_webhook_activation_name': aap_eda_itsm_webhook_pipeline_activation_name
-          })
-        }, recursive=True)
+        (aap_eda_itsm_webhook_pipeline_artifact_slurp.content | b64decode | from_yaml).demo_platform | default({})
+        | combine({
+            'eda': (
+              (aap_eda_itsm_webhook_pipeline_artifact_slurp.content | b64decode | from_yaml).demo_platform.eda | default({})
+              | combine({
+                  'itsm_webhook_activation_name': aap_eda_itsm_webhook_pipeline_activation_name,
+                  'kafka_topic_itsm': aap_eda_itsm_webhook_pipeline_kafka_topic_itsm,
+                })
+            )
+          }, recursive=True)
       }}
   no_log: true
 
-- name: Update demo platform facts artifact with ITSM webhook EDA details
+- name: Update demo platform facts artifact with ITSM Kafka EDA details
   ansible.builtin.copy:
     dest: "{{ aap_eda_itsm_webhook_pipeline_artifact_file }}"
     mode: "0600"
     content: |
       ---
       demo_platform:
-      {{ demo_platform | to_nice_yaml(indent=2) | indent(2, first=True) }}
+      {{ demo_platform_artifact_merged | to_nice_yaml(indent=2) | indent(2, first=True) }}
+  no_log: true
+
+- name: Refresh in-memory demo platform facts after ITSM EDA artifact update
+  ansible.builtin.set_fact:
+    demo_platform: "{{ demo_platform_artifact_merged }}"
   no_log: true

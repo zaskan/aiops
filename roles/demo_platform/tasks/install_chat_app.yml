@@ -53,75 +53,78 @@
           stringData:
             jwt-secret: "{{ chat_app_jwt_secret }}"
 
-    - name: Check whether chat-app BuildConfig exists
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ chat_app_namespace }}"
-          - get
-          - bc/demo-chat
-          - -o
-          - name
-      register: demo_chat_bc_check
-      changed_when: false
-      failed_when: false
+    - name: Build chat-app image in OpenShift
+      when: not (demo_platform_skip_image_builds | default(false) | bool)
+      block:
+        - name: Check whether chat-app BuildConfig exists
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ chat_app_namespace }}"
+              - get
+              - bc/demo-chat
+              - -o
+              - name
+          register: demo_chat_bc_check
+          changed_when: false
+          failed_when: false
 
-    - name: Create chat-app BuildConfig from Git source
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ chat_app_namespace }}"
-          - new-build
-          - "{{ chat_app_source_repo_url }}"
-          - --strategy=docker
-          - --name=demo-chat
-          - "-l"
-          - app=demo-chat
-      when: demo_chat_bc_check.rc != 0
-      register: demo_chat_new_build
-      changed_when: demo_chat_new_build.rc == 0
+        - name: Create chat-app BuildConfig from Git source
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ chat_app_namespace }}"
+              - new-build
+              - "{{ chat_app_source_repo_url }}"
+              - --strategy=docker
+              - --name=demo-chat
+              - "-l"
+              - app=demo-chat
+          when: demo_chat_bc_check.rc != 0
+          register: demo_chat_new_build
+          changed_when: demo_chat_new_build.rc == 0
 
-    - name: Import Python base image for chat-app build
-      ansible.builtin.command:
-        argv:
-          - oc
-          - import-image
-          - python:3.12-slim-bookworm
-          - --from=docker.io/library/python:3.12-slim-bookworm
-          - --confirm
-          - -n
-          - "{{ chat_app_namespace }}"
-      register: demo_chat_import_base
-      changed_when: demo_chat_import_base.rc == 0
-      failed_when: false
+        - name: Import Python base image for chat-app build
+          ansible.builtin.command:
+            argv:
+              - oc
+              - import-image
+              - python:3.12-slim-bookworm
+              - --from=docker.io/library/python:3.12-slim-bookworm
+              - --confirm
+              - -n
+              - "{{ chat_app_namespace }}"
+          register: demo_chat_import_base
+          changed_when: demo_chat_import_base.rc == 0
+          failed_when: false
 
-    - name: Build chat-app image from Git
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ chat_app_namespace }}"
-          - start-build
-          - demo-chat
-          - --follow
-      register: demo_chat_start_build
-      changed_when: demo_chat_start_build.rc == 0
+        - name: Build chat-app image from Git
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ chat_app_namespace }}"
+              - start-build
+              - demo-chat
+              - --follow
+          register: demo_chat_start_build
+          changed_when: demo_chat_start_build.rc == 0
 
-    - name: Enable local ImageStream lookup for demo-chat
-      ansible.builtin.command:
-        argv:
-          - oc
-          - patch
-          - imagestream/demo-chat
-          - -n
-          - "{{ chat_app_namespace }}"
-          - -p
-          - '{"spec":{"lookupPolicy":{"local":true}}}'
-      register: demo_chat_is_patch
-      changed_when: "'patched' in demo_chat_is_patch.stdout"
-      failed_when: false
+        - name: Enable local ImageStream lookup for demo-chat
+          ansible.builtin.command:
+            argv:
+              - oc
+              - patch
+              - imagestream/demo-chat
+              - -n
+              - "{{ chat_app_namespace }}"
+              - -p
+              - '{"spec":{"lookupPolicy":{"local":true}}}'
+          register: demo_chat_is_patch
+          changed_when: "'patched' in demo_chat_is_patch.stdout"
+          failed_when: false
 
     - name: Set chat-app seed admin environment variables
       ansible.builtin.command:
@@ -137,17 +140,26 @@
       register: demo_chat_seed_env
       changed_when: "'updated' in demo_chat_seed_env.stdout or 'restarted' in demo_chat_seed_env.stdout"
 
-    - name: Wait for chat-app deployment rollout
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ chat_app_namespace }}"
-          - rollout
-          - status
-          - deployment/demo-chat
-          - --timeout=300s
-      changed_when: false
+- name: Point demo-chat deployment at prebuilt Quay image
+  ansible.builtin.include_tasks: apply_prebuilt_workload_image.yml
+  vars:
+    prebuilt_workload_namespace: "{{ chat_app_namespace }}"
+    prebuilt_workload_deployment: demo-chat
+    prebuilt_workload_container: demo-chat
+    prebuilt_workload_image: "{{ demo_platform_images.chat_app }}"
+  when: demo_platform_skip_image_builds | default(false) | bool
+
+- name: Wait for chat-app deployment rollout
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ chat_app_namespace }}"
+      - rollout
+      - status
+      - deployment/demo-chat
+      - --timeout=300s
+  changed_when: false
 
 - name: Get chat-app route host
   ansible.builtin.command:

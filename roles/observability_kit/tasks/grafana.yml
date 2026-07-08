@@ -1,0 +1,39 @@
+---
+- name: Discover Grafana dashboard JSON files
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboard_paths: >-
+      {{ lookup('ansible.builtin.fileglob', role_path ~ '/files/grafana/dashboards/*.json', wantlist=True) }}
+
+- name: Build Grafana dashboards ConfigMap data map
+  ansible.builtin.set_fact:
+    observability_kit_grafana_dashboards_data: >-
+      {{
+        observability_kit_grafana_dashboards_data | default({})
+        | combine({ (item | basename): lookup('ansible.builtin.file', item) })
+      }}
+  loop: "{{ observability_kit_grafana_dashboard_paths }}"
+
+- name: Deploy Grafana Secret, ConfigMaps, workload, Service, and Route
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ lookup('template', 'grafana_stack.yaml.j2') | from_yaml_all | list }}"
+
+- name: Read Grafana Route host
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - "{{ observability_kit_grafana_route_name }}"
+      - -n
+      - "{{ observability_kit_namespace }}"
+      - -o
+      - jsonpath={.spec.host}
+  register: observability_kit_grafana_route_host
+  changed_when: false
+
+- name: Capture Grafana external URL
+  ansible.builtin.set_fact:
+    observability_kit_grafana_url: "https://{{ observability_kit_grafana_route_host.stdout | trim }}"
+  when: observability_kit_grafana_route_host.stdout | trim | length > 0

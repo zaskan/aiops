@@ -1,0 +1,49 @@
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    strimzi.io/cluster: {{ observability_kit_kafka_cluster_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  replicas: {{ observability_kit_kafka_replicas }}
+  roles:
+    - controller
+    - broker
+  storage:
+    type: ephemeral
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ observability_kit_kafka_cluster_name }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    app.kubernetes.io/part-of: aiops-observability
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    version: {{ observability_kit_kafka_version }}
+    metadataVersion: {{ observability_kit_kafka_metadata_version }}
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}

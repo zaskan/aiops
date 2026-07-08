@@ -1,0 +1,98 @@
+---
+demo_platform_enable_observability_kit: true
+
+observability_kit_namespace: aiops-observability
+observability_kit_validate_certs: false
+
+# Strimzi / Kafka (Streams for Apache Kafka operator must be installed manually)
+observability_kit_kafka_cluster_name: aiops-kafka
+observability_kit_kafka_version: "4.1.0"
+observability_kit_kafka_metadata_version: "4.1-IV1"
+observability_kit_kafka_replicas: 1
+observability_kit_kafka_topic_alertmanager: aiops.alertmanager
+observability_kit_kafka_topic_itsm: aiops.itsm
+observability_kit_kafka_topic_aap_logs: aiops.aap.logs
+observability_kit_kafka_topic_partitions: 3
+observability_kit_kafka_topic_replicas: 1
+
+# OTel Collector
+observability_kit_otel_collector_image: otel/opentelemetry-collector-contrib:0.109.0
+observability_kit_collector_upstream_name: otel-collector-upstream
+observability_kit_collector_downstream_name: otel-collector-downstream
+observability_kit_collector_alertmanager_path: /v1/alerts
+observability_kit_collector_itsm_path: /v1/itsm
+observability_kit_collector_alertmanager_port: 8090
+observability_kit_collector_itsm_port: 8091
+observability_kit_collector_aap_logs_port: 8092
+observability_kit_collector_aap_logs_path: /v1/aap/logs
+observability_kit_collector_otlp_grpc_port: 4317
+observability_kit_collector_otlp_http_port: 4318
+
+# Webhook basic auth (Alertmanager + ITSM)
+observability_kit_alertmanager_webhook_username: aiops-alertmanager
+observability_kit_alertmanager_webhook_password: >-
+  {{ lookup('ansible.builtin.env', 'OBSERVABILITY_ALERTMANAGER_WEBHOOK_PASSWORD')
+  | default('aiops-alertmanager-webhook-secret', true) }}
+observability_kit_itsm_webhook_username: aiops-itsm-webhook
+observability_kit_itsm_webhook_password: >-
+  {{ lookup('ansible.builtin.env', 'OBSERVABILITY_ITSM_WEBHOOK_PASSWORD')
+  | default('aiops-itsm-webhook-secret', true) }}
+
+# Internal service DNS (used by Alertmanager, itsm-app, EDA rulebooks)
+observability_kit_collector_internal_host: >-
+  otel-collector-upstream.{{ observability_kit_namespace }}.svc.cluster.local
+observability_kit_kafka_internal_bootstrap: >-
+  {{ observability_kit_kafka_cluster_name }}-kafka-bootstrap.{{ observability_kit_namespace }}.svc:9092
+
+# Loki
+observability_kit_loki_name: loki
+observability_kit_loki_image: grafana/loki:3.0.0
+observability_kit_loki_port: 3100
+observability_kit_loki_otlp_path: /otlp/v1/logs
+observability_kit_loki_internal_url: >-
+  http://{{ observability_kit_loki_name }}.{{ observability_kit_namespace }}.svc:{{ observability_kit_loki_port }}
+# Resource attributes promoted to index labels for Grafana LogQL selectors
+observability_kit_loki_otlp_index_labels:
+  - aiops_source
+  - service_namespace
+  - itsm_event
+  - itsm_public_id
+  - alertname
+  - alert_status
+  - vm_name
+  - aap_logger
+
+# Grafana
+observability_kit_grafana_name: grafana
+observability_kit_grafana_image: grafana/grafana:11.3.0
+observability_kit_grafana_port: 3000
+observability_kit_grafana_route_name: grafana
+observability_kit_grafana_admin_user: admin
+observability_kit_grafana_admin_password: >-
+  {{ lookup('ansible.builtin.env', 'OBSERVABILITY_GRAFANA_ADMIN_PASSWORD')
+  | default('aiops-grafana-admin-secret', true) }}
+observability_kit_grafana_dashboard_folder: AIOps
+observability_kit_grafana_ready_retries: 30
+observability_kit_grafana_ready_delay: 10
+
+# AAP native log aggregation (controller settings API, type other)
+observability_kit_aap_namespace: aap
+observability_kit_aap_logging_level: INFO
+observability_kit_aap_logging_loggers:
+  - awx
+  - activity_stream
+  - job_events
+  - system_tracking
+observability_kit_configure_aap_logging: true
+observability_kit_verify_strict: false
+
+# Readiness
+observability_kit_kafka_ready_retries: 60
+observability_kit_kafka_ready_delay: 10
+observability_kit_loki_ready_retries: 30
+observability_kit_loki_ready_delay: 10
+observability_kit_collector_ready_retries: 30
+observability_kit_collector_ready_delay: 10
+
+# Artifact output
+observability_kit_artifact_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"

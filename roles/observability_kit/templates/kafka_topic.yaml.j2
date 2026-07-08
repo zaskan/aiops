@@ -1,0 +1,13 @@
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ observability_kit_kafka_topic_name | replace('.', '-') }}
+  namespace: {{ observability_kit_namespace }}
+  labels:
+    strimzi.io/cluster: {{ observability_kit_kafka_cluster_name }}
+    app.kubernetes.io/part-of: aiops-observability
+spec:
+  topicName: {{ observability_kit_kafka_topic_name }}
+  partitions: {{ observability_kit_kafka_topic_partitions }}
+  replicas: {{ observability_kit_kafka_topic_replicas }}

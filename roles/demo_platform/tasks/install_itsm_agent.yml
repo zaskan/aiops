@@ -110,66 +110,69 @@
 - name: Install itsm-agent image and deployment from GitHub
   when: demo_itsm_agent_needs_install | bool
   block:
-    - name: Check whether itsm-agent BuildConfig exists
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_agent_namespace }}"
-          - get
-          - bc/itsm-agent
-          - -o
-          - name
-      register: demo_itsm_agent_bc_check
-      changed_when: false
-      failed_when: false
+    - name: Build itsm-agent image in OpenShift
+      when: not (demo_platform_skip_image_builds | default(false) | bool)
+      block:
+        - name: Check whether itsm-agent BuildConfig exists
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ itsm_agent_namespace }}"
+              - get
+              - bc/itsm-agent
+              - -o
+              - name
+          register: demo_itsm_agent_bc_check
+          changed_when: false
+          failed_when: false
 
-    - name: Create itsm-agent BuildConfig from Git source
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_agent_namespace }}"
-          - new-build
-          - "{{ itsm_agent_source_repo_url }}"
-          - --strategy=docker
-          - --name=itsm-agent
-          - "-l"
-          - app=itsm-agent
-      when: demo_itsm_agent_bc_check.rc != 0
-      register: demo_itsm_agent_new_build
-      changed_when: demo_itsm_agent_new_build.rc == 0
+        - name: Create itsm-agent BuildConfig from Git source
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ itsm_agent_namespace }}"
+              - new-build
+              - "{{ itsm_agent_source_repo_url }}"
+              - --strategy=docker
+              - --name=itsm-agent
+              - "-l"
+              - app=itsm-agent
+          when: demo_itsm_agent_bc_check.rc != 0
+          register: demo_itsm_agent_new_build
+          changed_when: demo_itsm_agent_new_build.rc == 0
 
-    - name: Import Python base image for itsm-agent build
-      ansible.builtin.command:
-        argv:
-          - oc
-          - import-image
-          - python:3.12-slim
-          - --from=docker.io/library/python:3.12-slim
-          - --confirm
-          - -n
-          - "{{ itsm_agent_namespace }}"
-      register: demo_itsm_agent_import_base
-      changed_when: demo_itsm_agent_import_base.rc == 0
-      failed_when: false
+        - name: Import Python base image for itsm-agent build
+          ansible.builtin.command:
+            argv:
+              - oc
+              - import-image
+              - python:3.12-slim
+              - --from=docker.io/library/python:3.12-slim
+              - --confirm
+              - -n
+              - "{{ itsm_agent_namespace }}"
+          register: demo_itsm_agent_import_base
+          changed_when: demo_itsm_agent_import_base.rc == 0
+          failed_when: false
 
-    - name: Build itsm-agent image from patched Git source
-      ansible.builtin.include_tasks: build_itsm_agent_image.yml
+        - name: Build itsm-agent image from upstream Git source
+          ansible.builtin.include_tasks: build_itsm_agent_image.yml
 
-    - name: Enable local ImageStream lookup for itsm-agent
-      ansible.builtin.command:
-        argv:
-          - oc
-          - patch
-          - imagestream/itsm-agent
-          - -n
-          - "{{ itsm_agent_namespace }}"
-          - -p
-          - '{"spec":{"lookupPolicy":{"local":true}}}'
-      register: demo_itsm_agent_is_patch
-      changed_when: "'patched' in demo_itsm_agent_is_patch.stdout"
-      failed_when: false
+        - name: Enable local ImageStream lookup for itsm-agent
+          ansible.builtin.command:
+            argv:
+              - oc
+              - patch
+              - imagestream/itsm-agent
+              - -n
+              - "{{ itsm_agent_namespace }}"
+              - -p
+              - '{"spec":{"lookupPolicy":{"local":true}}}'
+          register: demo_itsm_agent_is_patch
+          changed_when: "'patched' in demo_itsm_agent_is_patch.stdout"
+          failed_when: false
 
 - name: Apply itsm-agent deployment manifest
   ansible.builtin.command:
@@ -180,6 +183,33 @@
       - "{{ itsm_agent_manifest_base }}/deployment.yaml"
   register: demo_itsm_agent_deployment_apply
   changed_when: "'configured' in demo_itsm_agent_deployment_apply.stdout or 'created' in demo_itsm_agent_deployment_apply.stdout"
+
+- name: Remove spurious itsm-agent container from bad prebuilt image patch
+  ansible.builtin.command:
+    argv:
+      - oc
+      - patch
+      - deployment/itsm-agent
+      - "-n"
+      - "{{ itsm_agent_namespace }}"
+      - --type=json
+      - "-p"
+      - >-
+        [{"op":"test","path":"/spec/template/spec/containers/0/name","value":"itsm-agent"},
+        {"op":"remove","path":"/spec/template/spec/containers/0"}]
+  register: demo_itsm_agent_remove_spurious_container
+  changed_when: demo_itsm_agent_remove_spurious_container.rc == 0
+  failed_when: false
+  when: demo_platform_skip_image_builds | default(false) | bool
+
+- name: Point itsm-agent bot container at prebuilt Quay image
+  ansible.builtin.include_tasks: apply_prebuilt_workload_image.yml
+  vars:
+    prebuilt_workload_namespace: "{{ itsm_agent_namespace }}"
+    prebuilt_workload_deployment: itsm-agent
+    prebuilt_workload_container: bot
+    prebuilt_workload_image: "{{ demo_platform_images.itsm_agent }}"
+  when: demo_platform_skip_image_builds | default(false) | bool
 
 - name: Rollout restart itsm-agent when secrets changed on existing deployment
   when:
@@ -206,9 +236,6 @@
       - deployment/itsm-agent
       - --timeout=300s
   changed_when: false
-
-- name: Ensure itsm-agent enriches Apache Application asset fields for AAP extra vars
-  ansible.builtin.include_tasks: ensure_itsm_agent_apache_asset_patch.yml
 
 - name: Set itsm-agent demo platform facts
   ansible.builtin.set_fact:

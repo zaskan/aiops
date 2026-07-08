@@ -37,6 +37,8 @@ gitea_admin_password: "{{ lookup('ansible.builtin.env', 'GITEA_ADMIN_PASSWORD') 
 gitea_admin_email: "{{ lookup('ansible.builtin.env', 'GITEA_ADMIN_EMAIL') | default('admin@example.com', true) }}"
 gitea_secret_key: "{{ lookup('ansible.builtin.env', 'GITEA_SECRET_KEY') | default('changeme-gitea-secret-key', true) }}"
 gitea_postgres_password: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_PASSWORD') | default('changeme-gitea-db-password', true) }}"
+# Set true to wipe postgres-data PVC (fixes corrupt checkpoint / version mismatch; re-run install to reprovision gitea).
+gitea_postgres_reset_pvc: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_RESET_PVC', default='false') | bool }}"
 
 # AAP optional override after auto-discover
 aap_password_override: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD', default='') }}"

@@ -49,52 +49,55 @@
             bootstrap-admin-user: "{{ itsm_app_bootstrap_admin_user }}"
             bootstrap-admin-password: "{{ itsm_app_bootstrap_admin_password }}"
 
-    - name: Check whether itsm-app BuildConfig exists
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_app_namespace }}"
-          - get
-          - bc/itsm-app
-          - -o
-          - name
-      register: demo_itsm_bc_check
-      changed_when: false
-      failed_when: false
+    - name: Build itsm-app image in OpenShift
+      when: not (demo_platform_skip_image_builds | default(false) | bool)
+      block:
+        - name: Check whether itsm-app BuildConfig exists
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ itsm_app_namespace }}"
+              - get
+              - bc/itsm-app
+              - -o
+              - name
+          register: demo_itsm_bc_check
+          changed_when: false
+          failed_when: false
 
-    - name: Create itsm-app BuildConfig from Git source
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_app_namespace }}"
-          - new-build
-          - "{{ itsm_app_source_repo_url }}"
-          - --strategy=docker
-          - --name=itsm-app
-          - "-l"
-          - app=itsm-app
-      when: demo_itsm_bc_check.rc != 0
-      register: demo_itsm_new_build
-      changed_when: demo_itsm_new_build.rc == 0
+        - name: Create itsm-app BuildConfig from Git source
+          ansible.builtin.command:
+            argv:
+              - oc
+              - "-n"
+              - "{{ itsm_app_namespace }}"
+              - new-build
+              - "{{ itsm_app_source_repo_url }}"
+              - --strategy=docker
+              - --name=itsm-app
+              - "-l"
+              - app=itsm-app
+          when: demo_itsm_bc_check.rc != 0
+          register: demo_itsm_new_build
+          changed_when: demo_itsm_new_build.rc == 0
 
-    - name: Import Python base image for itsm-app build
-      ansible.builtin.command:
-        argv:
-          - oc
-          - import-image
-          - python:3.12-slim-bookworm
-          - --from=docker.io/library/python:3.12-slim-bookworm
-          - --confirm
-          - -n
-          - "{{ itsm_app_namespace }}"
-      register: demo_itsm_import_base
-      changed_when: demo_itsm_import_base.rc == 0
-      failed_when: false
+        - name: Import Python base image for itsm-app build
+          ansible.builtin.command:
+            argv:
+              - oc
+              - import-image
+              - python:3.12-slim-bookworm
+              - --from=docker.io/library/python:3.12-slim-bookworm
+              - --confirm
+              - -n
+              - "{{ itsm_app_namespace }}"
+          register: demo_itsm_import_base
+          changed_when: demo_itsm_import_base.rc == 0
+          failed_when: false
 
-    - name: Build itsm-app image from patched Git source
-      ansible.builtin.include_tasks: build_itsm_app_image.yml
+        - name: Build itsm-app image from patched Git source
+          ansible.builtin.include_tasks: build_itsm_app_image.yml
 
     - name: Apply itsm-app workload manifests
       ansible.builtin.command:
@@ -108,17 +111,26 @@
         - service.yaml
         - route.yaml
 
-    - name: Wait for itsm-app deployment rollout
-      ansible.builtin.command:
-        argv:
-          - oc
-          - "-n"
-          - "{{ itsm_app_namespace }}"
-          - rollout
-          - status
-          - deployment/itsm-app
-          - --timeout=300s
-      changed_when: false
+- name: Point itsm-app deployment at prebuilt Quay image
+  ansible.builtin.include_tasks: apply_prebuilt_workload_image.yml
+  vars:
+    prebuilt_workload_namespace: "{{ itsm_app_namespace }}"
+    prebuilt_workload_deployment: itsm-app
+    prebuilt_workload_container: itsm-app
+    prebuilt_workload_image: "{{ demo_platform_images.itsm_app }}"
+  when: demo_platform_skip_image_builds | default(false) | bool
+
+- name: Wait for itsm-app deployment rollout
+  ansible.builtin.command:
+    argv:
+      - oc
+      - "-n"
+      - "{{ itsm_app_namespace }}"
+      - rollout
+      - status
+      - deployment/itsm-app
+      - --timeout=300s
+  changed_when: false
 
 - name: Get itsm-app route host
   ansible.builtin.command:

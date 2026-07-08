@@ -42,9 +42,11 @@
 
 - name: Ensure itsm-app sends encoding_format for vLLM embedding backends
   ansible.builtin.include_tasks: ensure_itsm_app_vllm_embedding_patch.yml
+  when: not (demo_platform_skip_image_builds | default(false) | bool)
 
 - name: Ensure itsm-app avoids duplicate catalog request changes
   ansible.builtin.include_tasks: ensure_itsm_app_catalog_ritm_patch.yml
+  when: not (demo_platform_skip_image_builds | default(false) | bool)
 
 - name: Resolve effective ITSM KB embedding settings
   ansible.builtin.set_fact:

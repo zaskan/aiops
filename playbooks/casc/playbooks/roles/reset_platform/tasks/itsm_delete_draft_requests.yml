@@ -1,0 +1,55 @@
+---
+- name: List all ITSM service requests for draft cleanup
+  ansible.builtin.uri:
+    url: "{{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests"
+    method: GET
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    headers:
+      Accept: application/json
+  register: reset_itsm_all_requests
+
+- name: Build draft ITSM service request refs to delete
+  ansible.builtin.set_fact:
+    reset_itsm_draft_request_refs: >-
+      {{
+        reset_itsm_all_requests.json
+        | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'equalto', 'draft')
+        | map(attribute='public_id')
+        | list
+      }}
+
+- name: Delete draft ITSM service requests
+  ansible.builtin.uri:
+    url: >-
+      {{ itsm_api_base_url | regex_replace('/$', '') }}/api/v1/requests/{{
+      item | urlencode }}
+    method: DELETE
+    force_basic_auth: true
+    url_username: "{{ itsm_api_user }}"
+    url_password: "{{ itsm_api_password }}"
+    validate_certs: "{{ itsm_validate_certs }}"
+    status_code: [200, 204, 404, 409]
+  register: reset_itsm_draft_request_delete_results
+  failed_when: false
+  loop: "{{ reset_itsm_draft_request_refs | default([]) }}"
+  when: reset_itsm_draft_request_refs | default([]) | length > 0
+
+- name: Summarize draft ITSM service request deletions
+  ansible.builtin.debug:
+    msg:
+      - "Draft requests found: {{ reset_itsm_draft_request_refs | default([]) | length }}"
+      - >-
+        Deleted: {{
+          reset_itsm_draft_request_delete_results.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 204])
+          | list
+          | length
+        }}

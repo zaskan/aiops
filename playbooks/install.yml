@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars_files:
+    - ../group_vars/all/container_images.yml
     - ../group_vars/all/demo_platform.yml
     - ../group_vars/all/chat_aiops.yml
     - ../group_vars/all/itsm_aiops.yml
@@ -25,6 +26,9 @@
     - ../group_vars/all/aap_eda_pipeline.yml
     - ../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
     - ../group_vars/all/aap_itsm_chat_pipeline.yml
+    - ../group_vars/all/observability_kit.yml
+    - ../group_vars/all/gitops_observability.yml
+    - ../group_vars/all/aap_reset_pipeline.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
     - ../group_vars/all/itsm_kb_apache_troubleshoot.yml
     - ../group_vars/all/vm_network.yml

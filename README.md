@@ -18,7 +18,10 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 | `playbooks/casc/configure_itsm_app_rag.yml` | Enable ITSM KB semantic search (embedding API on itsm-app) |
 | `playbooks/casc/configure_aap_httpd_workflow.yml` | AAP job templates and Deploy Generic App workflow (inventory not created) |
 | `playbooks/casc/configure_aap_apache_troubleshoot_pipeline.yml` | AAP job templates for Apache alert incident and remediation |
-| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Alertmanager event stream, and **Apache Alert Incident Activation** |
+| `playbooks/casc/configure_aap_eda_pipeline.yml` | EDA Rulebooks project, Kafka activations, and **Apache Alert Incident Activation** |
+| `playbooks/casc/configure_observability_gitops.yml` | Argo CD Application for Observability stack |
+| `playbooks/casc/configure_observability_kit.yml` | Render/push observability manifests to Gitea and sync via Argo CD |
+| `playbooks/casc/configure_aap_reset_pipeline.yml` | AAP **Reset** job template for demo environment cleanup |
 | `playbooks/casc/configure_aap_lightspeed_remediation_pipeline.yml` | AAP Lightspeed Remediation workflow |
 | `playbooks/casc/configure_itsm_apache_stack_templates.yml` | ITSM task/change/request templates for Generic Application stack |
 | `playbooks/casc/configure_aap_apache_stack_workflow.yml` | Master AAP workflow Deploy Generic Application Stack |
@@ -50,13 +53,41 @@ Ansible automation to validate an OpenShift demo environment, install supporting
 
 | App                                            | Namespace   | Source                                  |
 | ---------------------------------------------- | ----------- | --------------------------------------- |
-| [itsm-app](https://github.com/zaskan/itsm-app) | `itsm-app`  | GitHub raw manifests + in-cluster build |
-| [chat-app](https://github.com/zaskan/chat-app) | `demo-chat` | GitHub raw manifests + in-cluster build |
-| [itsm-agent](https://github.com/zaskan/itsm-agent) | `itsm-agent` | GitHub raw manifests + in-cluster build (requires LiteLLM env vars) |
-| [gitea](https://github.com/zaskan/gitea)       | `gitea`     | Kustomize OpenShift overlay             |
+| [itsm-app](https://github.com/zaskan/itsm-app) | `itsm-app`  | Quay prebuilt image (default) or in-cluster build |
+| [chat-app](https://github.com/zaskan/chat-app) | `demo-chat` | Quay prebuilt image (default) or in-cluster build |
+| [itsm-agent](https://github.com/zaskan/itsm-agent) | `itsm-agent` | Quay prebuilt image (default) or in-cluster build (requires LiteLLM env vars) |
+| [gitea](https://github.com/zaskan/gitea)       | `gitea`     | Kustomize overlay; DB/app images from Quay when prebuilt |
 
 
 AAP, OpenShift GitOps, and the OpenShift cluster itself are **not** installed by these playbooks — they must already exist.
+
+## Prebuilt images on Quay
+
+By default the installer pulls public images from `quay.io/rhn_support_rafsanch` and **does not** run OpenShift builds (`demo_platform_skip_image_builds: true` in [group_vars/all/container_images.yml](group_vars/all/container_images.yml)).
+
+| Image | Quay repository |
+| ----- | ---------------- |
+| itsm-app | `quay.io/rhn_support_rafsanch/itsm-app:<tag>` |
+| chat-app | `quay.io/rhn_support_rafsanch/chat-app:<tag>` |
+| itsm-agent | `quay.io/rhn_support_rafsanch/itsm-agent:<tag>` |
+| gitea | `quay.io/rhn_support_rafsanch/gitea:1.24-rootless` |
+| postgres | `quay.io/rhn_support_rafsanch/postgres:16-alpine` |
+| blackbox-exporter | `quay.io/rhn_support_rafsanch/blackbox-exporter:v0.25.0` |
+| fedora containerDisk (KubeVirt) | `quay.io/rhn_support_rafsanch/fedora-cloud-containerdisk:v43` |
+
+**Publish images** (requires `docker` or `podman`, `skopeo`, `git`, and `docker login quay.io` or `podman login quay.io`):
+
+```bash
+IMAGE_TAG=aiops-1.0.0 ./scripts/build-push-quay-images.sh
+```
+
+Then set `demo_platform_image_tag` in `group_vars/all/container_images.yml` to match. Make each new Quay repository **public** in the Quay UI before install.
+
+The itsm-app image includes the same AIOps build-time patches as [build_itsm_app_image.yml](roles/demo_platform/tasks/build_itsm_app_image.yml) (vLLM embeddings + catalog RITM). Rebuild and bump the tag when those patches change.
+
+**In-cluster builds** (dev clusters): set `demo_platform_skip_image_builds: false` in `container_images.yml`. The playbook imports `python:3.12-slim-bookworm` / `python:3.12-slim` and runs `oc start-build` as before.
+
+**Not mirrored:** `registry.redhat.io/ansible-automation-platform-27/de-minimal-rhel9:latest` (AAP EDA decision environment) — the cluster still needs a Red Hat registry pull secret.
 
 ## Prerequisites
 
@@ -66,6 +97,7 @@ AAP, OpenShift GitOps, and the OpenShift cluster itself are **not** installed by
   - Ansible Automation Platform 2.7 operator + instance
   - OpenShift GitOps operator
   - OpenShift Virtualization operator (HyperConverged)
+  - **Red Hat Streams for Apache Kafka** operator (OperatorHub; provides `kafka.strimzi.io` CRDs — required before observability kit)
   - **OVN-Kubernetes** default network (not legacy OpenShift SDN)
   - **UserDefinedNetwork** CRD (`userdefinednetworks.k8s.ovn.org`) — OpenShift **4.17+** (tested on **4.21**)
 - Permission to create/delete namespaces and deploy workloads
@@ -106,15 +138,17 @@ The playbook will:
 8. Configure chat-app (**aiops** user, **operations** channel); deploy **itsm-agent** bot
 9. Mint a permanent OpenShift ServiceAccount token and update the artifact
 10. Create the **AIOps** organization and credentials in AAP (requires `PUBLIC_AH_OFFLINE_TOKEN`), including **Virtual Machines** (Machine type) and **ITSM App** (with API env/extra_var injectors)
-11. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
+11. Sync Gitea repositories (**Infrastructure**, **Playbooks**, **Rulebooks**, **Observability**, **AIOps_App**) for AAP SCM — includes `itsm_inventory.py` in **Playbooks**
 12. Create AAP **AIOps Playbooks** project, VM provisioning job templates, **AIOps Infrastructure** inventory (ITSM Assets SCM source), and **Provision VM** workflow
 13. Enable ITSM KB semantic search (embedding secret; may rebuild/restart itsm-app — SQLite is on `emptyDir`)
 14. Seed ITSM database after last pod restart: asset types, itsm-app webhooks, KB articles, and service catalog templates (must run after step 13 so data is not wiped by pod restart)
 15. Create application deployment job templates and **Deploy Generic App** workflow (uses **AIOps Infrastructure** inventory)
 16. Create Apache alert remediation job templates (**Create Apache Alert Incident**, **Troubleshoot apache application**)
-17. Configure EDA **AIOps Rulebooks** project, Alertmanager event stream, and enable **Apache Alert Incident Activation** rulebook activation
-18. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → EDA webhook)
-19. Create **Deploy Generic Application Stack** master workflow and VM modification workflows
+17. Deploy **observability kit** via GitOps: render manifests to Gitea **Observability**, sync with Argo CD **observability-stack** (Kafka, Loki, Grafana, OTel Collectors)
+18. Configure EDA **AIOps Rulebooks** project with Kafka rulebook activations (**Apache Alert Incident Activation**, **ITSM App Chat Activation**)
+19. Deploy OpenShift user-workload monitoring (blackbox exporter, PrometheusRule, AlertmanagerConfig → OTel Collector webhook)
+20. Export AAP platform logs via OTLP to the observability pipeline
+21. Create **Deploy Generic Application Stack** master workflow, VM modification workflows, and **Reset** job template
 
 The install playbook also prepares VM infrastructure: namespace **`aiops-demo`**, secret **`authorized-keys`** in [OKD format](https://docs.okd.io/4.19/virt/managing_vms/virt-accessing-vm-ssh.html#virt-adding-public-key-vm-cli_static-key) (`data.key` = base64-encoded OpenSSH public key for KubeVirt `accessCredentials`), and secondary UDN **`aiops-vm-network`** for fixed VM IPs. RSA 4096 keys are generated only when the secret is missing; re-runs leave the cluster secret unchanged. The **private** key is stored in the artifact under `demo_platform.virtualization` and provisioned in AAP as the **Virtual Machines** Machine credential. Legacy `vms-rsa` secrets are migrated automatically on the next install run.
 
@@ -433,11 +467,35 @@ Launch **Deploy Apache App** in AAP, fill in the survey, and confirm the Apache 
 
 ### Apache HTTP monitoring
 
-Install (`playbooks/install.yml` step 18) deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter, `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the EDA event stream.
+Install (`playbooks/install.yml` step 19) deploys the shared user-workload monitoring stack in `aiops-demo`: blackbox exporter (Quay image), `PrometheusRule` (`ApacheApplicationDown`), and `AlertmanagerConfig` routing alerts to the **upstream OTel Collector** (not directly to EDA).
 
 Per-VM HTTP **Probe** resources are **not** stored in the Infrastructure GitOps manifest. **Expose application** applies each `{vm_name}-http-probe` directly to the cluster via the OpenShift API after Argo CD sync creates the in-cluster Service. GitOps owns only the VirtualMachine, Service, and Route documents.
 
 Re-run **Expose application** on existing VMs to strip any legacy Probe documents from GitOps manifests and apply the direct Probe.
+
+### Observability kit (GitOps)
+
+Install **Red Hat Streams for Apache Kafka** from OperatorHub before running `playbooks/install.yml`. The automation deploys Kafka custom resources (`Kafka`, `KafkaNodePool`, `KafkaTopic`) but does not install the operator.
+
+Manifests are **rendered by Ansible**, pushed to the Gitea **Observability** repository, and deployed by Argo CD Application **`observability-stack`** (automated sync with prune/selfHeal). Demo app images use Quay; the observability stack uses public images (Grafana, Loki, OTel Collector) in GitOps manifests.
+
+```
+[ Alertmanager / ITSM / AAP logs ] ──► [ OTel Collector upstream ] ──► [ Kafka topics ]
+         │                                    │              │
+         │                                    │              ├──► EDA activations
+         └────────────────────────────────────┴──────────────┴──► [ OTel downstream ] ──► Loki ──► Grafana
+```
+
+Configure standalone (after Gitea is up):
+
+```bash
+ansible-playbook playbooks/casc/configure_observability_gitops.yml
+ansible-playbook playbooks/casc/configure_observability_kit.yml
+```
+
+Grafana URL and credentials are in `artifacts/demo_platform_facts.yml` under `demo_platform.observability`. Override the Grafana admin password with `OBSERVABILITY_GRAFANA_ADMIN_PASSWORD` before install.
+
+Disable the stack without removing other install steps: `-e demo_platform_enable_observability_kit=false`.
 
 **Troubleshoot apache application** restores a deleted VM/stack before SSH remediation: it syncs Argo CD when the manifest still exists in Gitea **Infrastructure**, or recreates the manifest from the ITSM **Virtual Machine** asset when it does not, then re-exposes the application if the in-cluster Service is missing. It also discovers the live pod-network `ansible_host`, updates the ITSM **Virtual Machine** asset when the IP changed, and syncs the **AIOps Infrastructure** inventory before connecting over SSH.
 
@@ -610,7 +668,7 @@ export ITSM_AIOPS_PASSWORD=your-secret
 ansible-playbook playbooks/casc/configure_itsm_aiops.yml
 ```
 
-### ITSM outbound webhooks via EDA
+### ITSM outbound webhooks to chat
 
 itsm-app outbound webhooks POST structured JSON:
 
@@ -618,36 +676,47 @@ itsm-app outbound webhooks POST structured JSON:
 {"event":"incident.created","timestamp":"...","actor":"admin","incident":{...}}
 ```
 
-chat-app inbound webhooks expect:
+chat-app accepts those payloads directly when the **operations** channel has `webhook_payload_format: itsm` (set by `configure_chat_aiops.yml`).
 
-```json
-{"body":"message text"}
-```
-
-AIOps routes itsm-app webhooks to an **EDA event stream** instead of posting directly to chat-app. The rulebook `itsm_app_chat_notifications.yml` launches AAP job template **Publish ITSM Chat Notification**, which formats the message and POSTs to the chat **operations** anonymous webhook.
+**Default path (`itsm_chat_webhook_delivery: eda`)** — routes through the observability pipeline:
 
 ```
-itsm-app  →  EDA (ITSM App Webhook)  →  AAP Publish ITSM Chat Notification  →  chat-app
+itsm-app  →  OTel Collector  →  Kafka (aiops.itsm)  →  EDA  →  AAP Publish ITSM Chat Notification  →  chat-app
+```
+
+**Direct path** (`itsm_chat_webhook_delivery: direct` in `group_vars/all/itsm_aiops.yml`):
+
+```
+itsm-app  →  chat-app operations webhook
 ```
 
 **Configure (after `playbooks/install.yml` or when updating):**
 
 ```bash
-ansible-playbook playbooks/casc/configure_gitea_repos.yml          # sync rulebook to Gitea
-ansible-playbook playbooks/casc/configure_aap_eda_itsm_webhook_pipeline.yml
-ansible-playbook playbooks/casc/configure_aap_itsm_chat_pipeline.yml
-ansible-playbook playbooks/casc/configure_itsm_eda_webhook.yml    # register itsm webhook + E2E test
+ansible-playbook playbooks/casc/configure_chat_aiops.yml
+ansible-playbook playbooks/casc/configure_itsm_eda_webhook.yml    # EDA/observability path (default)
+# or for direct chat delivery:
+ansible-playbook playbooks/casc/configure_itsm_chat_webhook.yml
 ```
 
-**What it creates:**
+**Legacy EDA event-stream path** is no longer used when the observability kit is enabled. Uninstall removes any leftover EDA event streams via `remove_legacy_event_streams.yml`.
+
+**What the direct path creates:**
 
 | Resource | Value |
 | -------- | ----- |
 | itsm user | `aiops` (non-admin) |
-| EDA event stream | `ITSM App Webhook` |
+| chat channel | `operations` with anonymous webhook + `webhook_payload_format: itsm` |
+| itsm webhook | chat operations channel anonymous webhook URL |
+
+**What the EDA/observability path creates:**
+
+| Resource | Value |
+| -------- | ----- |
+| Kafka topic | `aiops.itsm` |
 | EDA activation | `ITSM App Chat Activation` |
 | AAP job template | `Publish ITSM Chat Notification` |
-| itsm webhook | EDA event stream POST URL (basic auth embedded in URL for itsm-app) |
+| itsm webhook | OTel Collector ITSM endpoint (basic auth embedded in URL for itsm-app) |
 
 **Manual test** (after configuration):
 
@@ -790,6 +859,7 @@ ansible-playbook playbooks/casc/uninstall_aap_aiops.yml
 - **itsm-agent** — deletes namespace `itsm-agent` and all resources within it
 - **chat-app** — deletes namespace `demo-chat` and all resources within it
 - **gitea** — deletes namespace `gitea` (or workloads only when keeping PVCs)
+- **aiops-observability** (when `uninstall_remove_aap=true`) — observability kit removed via GitOps prune **before** Gitea is deleted; falls back to direct namespace deletion if Gitea is unavailable
 - **aiops-demo** — deletes namespace `aiops-demo` (VM SSH secret and any provisioned VMs)
 - **AAP AIOps** (when `uninstall_remove_aap=true`) — removes workflows, job templates, project, inventories (including **AIOps Infrastructure** and its ITSM Assets source), credentials, organization **AIOps**, and custom credential types
 - **OpenShift AAP automation** (when `uninstall_remove_openshift_sa=true`) — removes ServiceAccount `aap-aiops-automation`, token secret `aap-aiops-openshift-token`, and ClusterRoleBinding
@@ -826,6 +896,7 @@ Defaults live in `[group_vars/all/demo_platform.yml](group_vars/all/demo_platfor
 aiops/
 ├── ansible.cfg
 ├── collections/requirements.yml
+├── group_vars/all/container_images.yml
 ├── group_vars/all/demo_platform.yml
 ├── group_vars/all/aap_casc.yml
 ├── group_vars/all/gitea_repos.yml
@@ -845,7 +916,8 @@ aiops/
 │       ├── configure_gitea_repos.yml      # Gitea AIOps repositories
 │       ├── configure_chat_aiops.yml     # chat-app aiops user + webhook
 │       ├── configure_itsm_aiops.yml     # itsm-app aiops user
-│       ├── configure_itsm_eda_webhook.yml  # itsm webhook → EDA + chat E2E verify
+│       ├── configure_itsm_eda_webhook.yml  # legacy itsm webhook → EDA + chat E2E verify
+│       ├── configure_itsm_chat_webhook.yml  # itsm webhook → chat (direct)
 │       └── configure_itsm_agent.yml     # itsm-agent bot deploy + secrets
 ├── roles/
 │   ├── aap_casc/                    # AAP CASC provisioning
@@ -872,7 +944,11 @@ aiops/
 | AAP 2.7 not detected                | Confirm operator channel `stable-2.7` and a ready `AnsibleAutomationPlatform` CR          |
 | GitOps not available                | Confirm `openshift-gitops` namespace and running `openshift-gitops-server`                |
 | OpenShift Virtualization not ready  | Confirm `openshift-cnv` namespace, HyperConverged Available, and `virt-api` deployment  |
-| itsm/chat build fails on base image | Cluster needs registry access; playbook imports `python:3.12-slim-bookworm` automatically |
+| itsm/chat build fails on base image | Set `demo_platform_skip_image_builds: true` and use Quay images, or ensure cluster can import `python:3.12-slim-bookworm` when building in-cluster |
+| ImagePullBackOff on demo apps | Confirm Quay repos are public and `demo_platform_image_tag` matches a pushed tag (`skopeo inspect docker://quay.io/rhn_support_rafsanch/itsm-app:<tag>`) |
+| Gitea postgres crash loop (`invalid resource manager ID in checkpoint`) | Corrupt PVC — `GITEA_POSTGRES_RESET_PVC=true ansible-playbook playbooks/install.yml` (wipes DB; admin user is recreated automatically) |
+| Gitea API auth fails (`user does not exist`) after postgres reset | Re-run `playbooks/install.yml` or `playbooks/casc/configure_gitea_repos.yml` after install (admin ensure runs every install) |
+| Gitea postgres `chmod: /var/run/postgresql` | Fixed by install patch (`emptyDir` at `/var/run/postgresql`); re-run install or `patch_gitea_postgres_deployment.yml` |
 | Wrong app URLs after install        | Re-run install playbook to refresh facts                                                  |
 | ITSM AIOps chat message not received | Check EDA activation `ITSM App Chat Activation` and AAP job `Publish ITSM Chat Notification` |
 | ITSM AIOps preflight fails           | Run `playbooks/casc/configure_chat_aiops.yml` first (operations channel + anonymous webhook required)   |

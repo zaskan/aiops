@@ -23,10 +23,29 @@
     password: "{{ gitea_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ gitea_validate_certs }}"
-    status_code: 200
+    status_code: [200, 403]
     return_content: true
   register: gitea_repos_user
   no_log: true
+
+- name: Fail when Gitea admin must change password before API access
+  ansible.builtin.fail:
+    msg: >-
+      Gitea admin API auth failed: password change required for {{ gitea_admin_username }}.
+      Re-run playbooks/install.yml (ensure_gitea_admin_user clears the flag) or run:
+      oc exec -n gitea deployment/gitea -c gitea -- gitea --config /data/gitea/conf/app.ini
+      admin user change-password -u {{ gitea_admin_username }} -p '<password>' --must-change-password=false
+  when:
+    - gitea_repos_user.status == 403
+    - gitea_repos_user.content is search('must change your password', ignorecase=true)
+
+- name: Fail when Gitea admin API authentication fails
+  ansible.builtin.fail:
+    msg: >-
+      Gitea admin API auth failed for {{ gitea_admin_username }} at {{ gitea_api_base }}/api/v1/user
+      (HTTP {{ gitea_repos_user.status | default('unknown') }}).
+      Check artifacts/demo_platform_facts.yml credentials match secret gitea-secret in namespace gitea.
+  when: gitea_repos_user.status | default(0) != 200
 
 - name: Set Gitea repository owner from authenticated user
   ansible.builtin.set_fact:

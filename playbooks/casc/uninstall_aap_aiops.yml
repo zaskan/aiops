@@ -9,8 +9,16 @@
     - ../../group_vars/all/aap_casc.yml
     - ../../group_vars/all/aap_vm_pipeline.yml
     - ../../group_vars/all/aap_httpd_pipeline.yml
+    - ../../group_vars/all/aap_apache_stack_pipeline.yml
+    - ../../group_vars/all/aap_vm_cpu_modification_pipeline.yml
+    - ../../group_vars/all/aap_vm_memory_modification_pipeline.yml
+    - ../../group_vars/all/aap_vm_modification_pipeline.yml
     - ../../group_vars/all/aap_eda_itsm_webhook_pipeline.yml
     - ../../group_vars/all/aap_itsm_chat_pipeline.yml
     - ../../group_vars/all/aap_apache_troubleshoot_pipeline.yml
+    - ../../group_vars/all/aap_lightspeed_remediation_pipeline.yml
+    - ../../group_vars/all/aap_eda_pipeline.yml
+    - ../../group_vars/all/observability_kit.yml
+    - ../../group_vars/all/gitops_observability.yml
   roles:
     - role: aap_uninstall

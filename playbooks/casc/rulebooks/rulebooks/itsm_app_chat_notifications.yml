@@ -1,14 +1,16 @@
 ---
-- name: ITSM outbound webhooks to chat
+- name: ITSM outbound webhooks via Kafka
   hosts: all
   sources:
     - name: listen for itsm events
-      ansible.eda.webhook:
-        host: 0.0.0.0
-        port: 5000
+      ansible.eda.kafka:
+        host: aiops-kafka-kafka-bootstrap.aiops-observability.svc
+        port: 9092
+        topic: aiops.itsm
+        group_id: eda-itsm-chat-notifications
   rules:
     - name: Post incident.created to chat
-      condition: event.payload.event == "incident.created"
+      condition: event.body.event == "incident.created"
       action:
         run_job_template:
           name: Publish ITSM Chat Notification
@@ -16,12 +18,12 @@
           job_args:
             extra_vars:
               itsm_chat_event: incident.created
-              itsm_chat_public_id: "{{ event.payload.incident.public_id | default('?') }}"
-              itsm_chat_title: "{{ event.payload.incident.title | default('Untitled') }}"
-              itsm_chat_severity: "{{ event.payload.incident.severity | default('medium') }}"
+              itsm_chat_public_id: "{{ event.body.incident.public_id | default('?') }}"
+              itsm_chat_title: "{{ event.body.incident.title | default('Untitled') }}"
+              itsm_chat_severity: "{{ event.body.incident.severity | default('medium') }}"
 
     - name: Post request.submitted to chat
-      condition: event.payload.event == "request.submitted"
+      condition: event.body.event == "request.submitted"
       action:
         run_job_template:
           name: Publish ITSM Chat Notification
@@ -29,6 +31,6 @@
           job_args:
             extra_vars:
               itsm_chat_event: request.submitted
-              itsm_chat_public_id: "{{ event.payload.request.public_id | default('?') }}"
+              itsm_chat_public_id: "{{ event.body.request.public_id | default('?') }}"
               itsm_chat_title: >-
-                {{ event.payload.request.name | default(event.payload.request.title | default('Service request')) }}
+                {{ event.body.request.name | default(event.body.request.title | default('Service request')) }}

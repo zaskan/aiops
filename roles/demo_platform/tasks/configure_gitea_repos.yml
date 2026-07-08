@@ -15,6 +15,12 @@
   ansible.builtin.include_vars:
     file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
 
+- name: Ensure gitea admin user matches artifact credentials
+  ansible.builtin.include_tasks: ensure_gitea_admin_user.yml
+  vars:
+    gitea_admin_user: "{{ demo_platform.gitea.username }}"
+    gitea_admin_password: "{{ demo_platform.gitea.password }}"
+
 - name: Map Gitea API connection from artifact
   ansible.builtin.set_fact:
     gitea_api_base: "{{ demo_platform.gitea.url }}"
@@ -29,6 +35,9 @@
   loop_control:
     loop_var: repo
     label: "{{ repo.name }}"
+  when:
+    - not (repo.skip_sync | default(false) | bool)
+    - gitea_repos_sync_only | default([]) | length == 0 or repo.name in gitea_repos_sync_only
   vars:
     gitea_repos_seed_entry: >-
       {{

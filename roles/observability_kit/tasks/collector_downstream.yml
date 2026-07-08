@@ -1,0 +1,6 @@
+---
+- name: Deploy downstream OTel Collector ConfigMap, Deployment, and Service
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ lookup('template', 'otel_collector_downstream.yaml.j2') | from_yaml_all | list }}"
