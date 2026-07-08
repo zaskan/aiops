@@ -6,5 +6,7 @@ gitops_infrastructure_gitea_repo: Infrastructure
 gitops_infrastructure_source_path: vms
 gitops_infrastructure_source_branch: main
 gitops_infrastructure_repo_secret_name: gitea-infrastructure
+gitops_infrastructure_dest_namespace: aiops-demo
+gitops_infrastructure_argocd_instance_name: openshift-gitops
 gitops_infrastructure_validate_certs: false
 gitops_infrastructure_gitea_insecure: true

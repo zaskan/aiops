@@ -1,0 +1,45 @@
+---
+cluster_operators_validate_certs: false
+
+cluster_operators_install_gitops: true
+cluster_operators_install_virtualization: true
+cluster_operators_install_kafka: true
+cluster_operators_install_aap: true
+
+cluster_operators_olm_source: redhat-operators
+cluster_operators_olm_source_namespace: openshift-marketplace
+cluster_operators_install_plan_approval: Automatic
+
+cluster_operators_csv_wait_retries: 60
+cluster_operators_csv_wait_delay: 15
+cluster_operators_component_wait_retries: 60
+cluster_operators_component_wait_delay: 15
+
+cluster_operators_gitops_operator_namespace: openshift-gitops-operator
+cluster_operators_gitops_operator_package: openshift-gitops-operator
+cluster_operators_gitops_subscription_name: openshift-gitops-operator
+cluster_operators_gitops_channel: latest
+cluster_operators_gitops_operand_namespace: openshift-gitops
+cluster_operators_gitops_operatorgroup_name: openshift-gitops-operator-group
+cluster_operators_gitops_operatorgroup_spec: {}
+
+cluster_operators_virt_operator_namespace: openshift-cnv
+cluster_operators_virt_operator_package: kubevirt-hyperconverged
+cluster_operators_virt_subscription_name: kubevirt-hyperconverged
+cluster_operators_virt_channel: stable
+cluster_operators_virt_hyperconverged_name: kubevirt-hyperconverged
+
+cluster_operators_kafka_operator_namespace: openshift-operators
+cluster_operators_kafka_operator_package: amq-streams
+cluster_operators_kafka_subscription_name: amq-streams
+cluster_operators_kafka_channel: stable
+
+cluster_operators_aap_operator_namespace: aap
+cluster_operators_aap_operator_package: ansible-automation-platform-operator
+cluster_operators_aap_subscription_name: ansible-automation-platform
+cluster_operators_aap_channel: stable-2.7
+cluster_operators_aap_instance_name: ansible
+cluster_operators_aap_hub_storage_size: 10Gi
+cluster_operators_aap_hub_storage_class: ""
+# When no ReadWriteMany StorageClass exists: disable_hub (default), rwo, or fail.
+cluster_operators_aap_hub_no_rwx_fallback: disable_hub

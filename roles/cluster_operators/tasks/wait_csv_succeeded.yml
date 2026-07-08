@@ -1,0 +1,22 @@
+---
+- name: Wait for operator CSV to reach Succeeded phase
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - csv
+      - -n
+      - "{{ cluster_operator_namespace }}"
+      - -l
+      - operators.coreos.com/{{ cluster_operator_package_name }}.{{ cluster_operator_namespace }}=
+      - -o
+      - jsonpath={.items[?(@.status.phase=="Succeeded")].metadata.name}
+  register: cluster_operator_csv_wait
+  changed_when: false
+  until: cluster_operator_csv_wait.stdout | default('') | trim | length > 0
+  retries: "{{ cluster_operators_csv_wait_retries }}"
+  delay: "{{ cluster_operators_csv_wait_delay }}"
+
+- name: Record installed operator CSV name
+  ansible.builtin.set_fact:
+    cluster_operator_csv_name: "{{ cluster_operator_csv_wait.stdout | trim }}"

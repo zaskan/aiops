@@ -1,0 +1,63 @@
+---
+- name: Ensure namespace exists for operator subscription
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ cluster_operator_namespace }}"
+
+- name: Look up existing operator subscription
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ cluster_operator_subscription_name }}"
+    namespace: "{{ cluster_operator_namespace }}"
+  register: cluster_operator_subscription_lookup
+
+- name: Ensure OperatorGroup exists for operator subscription
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    definition:
+      apiVersion: operators.coreos.com/v1
+      kind: OperatorGroup
+      metadata:
+        name: "{{ cluster_operator_operatorgroup_name }}"
+        namespace: "{{ cluster_operator_namespace }}"
+      spec: "{{ cluster_operator_operatorgroup_spec }}"
+  when:
+    - cluster_operator_operatorgroup_spec is defined
+    - cluster_operator_operatorgroup_spec is not none
+
+- name: Ensure Subscription exists for operator package
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ cluster_operator_subscription_name }}"
+        namespace: "{{ cluster_operator_namespace }}"
+      spec:
+        channel: "{{ cluster_operator_channel }}"
+        installPlanApproval: "{{ cluster_operators_install_plan_approval }}"
+        name: "{{ cluster_operator_package_name }}"
+        source: "{{ cluster_operators_olm_source }}"
+        sourceNamespace: "{{ cluster_operators_olm_source_namespace }}"
+  register: cluster_operator_subscription_apply
+
+- name: Wait for operator CSV to reach Succeeded phase
+  ansible.builtin.include_tasks: wait_csv_succeeded.yml

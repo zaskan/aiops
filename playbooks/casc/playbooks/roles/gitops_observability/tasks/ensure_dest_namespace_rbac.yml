@@ -1,0 +1,9 @@
+---
+- name: Grant OpenShift GitOps permission to manage Observability destination namespace
+  ansible.builtin.include_tasks: ../common/tasks/ensure_argocd_managed_namespace.yml
+  vars:
+    argocd_managed_namespace: "{{ gitops_observability_dest_namespace }}"
+    argocd_instance_name: "{{ gitops_observability_argocd_instance_name }}"
+    argocd_managed_namespace_openshift_api_server: "{{ gitops_observability_openshift_api_server | default(omit) }}"
+    argocd_managed_namespace_openshift_token: "{{ gitops_observability_openshift_token | default(omit) }}"
+    argocd_managed_namespace_validate_certs: "{{ gitops_observability_validate_certs }}"

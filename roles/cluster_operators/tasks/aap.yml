@@ -1,0 +1,191 @@
+---
+- name: Install Ansible Automation Platform operator subscription
+  ansible.builtin.include_tasks: install_subscription.yml
+  vars:
+    cluster_operator_namespace: "{{ cluster_operators_aap_operator_namespace }}"
+    cluster_operator_subscription_name: "{{ cluster_operators_aap_subscription_name }}"
+    cluster_operator_package_name: "{{ cluster_operators_aap_operator_package }}"
+    cluster_operator_channel: "{{ cluster_operators_aap_channel }}"
+    cluster_operator_operatorgroup_name: aap-operator-group
+    cluster_operator_operatorgroup_spec:
+      targetNamespaces:
+        - "{{ cluster_operators_aap_operator_namespace }}"
+
+- name: Discover ReadWriteMany storage class for AAP hub when not provided
+  ansible.builtin.shell: |
+    set -euo pipefail
+    oc get storageclass -o json | python3 -c '
+    import json, sys
+    items = json.load(sys.stdin).get("items", [])
+    for sc in items:
+        ann = sc.get("metadata", {}).get("annotations", {}) or {}
+        modes = ann.get("storageclass.kubernetes.io/supported-access-modes", "")
+        if "ReadWriteMany" in modes:
+            print(sc["metadata"]["name"])
+            raise SystemExit(0)
+    for preferred in ("ocs-storagecluster-cephfs", "nfs-client", "rook-cephfs"):
+        if any(sc.get("metadata", {}).get("name") == preferred for sc in items):
+            print(preferred)
+            raise SystemExit(0)
+    raise SystemExit(1)
+    '
+  register: cluster_operators_aap_storage_class_discover
+  changed_when: false
+  failed_when: false
+  when: cluster_operators_aap_hub_storage_class | default('') | trim | length == 0
+
+- name: Set discovered AAP hub ReadWriteMany storage class
+  ansible.builtin.set_fact:
+    cluster_operators_aap_hub_rwx_storage_class: >-
+      {{ cluster_operators_aap_storage_class_discover.stdout | trim }}
+  when:
+    - cluster_operators_aap_hub_storage_class | default('') | trim | length == 0
+    - cluster_operators_aap_storage_class_discover.stdout | default('') | trim | length > 0
+
+- name: Use configured AAP hub storage class
+  ansible.builtin.set_fact:
+    cluster_operators_aap_hub_rwx_storage_class: >-
+      {{ cluster_operators_aap_hub_storage_class | trim }}
+  when: cluster_operators_aap_hub_storage_class | default('') | trim | length > 0
+
+- name: Resolve AAP hub file storage when ReadWriteMany is available
+  ansible.builtin.set_fact:
+    cluster_operators_aap_hub_mode: file-rwx
+    cluster_operators_aap_hub_spec:
+      disabled: false
+      storage_type: file
+      file_storage_storage_class: "{{ cluster_operators_aap_hub_rwx_storage_class }}"
+      file_storage_size: "{{ cluster_operators_aap_hub_storage_size }}"
+  when: cluster_operators_aap_hub_rwx_storage_class | default('') | trim | length > 0
+
+- name: Discover default storage class for ReadWriteOnce hub fallback
+  ansible.builtin.shell: |
+    set -euo pipefail
+    oc get storageclass -o json | python3 -c '
+    import json, sys
+    items = json.load(sys.stdin).get("items", [])
+    for sc in items:
+        ann = sc.get("metadata", {}).get("annotations", {}) or {}
+        if ann.get("storageclass.kubernetes.io/is-default-class") == "true":
+            print(sc["metadata"]["name"])
+            raise SystemExit(0)
+    if items:
+        print(items[0]["metadata"]["name"])
+    raise SystemExit(1)
+    '
+  register: cluster_operators_aap_rwo_storage_class_discover
+  changed_when: false
+  failed_when: false
+  when:
+    - cluster_operators_aap_hub_spec is not defined
+    - cluster_operators_aap_hub_no_rwx_fallback | default('disable_hub') == 'rwo'
+
+- name: Resolve AAP hub file storage with ReadWriteOnce fallback
+  ansible.builtin.set_fact:
+    cluster_operators_aap_hub_mode: file-rwo
+    cluster_operators_aap_hub_spec:
+      disabled: false
+      storage_type: file
+      file_storage_storage_class: >-
+        {{ cluster_operators_aap_rwo_storage_class_discover.stdout | trim }}
+      file_storage_size: "{{ cluster_operators_aap_hub_storage_size }}"
+  when:
+    - cluster_operators_aap_hub_spec is not defined
+    - cluster_operators_aap_rwo_storage_class_discover.stdout | default('') | trim | length > 0
+
+- name: Resolve AAP hub disabled when no ReadWriteMany storage is available
+  ansible.builtin.set_fact:
+    cluster_operators_aap_hub_mode: disabled
+    cluster_operators_aap_hub_spec:
+      disabled: true
+  when:
+    - cluster_operators_aap_hub_spec is not defined
+    - cluster_operators_aap_hub_no_rwx_fallback | default('disable_hub') == 'disable_hub'
+
+- name: Fail when AAP hub storage cannot be resolved
+  ansible.builtin.fail:
+    msg: >-
+      No ReadWriteMany StorageClass was found for AAP automation hub file storage
+      and cluster_operators_aap_hub_no_rwx_fallback is set to fail.
+      Set CLUSTER_OPERATORS_AAP_HUB_STORAGE_CLASS or pass
+      -e cluster_operators_aap_hub_storage_class=<rwx-storage-class>,
+      or use -e cluster_operators_aap_hub_no_rwx_fallback=disable_hub to deploy
+      controller and EDA only (demo uses Red Hat Automation Hub externally).
+  when: cluster_operators_aap_hub_spec is not defined
+
+- name: Look up AnsibleAutomationPlatform custom resource
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+    name: "{{ cluster_operators_aap_instance_name }}"
+    namespace: "{{ cluster_operators_aap_operator_namespace }}"
+  register: cluster_operators_aap_cr_lookup
+
+- name: Deploy AnsibleAutomationPlatform custom resource
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    definition:
+      apiVersion: aap.ansible.com/v1alpha1
+      kind: AnsibleAutomationPlatform
+      metadata:
+        name: "{{ cluster_operators_aap_instance_name }}"
+        namespace: "{{ cluster_operators_aap_operator_namespace }}"
+      spec:
+        image_pull_policy: IfNotPresent
+        controller:
+          disabled: false
+        eda:
+          disabled: false
+        hub: "{{ cluster_operators_aap_hub_spec }}"
+        lightspeed:
+          disabled: true
+  when: cluster_operators_aap_cr_lookup.resources | default([]) | length == 0
+
+- name: Wait for AAP gateway route to be created
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - route
+      - -n
+      - "{{ cluster_operators_aap_operator_namespace }}"
+      - -o
+      - jsonpath={.items[?(@.spec.host)].spec.host}
+  register: cluster_operators_aap_route_wait
+  changed_when: false
+  until: cluster_operators_aap_route_wait.stdout | default('') | trim | length > 0
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Wait for AAP admin password secret
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: v1
+    kind: Secret
+    name: "{{ cluster_operators_aap_instance_name }}-admin-password"
+    namespace: "{{ cluster_operators_aap_operator_namespace }}"
+  register: cluster_operators_aap_admin_secret_wait
+  until: cluster_operators_aap_admin_secret_wait.resources | default([]) | length > 0
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+  no_log: true
+
+- name: Display Ansible Automation Platform operator summary
+  ansible.builtin.debug:
+    msg:
+      - "Operator CSV: {{ cluster_operator_csv_name | default('unknown') }}"
+      - "Instance: {{ cluster_operators_aap_operator_namespace }}/{{ cluster_operators_aap_instance_name }}"
+      - >-
+        Hub: {{ cluster_operators_aap_hub_mode }}
+        {%- if cluster_operators_aap_hub_mode in ['file-rwx', 'file-rwo'] -%}
+        ({{ cluster_operators_aap_hub_spec.file_storage_storage_class }})
+        {%- endif -%}
+      - "Gateway route host: {{ cluster_operators_aap_route_wait.stdout.split() | first | default('pending') }}"

@@ -5,3 +5,4 @@ metadata:
   name: {{ observability_kit_namespace }}
   labels:
     app.kubernetes.io/part-of: aiops-observability
+    argocd.argoproj.io/managed-by: {{ gitops_observability_argocd_instance_name | default('openshift-gitops') }}

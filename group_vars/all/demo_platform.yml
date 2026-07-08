@@ -40,9 +40,13 @@ gitea_postgres_password: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_PASSW
 # Set true to wipe postgres-data PVC (fixes corrupt checkpoint / version mismatch; re-run install to reprovision gitea).
 gitea_postgres_reset_pvc: "{{ lookup('ansible.builtin.env', 'GITEA_POSTGRES_RESET_PVC', default='false') | bool }}"
 
-# AAP optional override after auto-discover
+# OpenShift GitOps instance name for argocd.argoproj.io/managed-by namespace labels.
+demo_platform_gitops_argocd_instance_name: openshift-gitops
 aap_password_override: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD', default='') }}"
 aap_username_override: "{{ lookup('ansible.builtin.env', 'AAP_USERNAME', default='') }}"
+# Gateway may return 503 while controller/EDA pods are still starting after install_operators.
+demo_aap_api_wait_retries: 60
+demo_aap_api_wait_delay: 15
 
 # Ansible Automation Platform MCP server (operator-based, Technology Preview)
 aap_mcp_server_api_version: mcpserver.ansible.com/v1alpha1

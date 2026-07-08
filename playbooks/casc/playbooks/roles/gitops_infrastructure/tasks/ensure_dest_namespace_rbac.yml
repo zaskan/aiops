@@ -1,0 +1,9 @@
+---
+- name: Grant OpenShift GitOps permission to manage Infrastructure destination namespace
+  ansible.builtin.include_tasks: ../common/tasks/ensure_argocd_managed_namespace.yml
+  vars:
+    argocd_managed_namespace: "{{ gitops_infrastructure_dest_namespace }}"
+    argocd_instance_name: "{{ gitops_infrastructure_argocd_instance_name }}"
+    argocd_managed_namespace_openshift_api_server: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
+    argocd_managed_namespace_openshift_token: "{{ gitops_infrastructure_openshift_token | default(omit) }}"
+    argocd_managed_namespace_validate_certs: "{{ gitops_infrastructure_validate_certs }}"

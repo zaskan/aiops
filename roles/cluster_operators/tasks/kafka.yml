@@ -1,0 +1,48 @@
+---
+- name: Install Red Hat Streams for Apache Kafka operator subscription
+  ansible.builtin.include_tasks: install_subscription.yml
+  vars:
+    cluster_operator_namespace: "{{ cluster_operators_kafka_operator_namespace }}"
+    cluster_operator_subscription_name: "{{ cluster_operators_kafka_subscription_name }}"
+    cluster_operator_package_name: "{{ cluster_operators_kafka_operator_package }}"
+    cluster_operator_channel: "{{ cluster_operators_kafka_channel }}"
+    cluster_operator_operatorgroup_name: global-operators
+    cluster_operator_operatorgroup_spec: {}
+
+- name: Wait for Streams for Apache Kafka cluster operator pod
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - pods
+      - -n
+      - "{{ cluster_operators_kafka_operator_namespace }}"
+      - -l
+      - strimzi.io/kind=cluster-operator
+      - --field-selector=status.phase=Running
+      - -o
+      - name
+  register: cluster_operators_kafka_operator_pod_wait
+  changed_when: false
+  until: cluster_operators_kafka_operator_pod_wait.stdout | default('') | trim | length > 0
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Verify Kafka Strimzi API CRDs are registered
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - crd
+      - kafkas.kafka.strimzi.io
+      - kafkanodepools.kafka.strimzi.io
+      - kafkatopics.kafka.strimzi.io
+  register: cluster_operators_kafka_crds
+  changed_when: false
+
+- name: Display Streams for Apache Kafka operator summary
+  ansible.builtin.debug:
+    msg:
+      - "Operator CSV: {{ cluster_operator_csv_name | default('unknown') }}"
+      - "Cluster operator pod: {{ cluster_operators_kafka_operator_pod_wait.stdout | trim }}"
+      - "Kafka CRDs: registered"

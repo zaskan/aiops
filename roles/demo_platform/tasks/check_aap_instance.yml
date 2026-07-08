@@ -82,10 +82,10 @@
     method: GET
     validate_certs: "{{ validate_certs }}"
     force_basic_auth: true
-    status_code: 200
+    status_code: [200, 502, 503, 504]
   register: demo_aap_ping
-  retries: 5
-  delay: 5
+  retries: "{{ demo_aap_api_wait_retries }}"
+  delay: "{{ demo_aap_api_wait_delay }}"
   until: demo_aap_ping.status == 200
   when: demo_aap_candidate_ready | bool
 
@@ -119,10 +119,10 @@
     method: GET
     validate_certs: "{{ validate_certs }}"
     force_basic_auth: true
-    status_code: 200
+    status_code: [200, 502, 503, 504]
   register: demo_aap_eda_gateway_probe
-  retries: 3
-  delay: 5
+  retries: "{{ demo_aap_api_wait_retries }}"
+  delay: "{{ demo_aap_api_wait_delay }}"
   until: demo_aap_eda_gateway_probe.status == 200
   when:
     - demo_aap_candidate_ready | bool

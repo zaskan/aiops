@@ -93,7 +93,8 @@ The itsm-app image includes the same AIOps build-time patches as [build_itsm_app
 
 - `oc` CLI logged in to your cluster (`oc login`)
 - `ansible-core` >= 2.14
-- Cluster already has:
+- Cluster admin privileges to install operators from OperatorHub (or run `playbooks/install_operators.yml` first)
+- Cluster already has (or install via `playbooks/install_operators.yml`):
   - Ansible Automation Platform 2.7 operator + instance
   - OpenShift GitOps operator
   - OpenShift Virtualization operator (HyperConverged)
@@ -117,6 +118,51 @@ ansible-galaxy collection install -r collections/requirements.yml \
 Collections include `kubernetes.core`, `awx.awx` (from Automation Hub), and **`demos.utils`** (from [GitHub](https://github.com/zaskan/demos.utils)) for ITSM asset type setup during install (`demos.utils.itsm_ansible_role` on the control node).
 
 **AAP execution environment:** the **AIOps Playbooks** EE needs at least `kubernetes.core` (for OpenShift API calls in register/sync playbooks). Mirror [`playbooks/casc/playbooks/collections/requirements.yml`](playbooks/casc/playbooks/collections/requirements.yml) when building the EE. Asset registration in `register_itsm_vm_asset.yml` uses built-in `uri` tasks (no `demos.utils` required at job runtime). The `itsm_inventory.py` dynamic inventory script is stdlib-only.
+
+## Install cluster operators
+
+Use this playbook **before** `playbooks/install.yml` on clusters that do not already have the required operators:
+
+```bash
+oc login
+ansible-playbook playbooks/install_operators.yml
+```
+
+It installs OLM subscriptions and deploys operand components for:
+
+| Operator | Operand component |
+| -------- | ----------------- |
+| OpenShift GitOps | Default Argo CD instance in `openshift-gitops` |
+| OpenShift Virtualization | `HyperConverged` in `openshift-cnv` |
+| Red Hat Streams for Apache Kafka | Strimzi cluster operator + Kafka CRDs |
+| Ansible Automation Platform 2.7 | `AnsibleAutomationPlatform` CR in `aap` |
+
+OpenShift GitOps uses an **AllNamespaces** `OperatorGroup` (`spec: {}` in `openshift-gitops-operator`). Do not scope it to `targetNamespaces: [openshift-gitops-operator]` — that OwnNamespace mode is unsupported and fails with `OwnNamespace InstallModeType not supported`.
+
+Configure via [`group_vars/all/cluster_operators.yml`](group_vars/all/cluster_operators.yml). AAP hub file storage prefers a ReadWriteMany storage class; when none exists the playbook falls back per `cluster_operators_aap_hub_no_rwx_fallback` (default `disable_hub` — controller and EDA only, which is sufficient for this demo):
+
+```bash
+export CLUSTER_OPERATORS_AAP_HUB_STORAGE_CLASS=ocs-storagecluster-cephfs
+ansible-playbook playbooks/install_operators.yml
+
+# Clusters without RWX: hub disabled by default, or try RWO default storage class
+export CLUSTER_OPERATORS_AAP_HUB_NO_RWX_FALLBACK=rwo
+ansible-playbook playbooks/install_operators.yml
+```
+
+Skip individual operators with `-e cluster_operators_install_aap=false`, etc.
+
+If a previous GitOps install failed with the OwnNamespace error, remove the broken OLM objects and re-run (the playbook also repairs this automatically):
+
+```bash
+oc delete subscription openshift-gitops-operator -n openshift-gitops-operator --ignore-not-found
+oc delete csv -n openshift-gitops-operator -l operators.coreos.com/openshift-gitops-operator.openshift-gitops-operator= --ignore-not-found
+oc delete operatorgroup openshift-gitops-operator-group -n openshift-gitops-operator --ignore-not-found
+ansible-playbook playbooks/install_operators.yml \
+  -e cluster_operators_install_virtualization=false \
+  -e cluster_operators_install_kafka=false \
+  -e cluster_operators_install_aap=false
+```
 
 ## Install demo
 

@@ -1,0 +1,58 @@
+---
+# Cluster operator installation (parallel to playbooks/install.yml).
+# Installs OLM subscriptions and deploys operand CRs required by the AIOps demo.
+
+cluster_operators_validate_certs: false
+
+cluster_operators_install_gitops: true
+cluster_operators_install_virtualization: true
+cluster_operators_install_kafka: true
+cluster_operators_install_aap: true
+
+cluster_operators_olm_source: redhat-operators
+cluster_operators_olm_source_namespace: openshift-marketplace
+cluster_operators_install_plan_approval: Automatic
+
+cluster_operators_csv_wait_retries: 60
+cluster_operators_csv_wait_delay: 15
+cluster_operators_component_wait_retries: 60
+cluster_operators_component_wait_delay: 15
+
+# OpenShift GitOps — operator creates default Argo CD in openshift-gitops
+cluster_operators_gitops_operator_namespace: openshift-gitops-operator
+cluster_operators_gitops_operator_package: openshift-gitops-operator
+cluster_operators_gitops_subscription_name: openshift-gitops-operator
+cluster_operators_gitops_channel: latest
+cluster_operators_gitops_operand_namespace: openshift-gitops
+# AllNamespaces install mode (empty spec). Do not set targetNamespaces to the operator namespace.
+cluster_operators_gitops_operatorgroup_name: openshift-gitops-operator-group
+cluster_operators_gitops_operatorgroup_spec: {}
+
+# OpenShift Virtualization — HyperConverged CR in openshift-cnv
+cluster_operators_virt_operator_namespace: openshift-cnv
+cluster_operators_virt_operator_package: kubevirt-hyperconverged
+cluster_operators_virt_subscription_name: kubevirt-hyperconverged
+cluster_operators_virt_channel: stable
+cluster_operators_virt_hyperconverged_name: kubevirt-hyperconverged
+
+# Red Hat Streams for Apache Kafka — cluster-scoped Strimzi operator
+cluster_operators_kafka_operator_namespace: openshift-operators
+cluster_operators_kafka_operator_package: amq-streams
+cluster_operators_kafka_subscription_name: amq-streams
+cluster_operators_kafka_channel: stable
+
+# Ansible Automation Platform 2.7
+cluster_operators_aap_operator_namespace: aap
+cluster_operators_aap_operator_package: ansible-automation-platform-operator
+cluster_operators_aap_subscription_name: ansible-automation-platform
+cluster_operators_aap_channel: stable-2.7
+cluster_operators_aap_instance_name: ansible
+cluster_operators_aap_hub_storage_size: 10Gi
+# Leave empty to auto-discover the first StorageClass that supports ReadWriteMany.
+cluster_operators_aap_hub_storage_class: >-
+  {{ lookup('ansible.builtin.env', 'CLUSTER_OPERATORS_AAP_HUB_STORAGE_CLASS', default='') }}
+# disable_hub: deploy controller + EDA only (demo uses Red Hat Automation Hub externally).
+# rwo: use the cluster default StorageClass (single-replica dev clusters).
+# fail: error when no ReadWriteMany StorageClass is found.
+cluster_operators_aap_hub_no_rwx_fallback: >-
+  {{ lookup('ansible.builtin.env', 'CLUSTER_OPERATORS_AAP_HUB_NO_RWX_FALLBACK', default='disable_hub') }}

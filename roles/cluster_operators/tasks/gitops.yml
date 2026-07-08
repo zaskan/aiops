@@ -1,0 +1,51 @@
+---
+- name: Repair failed OpenShift GitOps operator install when OperatorGroup used OwnNamespace mode
+  ansible.builtin.include_tasks: repair_gitops_operator.yml
+
+- name: Install OpenShift GitOps operator subscription
+  ansible.builtin.include_tasks: install_subscription.yml
+  vars:
+    cluster_operator_namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+    cluster_operator_subscription_name: "{{ cluster_operators_gitops_subscription_name }}"
+    cluster_operator_package_name: "{{ cluster_operators_gitops_operator_package }}"
+    cluster_operator_channel: "{{ cluster_operators_gitops_channel }}"
+    cluster_operator_operatorgroup_name: "{{ cluster_operators_gitops_operatorgroup_name }}"
+    cluster_operator_operatorgroup_spec: "{{ cluster_operators_gitops_operatorgroup_spec }}"
+
+- name: Wait for default OpenShift GitOps Argo CD namespace
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ cluster_operators_gitops_operand_namespace }}"
+  register: cluster_operators_gitops_operand_namespace_wait
+  until: cluster_operators_gitops_operand_namespace_wait.resources | default([]) | length > 0
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Wait for OpenShift GitOps server deployment to become available
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: openshift-gitops-server
+    namespace: "{{ cluster_operators_gitops_operand_namespace }}"
+  register: cluster_operators_gitops_server_wait
+  until: >
+    cluster_operators_gitops_server_wait.resources | default([]) | length > 0
+    and (
+      cluster_operators_gitops_server_wait.resources[0].status.availableReplicas | default(0) | int
+    ) >= 1
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Display OpenShift GitOps operator summary
+  ansible.builtin.debug:
+    msg:
+      - "Operator CSV: {{ cluster_operator_csv_name | default('unknown') }}"
+      - "Argo CD namespace: {{ cluster_operators_gitops_operand_namespace }}"
+      - "GitOps server deployment: openshift-gitops-server"

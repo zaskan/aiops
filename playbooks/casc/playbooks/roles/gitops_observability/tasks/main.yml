@@ -5,6 +5,9 @@
 - name: Configure Argo CD repository credentials for Observability
   ansible.builtin.include_tasks: repository_secret.yml
 
+- name: Grant Argo CD permission to manage Observability destination namespace
+  ansible.builtin.include_tasks: ensure_dest_namespace_rbac.yml
+
 - name: Configure Argo CD Application for Observability stack
   ansible.builtin.include_tasks: application.yml
 

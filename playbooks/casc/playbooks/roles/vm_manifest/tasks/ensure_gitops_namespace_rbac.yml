@@ -1,0 +1,13 @@
+---
+- name: Load OpenShift API credentials for GitOps namespace RBAC
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+
+- name: Map OpenShift credentials for Infrastructure GitOps RBAC
+  ansible.builtin.set_fact:
+    gitops_infrastructure_openshift_api_server: "{{ openshift_credential_host }}"
+    gitops_infrastructure_openshift_token: "{{ openshift_credential_token }}"
+    gitops_infrastructure_dest_namespace: "{{ vm_namespace }}"
+  no_log: true
+
+- name: Grant Argo CD permission to manage VM destination namespace before git push
+  ansible.builtin.include_tasks: ../gitops_infrastructure/tasks/ensure_dest_namespace_rbac.yml

@@ -1,0 +1,5 @@
+---
+- name: Verify OpenShift cluster access
+  ansible.builtin.include_role:
+    name: demo_platform
+    tasks_from: check_openshift.yml

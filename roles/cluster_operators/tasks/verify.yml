@@ -1,0 +1,24 @@
+---
+- name: Verify Ansible Automation Platform 2.7 readiness
+  ansible.builtin.include_role:
+    name: demo_platform
+    tasks_from: check_aap.yml
+  when: cluster_operators_install_aap | bool
+
+- name: Verify OpenShift GitOps readiness
+  ansible.builtin.include_role:
+    name: demo_platform
+    tasks_from: check_gitops.yml
+  when: cluster_operators_install_gitops | bool
+
+- name: Verify OpenShift Virtualization readiness
+  ansible.builtin.include_role:
+    name: demo_platform
+    tasks_from: check_virt.yml
+  when: cluster_operators_install_virtualization | bool
+
+- name: Verify Streams for Apache Kafka operator readiness
+  ansible.builtin.include_role:
+    name: observability_kit
+    tasks_from: check_streams_operator.yml
+  when: cluster_operators_install_kafka | bool

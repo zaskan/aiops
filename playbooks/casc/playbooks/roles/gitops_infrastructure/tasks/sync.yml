@@ -7,6 +7,20 @@
 - name: Load GitOps infrastructure connection configuration
   ansible.builtin.include_tasks: preflight.yml
 
+- name: Load OpenShift API credentials for Infrastructure GitOps sync
+  ansible.builtin.include_tasks: ../common/tasks/load_openshift_credential.yml
+  when: gitops_infrastructure_openshift_api_server is not defined
+
+- name: Map OpenShift credentials for Infrastructure GitOps sync
+  ansible.builtin.set_fact:
+    gitops_infrastructure_openshift_api_server: "{{ openshift_credential_host }}"
+    gitops_infrastructure_openshift_token: "{{ openshift_credential_token }}"
+  when: gitops_infrastructure_openshift_api_server is not defined
+  no_log: true
+
+- name: Grant Argo CD permission to manage Infrastructure destination namespace
+  ansible.builtin.include_tasks: ensure_dest_namespace_rbac.yml
+
 - name: Look up Infrastructure VMs Argo CD Application
   kubernetes.core.k8s_info:
     host: "{{ gitops_infrastructure_openshift_api_server | default(omit) }}"
@@ -23,6 +37,9 @@
   block:
     - name: Configure Argo CD repository credentials for Infrastructure
       ansible.builtin.include_tasks: repository_secret.yml
+
+    - name: Grant Argo CD permission to manage Infrastructure destination namespace
+      ansible.builtin.include_tasks: ensure_dest_namespace_rbac.yml
 
     - name: Configure Argo CD Application for Infrastructure VMs
       ansible.builtin.include_tasks: application.yml

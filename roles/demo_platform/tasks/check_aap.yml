@@ -84,6 +84,32 @@
       the gateway route/API ping. Check: oc get routes,secrets -n aap
   when: demo_aap_ready_instance is not defined
 
+- name: Read AAP controller license status
+  ansible.builtin.uri:
+    url: "{{ aap_gateway_url }}/api/controller/v2/config/"
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    method: GET
+    validate_certs: "{{ validate_certs }}"
+    force_basic_auth: true
+    status_code: 200
+  register: demo_aap_license_check
+  no_log: true
+  when: demo_aap_ready_instance is defined
+
+- name: Fail when AAP subscription license is not applied
+  ansible.builtin.fail:
+    msg: >-
+      AAP controller has no subscription license applied (license_info is empty).
+      Creating hosts and job templates returns HTTP 403 until the subscription is
+      activated. Log in to {{ aap_gateway_url }}, open Settings > Subscription, and
+      upload a manifest from https://console.redhat.com/subscriptions/manifests or
+      enter your service-account credentials. Re-run playbooks/install.yml after
+      activation completes.
+  when:
+    - demo_aap_ready_instance is defined
+    - demo_aap_license_check.json.license_info | default({}) | length == 0
+
 - name: Apply optional AAP credential overrides
   ansible.builtin.set_fact:
     aap_username: "{{ aap_username_override if (aap_username_override | default('') | length > 0) else aap_username }}"

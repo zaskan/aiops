@@ -7,6 +7,8 @@
       kind: Namespace
       metadata:
         name: "{{ aiops_demo_namespace }}"
+        labels:
+          argocd.argoproj.io/managed-by: "{{ demo_platform_gitops_argocd_instance_name | default('openshift-gitops') }}"
 
 - name: Check whether authorized-keys secret already exists
   kubernetes.core.k8s_info:

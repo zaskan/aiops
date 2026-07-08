@@ -15,6 +15,7 @@ observability_kit_gitea_use_internal: >-
 observability_kit_namespace_delete_retries: 30
 observability_kit_namespace_delete_delay: 10
 observability_kit_force_finalize_namespace: true
+gitops_observability_argocd_instance_name: openshift-gitops
 
 observability_kit_manifest_files:
   - namespace.yaml

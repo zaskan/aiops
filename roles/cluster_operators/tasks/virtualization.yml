@@ -1,0 +1,84 @@
+---
+- name: Install OpenShift Virtualization operator subscription
+  ansible.builtin.include_tasks: install_subscription.yml
+  vars:
+    cluster_operator_namespace: "{{ cluster_operators_virt_operator_namespace }}"
+    cluster_operator_subscription_name: "{{ cluster_operators_virt_subscription_name }}"
+    cluster_operator_package_name: "{{ cluster_operators_virt_operator_package }}"
+    cluster_operator_channel: "{{ cluster_operators_virt_channel }}"
+    cluster_operator_operatorgroup_name: kubevirt-hyperconverged-operatorgroup
+    cluster_operator_operatorgroup_spec:
+      targetNamespaces:
+        - "{{ cluster_operators_virt_operator_namespace }}"
+
+- name: Look up HyperConverged custom resource
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    name: "{{ cluster_operators_virt_hyperconverged_name }}"
+    namespace: "{{ cluster_operators_virt_operator_namespace }}"
+  register: cluster_operators_virt_hco_lookup
+
+- name: Deploy HyperConverged custom resource for OpenShift Virtualization
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    definition:
+      apiVersion: hco.kubevirt.io/v1beta1
+      kind: HyperConverged
+      metadata:
+        name: "{{ cluster_operators_virt_hyperconverged_name }}"
+        namespace: "{{ cluster_operators_virt_operator_namespace }}"
+  when: cluster_operators_virt_hco_lookup.resources | default([]) | length == 0
+
+- name: Wait for HyperConverged Available condition
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    name: "{{ cluster_operators_virt_hyperconverged_name }}"
+    namespace: "{{ cluster_operators_virt_operator_namespace }}"
+  register: cluster_operators_virt_hco_wait
+  until: >
+    (
+      cluster_operators_virt_hco_wait.resources[0].status.conditions
+      | default([])
+      | selectattr('type', 'equalto', 'Available')
+      | selectattr('status', 'equalto', 'True')
+      | list
+      | length
+    ) > 0
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Wait for virt-api deployment to become available
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: virt-api
+    namespace: "{{ cluster_operators_virt_operator_namespace }}"
+  register: cluster_operators_virt_api_wait
+  until: >
+    cluster_operators_virt_api_wait.resources | default([]) | length > 0
+    and (
+      cluster_operators_virt_api_wait.resources[0].status.availableReplicas | default(0) | int
+    ) >= 1
+  retries: "{{ cluster_operators_component_wait_retries }}"
+  delay: "{{ cluster_operators_component_wait_delay }}"
+
+- name: Display OpenShift Virtualization operator summary
+  ansible.builtin.debug:
+    msg:
+      - "Operator CSV: {{ cluster_operator_csv_name | default('unknown') }}"
+      - "HyperConverged: {{ cluster_operators_virt_hyperconverged_name }}"
+      - "Namespace: {{ cluster_operators_virt_operator_namespace }}"

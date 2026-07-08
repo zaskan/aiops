@@ -7,6 +7,9 @@
 - name: Load GitOps observability connection configuration
   ansible.builtin.include_tasks: preflight.yml
 
+- name: Grant Argo CD permission to manage Observability destination namespace
+  ansible.builtin.include_tasks: ensure_dest_namespace_rbac.yml
+
 - name: Look up Observability stack Argo CD Application
   kubernetes.core.k8s_info:
     host: "{{ gitops_observability_openshift_api_server | default(omit) }}"
@@ -23,6 +26,9 @@
   block:
     - name: Configure Argo CD repository credentials for Observability
       ansible.builtin.include_tasks: repository_secret.yml
+
+    - name: Grant Argo CD permission to manage Observability destination namespace
+      ansible.builtin.include_tasks: ensure_dest_namespace_rbac.yml
 
     - name: Configure Argo CD Application for Observability stack
       ansible.builtin.include_tasks: application.yml

@@ -13,6 +13,9 @@
 - name: Generate VM password and render manifest
   ansible.builtin.include_tasks: render.yml
 
+- name: Grant Argo CD permission to manage VM namespace before pushing manifest
+  ansible.builtin.include_tasks: ensure_gitops_namespace_rbac.yml
+
 - name: Push rendered manifest to Gitea Infrastructure repository
   ansible.builtin.include_tasks: push.yml
 

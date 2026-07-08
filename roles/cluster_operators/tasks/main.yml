@@ -1,0 +1,39 @@
+---
+- name: Run cluster operator preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Install OpenShift GitOps operator and default Argo CD instance
+  ansible.builtin.include_tasks: gitops.yml
+  when: cluster_operators_install_gitops | bool
+
+- name: Install OpenShift Virtualization operator and HyperConverged instance
+  ansible.builtin.include_tasks: virtualization.yml
+  when: cluster_operators_install_virtualization | bool
+
+- name: Install Red Hat Streams for Apache Kafka operator
+  ansible.builtin.include_tasks: kafka.yml
+  when: cluster_operators_install_kafka | bool
+
+- name: Install Ansible Automation Platform 2.7 operator and instance
+  ansible.builtin.include_tasks: aap.yml
+  when: cluster_operators_install_aap | bool
+
+- name: Verify installed operators and operand components
+  ansible.builtin.include_tasks: verify.yml
+
+- name: Display cluster operator installation summary
+  ansible.builtin.debug:
+    msg:
+      - >-
+        GitOps:
+        {{ 'installed' if cluster_operators_install_gitops | bool else 'skipped' }}
+      - >-
+        Virtualization:
+        {{ 'installed' if cluster_operators_install_virtualization | bool else 'skipped' }}
+      - >-
+        Kafka:
+        {{ 'installed' if cluster_operators_install_kafka | bool else 'skipped' }}
+      - >-
+        AAP 2.7:
+        {{ 'installed' if cluster_operators_install_aap | bool else 'skipped' }}
+      - "Next step: ansible-playbook playbooks/install.yml"

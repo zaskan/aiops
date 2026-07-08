@@ -1,0 +1,135 @@
+---
+- name: Look up OpenShift GitOps OperatorGroup
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: operators.coreos.com/v1
+    kind: OperatorGroup
+    name: "{{ cluster_operators_gitops_operatorgroup_name }}"
+    namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+  register: cluster_operators_gitops_operatorgroup_lookup
+  failed_when: false
+
+- name: Look up OpenShift GitOps operator subscription
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ cluster_operators_gitops_subscription_name }}"
+    namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+  register: cluster_operators_gitops_subscription_lookup
+  failed_when: false
+
+- name: List OpenShift GitOps operator CSVs
+  kubernetes.core.k8s_info:
+    host: "{{ openshift_api_server }}"
+    api_key: "{{ openshift_token }}"
+    validate_certs: "{{ cluster_operators_validate_certs }}"
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+    label_selectors:
+      - operators.coreos.com/{{ cluster_operators_gitops_operator_package }}.{{ cluster_operators_gitops_operator_namespace }}=
+  register: cluster_operators_gitops_csv_lookup
+  failed_when: false
+
+- name: Detect unsupported OwnNamespace OperatorGroup for OpenShift GitOps
+  ansible.builtin.set_fact:
+    cluster_operators_gitops_operatorgroup_needs_repair: >-
+      {{
+        (
+          cluster_operators_gitops_operatorgroup_lookup.resources
+          | default([])
+          | length
+        ) > 0
+        and (
+          cluster_operators_gitops_operator_namespace
+          in (
+            cluster_operators_gitops_operatorgroup_lookup.resources[0].spec.targetNamespaces
+            | default([])
+          )
+        )
+      }}
+
+- name: Detect failed or missing OpenShift GitOps operator CSV
+  ansible.builtin.set_fact:
+    cluster_operators_gitops_csv_needs_repair: >-
+      {{
+        (
+          cluster_operators_gitops_subscription_lookup.resources
+          | default([])
+          | length
+        ) > 0
+        and (
+          (
+            cluster_operators_gitops_csv_lookup.resources
+            | default([])
+            | selectattr('status.phase', 'equalto', 'Succeeded')
+            | list
+            | length
+          ) == 0
+        )
+      }}
+
+- name: Repair OpenShift GitOps operator OLM objects after failed OwnNamespace install
+  when: >
+    cluster_operators_gitops_operatorgroup_needs_repair | default(false) | bool
+    or cluster_operators_gitops_csv_needs_repair | default(false) | bool
+  block:
+    - name: Remove OpenShift GitOps operator subscription before OperatorGroup repair
+      kubernetes.core.k8s:
+        state: absent
+        host: "{{ openshift_api_server }}"
+        api_key: "{{ openshift_token }}"
+        validate_certs: "{{ cluster_operators_validate_certs }}"
+        api_version: operators.coreos.com/v1alpha1
+        kind: Subscription
+        name: "{{ cluster_operators_gitops_subscription_name }}"
+        namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+      failed_when: false
+
+    - name: Remove OpenShift GitOps operator CSVs before OperatorGroup repair
+      kubernetes.core.k8s:
+        state: absent
+        host: "{{ openshift_api_server }}"
+        api_key: "{{ openshift_token }}"
+        validate_certs: "{{ cluster_operators_validate_certs }}"
+        api_version: operators.coreos.com/v1alpha1
+        kind: ClusterServiceVersion
+        name: "{{ item.metadata.name }}"
+        namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+      loop: "{{ cluster_operators_gitops_csv_lookup.resources | default([]) }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      failed_when: false
+
+    - name: Remove unsupported OwnNamespace OperatorGroup for OpenShift GitOps
+      kubernetes.core.k8s:
+        state: absent
+        host: "{{ openshift_api_server }}"
+        api_key: "{{ openshift_token }}"
+        validate_certs: "{{ cluster_operators_validate_certs }}"
+        api_version: operators.coreos.com/v1
+        kind: OperatorGroup
+        name: "{{ cluster_operators_gitops_operatorgroup_name }}"
+        namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+      failed_when: false
+
+    - name: Wait until OpenShift GitOps operator CSVs are removed
+      kubernetes.core.k8s_info:
+        host: "{{ openshift_api_server }}"
+        api_key: "{{ openshift_token }}"
+        validate_certs: "{{ cluster_operators_validate_certs }}"
+        api_version: operators.coreos.com/v1alpha1
+        kind: ClusterServiceVersion
+        namespace: "{{ cluster_operators_gitops_operator_namespace }}"
+        label_selectors:
+          - operators.coreos.com/{{ cluster_operators_gitops_operator_package }}.{{ cluster_operators_gitops_operator_namespace }}=
+      register: cluster_operators_gitops_csv_removed_wait
+      until: cluster_operators_gitops_csv_removed_wait.resources | default([]) | length == 0
+      retries: 20
+      delay: 5
+      failed_when: false

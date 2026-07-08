@@ -60,6 +60,13 @@
   vars:
     gitea_repos_local_base: "{{ playbook_dir }}/casc"
 
+- name: Configure Argo CD for Infrastructure VMs repository
+  ansible.builtin.include_role:
+    name: gitops_infrastructure
+  vars:
+    gitea_credential_artifacts_file: "{{ demo_platform_artifacts_dir }}/demo_platform_facts.yml"
+    gitops_infrastructure_dest_namespace: "{{ aiops_demo_namespace }}"
+
 - name: Configure AAP VM provisioning workflow
   ansible.builtin.include_role:
     name: aap_vm_pipeline

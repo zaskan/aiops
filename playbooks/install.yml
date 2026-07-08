@@ -28,6 +28,7 @@
     - ../group_vars/all/aap_itsm_chat_pipeline.yml
     - ../group_vars/all/observability_kit.yml
     - ../group_vars/all/gitops_observability.yml
+    - ../group_vars/all/gitops_infrastructure.yml
     - ../group_vars/all/aap_reset_pipeline.yml
     - ../group_vars/all/openshift_apache_monitoring.yml
     - ../group_vars/all/itsm_kb_apache_troubleshoot.yml

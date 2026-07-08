@@ -12,6 +12,7 @@
     extra_vars: "{{ aap_vm_pipeline_job_extra_vars }}"
     ask_variables_on_launch: true
     credentials:
+      - "{{ aap_vm_pipeline_credential_openshift }}"
       - "{{ aap_vm_pipeline_credential_gitea }}"
       - "{{ aap_vm_pipeline_credential_itsm }}"
       - "{{ aap_vm_pipeline_credential_aap }}"

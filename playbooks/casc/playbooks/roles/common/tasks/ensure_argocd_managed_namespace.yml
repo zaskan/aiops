@@ -1,0 +1,28 @@
+---
+- name: Ensure Argo CD destination namespace exists with managed-by label
+  kubernetes.core.k8s:
+    state: present
+    host: "{{ argocd_managed_namespace_openshift_api_server | default(omit) }}"
+    api_key: "{{ argocd_managed_namespace_openshift_token | default(omit) }}"
+    validate_certs: "{{ argocd_managed_namespace_validate_certs | default(false) }}"
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ argocd_managed_namespace }}"
+        labels:
+          argocd.argoproj.io/managed-by: "{{ argocd_instance_name | default('openshift-gitops') }}"
+
+- name: Wait for Argo CD application controller RoleBinding in destination namespace
+  kubernetes.core.k8s_info:
+    host: "{{ argocd_managed_namespace_openshift_api_server | default(omit) }}"
+    api_key: "{{ argocd_managed_namespace_openshift_token | default(omit) }}"
+    validate_certs: "{{ argocd_managed_namespace_validate_certs | default(false) }}"
+    api_version: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    name: "{{ argocd_instance_name | default('openshift-gitops') }}-argocd-application-controller"
+    namespace: "{{ argocd_managed_namespace }}"
+  register: argocd_managed_namespace_controller_binding
+  until: argocd_managed_namespace_controller_binding.resources | default([]) | length > 0
+  retries: 30
+  delay: 2

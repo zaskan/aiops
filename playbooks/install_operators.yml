@@ -1,0 +1,10 @@
+---
+- name: Install cluster operators and operands for AIOps demo
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all/demo_platform.yml
+    - ../group_vars/all/cluster_operators.yml
+    - ../group_vars/all/observability_kit.yml
+  roles:
+    - role: cluster_operators
